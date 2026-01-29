@@ -1,0 +1,22 @@
+[package]
+name = "forvanced-frida"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[features]
+default = ["mock"]
+mock = []  # Use mock implementation (no real Frida)
+real = ["dep:frida"]  # Use real Frida (requires devkit)
+
+[dependencies]
+# Frida is optional - only included with "real" feature
+frida = { version = "0.17", optional = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }

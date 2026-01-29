@@ -1,0 +1,30 @@
+[package]
+name = "forvanced-build"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Build system for Forvanced trainer generation"
+
+[dependencies]
+forvanced-core = { path = "../forvanced-core" }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+# Template processing
+handlebars = "5"
+
+# File utilities
+walkdir = "2"
+tempfile = "3"
+fs_extra = "1.3"
+
+# Process execution
+which = "6"
+
+[dev-dependencies]
+tokio-test = "0.4"

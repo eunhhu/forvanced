@@ -1,0 +1,67 @@
+mod commands;
+mod state;
+
+use tauri::Manager;
+use tracing::info;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+pub use state::AppState;
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    // Initialize tracing
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
+    info!("Starting Forvanced Builder");
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_shell::init())
+        .setup(|app| {
+            // Initialize app state
+            let state = AppState::new();
+            app.manage(state.clone());
+
+            // Initialize async tasks (connect default adapter)
+            let state_clone = state.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = state_clone.initialize().await {
+                    tracing::error!("Failed to initialize app state: {}", e);
+                }
+            });
+
+            info!("Forvanced Builder initialized");
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            // Adapter commands
+            commands::enumerate_processes,
+            commands::attach_to_process,
+            commands::detach_from_process,
+            commands::list_adapters,
+            commands::select_adapter,
+            commands::get_current_adapter,
+            commands::inject_script,
+            commands::unload_script,
+            // Project commands
+            commands::create_project,
+            commands::save_project,
+            commands::load_project,
+            commands::get_current_project,
+            commands::update_project,
+            commands::close_project,
+            commands::get_recent_projects,
+            commands::remove_recent_project,
+            // Build commands
+            commands::generate_trainer_project,
+            commands::build_trainer,
+            commands::get_build_targets,
+            commands::preview_generated_code,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}

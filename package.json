@@ -1,0 +1,20 @@
+{
+  "name": "forvanced",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "bun run --filter @forvanced/builder dev",
+    "build": "bun run --filter @forvanced/builder build",
+    "tauri": "cd apps/builder && bun tauri",
+    "lint": "bun run --filter '*' lint",
+    "format": "bun run --filter '*' format",
+    "typecheck": "bun run --filter '*' typecheck"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}
