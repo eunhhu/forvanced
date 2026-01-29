@@ -47,7 +47,7 @@ function getMockProjectResponse<T>(cmd: string, args?: Record<string, unknown>):
       ui: {
         components: [],
         width: 400,
-        height: 300,
+        height: 500,
         theme: "dark",
       },
       created_at: now,
@@ -65,7 +65,7 @@ function getMockProjectResponse<T>(cmd: string, args?: Record<string, unknown>):
         build: { output_name: null, targets: ["windows"], icon: null, bundle_frida: false },
         hotkeys: { enabled: true, bindings: [] },
       },
-      ui: { components: [], width: 400, height: 300, theme: "dark" },
+      ui: { components: [], width: 400, height: 500, theme: "dark" },
       created_at: now,
       updated_at: now,
     },

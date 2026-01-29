@@ -11,12 +11,16 @@ import { TrashIcon } from "@/components/common/Icons";
 const nodeColors: Record<string, { bg: string; border: string; header: string }> = {
   Flow: { bg: "bg-blue-900/30", border: "border-blue-500/50", header: "bg-blue-500/20" },
   Memory: { bg: "bg-purple-900/30", border: "border-purple-500/50", header: "bg-purple-500/20" },
+  Pointer: { bg: "bg-violet-900/30", border: "border-violet-500/50", header: "bg-violet-500/20" },
   Module: { bg: "bg-green-900/30", border: "border-green-500/50", header: "bg-green-500/20" },
   Variable: { bg: "bg-yellow-900/30", border: "border-yellow-500/50", header: "bg-yellow-500/20" },
   Math: { bg: "bg-orange-900/30", border: "border-orange-500/50", header: "bg-orange-500/20" },
+  String: { bg: "bg-teal-900/30", border: "border-teal-500/50", header: "bg-teal-500/20" },
   Native: { bg: "bg-red-900/30", border: "border-red-500/50", header: "bg-red-500/20" },
+  Interceptor: { bg: "bg-rose-900/30", border: "border-rose-500/50", header: "bg-rose-500/20" },
   Hook: { bg: "bg-pink-900/30", border: "border-pink-500/50", header: "bg-pink-500/20" },
   Output: { bg: "bg-cyan-900/30", border: "border-cyan-500/50", header: "bg-cyan-500/20" },
+  UI: { bg: "bg-indigo-900/30", border: "border-indigo-500/50", header: "bg-indigo-500/20" },
 };
 
 // Get category for node type
@@ -55,10 +59,13 @@ export const NodeCanvas: Component = () => {
     setScale(newScale);
   };
 
+  // Track if space is pressed for panning
+  const [isSpaceDown, setIsSpaceDown] = createSignal(false);
+
   // Handle canvas panning
   const handleMouseDown = (e: MouseEvent) => {
-    if (e.button === 1 || (e.button === 0 && e.altKey)) {
-      // Middle click or Alt+Left click to pan
+    if (e.button === 1 || (e.button === 0 && e.altKey) || (e.button === 0 && isSpaceDown())) {
+      // Middle click or Alt+Left click or Space+Left click to pan
       e.preventDefault();
       setIsPanning(true);
       setPanStart({ x: e.clientX - offset().x, y: e.clientY - offset().y });
@@ -70,10 +77,11 @@ export const NodeCanvas: Component = () => {
 
   const handleMouseMove = (e: MouseEvent) => {
     if (isPanning()) {
-      setOffset({
+      const newOffset = {
         x: e.clientX - panStart().x,
         y: e.clientY - panStart().y,
-      });
+      };
+      setOffset(newOffset);
     }
 
     // Update connection drag position
@@ -88,9 +96,32 @@ export const NodeCanvas: Component = () => {
     }
   };
 
-  const handleMouseUp = () => {
-    setIsPanning(false);
+  const handleMouseUp = (e: MouseEvent) => {
+    // Only stop panning if not holding space/alt
+    if (!e.altKey && !isSpaceDown()) {
+      setIsPanning(false);
+    }
+    // Clear dragging connection if not dropped on a valid port
     setDraggingConnection(null);
+  };
+
+  // Handle keyboard events for space pan
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.code === "Space" && !isSpaceDown()) {
+      e.preventDefault();
+      setIsSpaceDown(true);
+    }
+    // Delete selected connection with Delete or Backspace
+    if ((e.key === "Delete" || e.key === "Backspace") && scriptStore.selectedConnectionId()) {
+      scriptStore.deleteConnection(scriptStore.selectedConnectionId()!);
+    }
+  };
+
+  const handleKeyUp = (e: KeyboardEvent) => {
+    if (e.code === "Space") {
+      setIsSpaceDown(false);
+      setIsPanning(false);
+    }
   };
 
   // Handle drop from palette
@@ -149,11 +180,15 @@ export const NodeCanvas: Component = () => {
   onMount(() => {
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
   });
 
   onCleanup(() => {
     window.removeEventListener("mousemove", handleMouseMove);
     window.removeEventListener("mouseup", handleMouseUp);
+    window.removeEventListener("keydown", handleKeyDown);
+    window.removeEventListener("keyup", handleKeyUp);
   });
 
   // Get port position for a node
@@ -212,7 +247,7 @@ export const NodeCanvas: Component = () => {
             "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
           "background-size": `${20 * scale()}px ${20 * scale()}px`,
           "background-position": `${offset().x}px ${offset().y}px`,
-          cursor: isPanning() ? "grabbing" : "default",
+          cursor: isPanning() ? "grabbing" : isSpaceDown() ? "grab" : "default",
         }}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
@@ -235,36 +270,47 @@ export const NodeCanvas: Component = () => {
             {/* Render connections */}
             <For each={currentScript()?.connections ?? []}>
               {(conn) => {
-                const fromNode = currentScript()?.nodes.find(
+                // Use getter functions to ensure reactivity when nodes move
+                const fromNode = () => currentScript()?.nodes.find(
                   (n) => n.id === conn.fromNodeId
                 );
-                const toNode = currentScript()?.nodes.find(
+                const toNode = () => currentScript()?.nodes.find(
                   (n) => n.id === conn.toNodeId
                 );
-                if (!fromNode || !toNode) return null;
 
-                const fromPort = fromNode.outputs.find(
+                const fromPort = () => fromNode()?.outputs.find(
                   (p) => p.id === conn.fromPortId
                 );
-                const toPort = toNode.inputs.find((p) => p.id === conn.toPortId);
-                if (!fromPort || !toPort) return null;
+                const toPort = () => toNode()?.inputs.find((p) => p.id === conn.toPortId);
 
-                const start = getPortPosition(fromNode, fromPort, false);
-                const end = getPortPosition(toNode, toPort, true);
+                const start = () => {
+                  const node = fromNode();
+                  const port = fromPort();
+                  if (!node || !port) return { x: 0, y: 0 };
+                  return getPortPosition(node, port, false);
+                };
+                const end = () => {
+                  const node = toNode();
+                  const port = toPort();
+                  if (!node || !port) return { x: 0, y: 0 };
+                  return getPortPosition(node, port, true);
+                };
 
-                const isFlow = fromPort.type === "flow";
-                const strokeColor = isFlow ? "#3b82f6" : "#a855f7";
+                const isFlow = () => fromPort()?.type === "flow";
+                const strokeColor = () => isFlow() ? "#3b82f6" : "#a855f7";
 
                 return (
-                  <ConnectionLine
-                    x1={start.x}
-                    y1={start.y}
-                    x2={end.x}
-                    y2={end.y}
-                    color={strokeColor}
-                    isSelected={scriptStore.selectedConnectionId() === conn.id}
-                    onClick={() => scriptStore.setSelectedConnectionId(conn.id)}
-                  />
+                  <Show when={fromNode() && toNode() && fromPort() && toPort()}>
+                    <ConnectionLine
+                      x1={start().x}
+                      y1={start().y}
+                      x2={end().x}
+                      y2={end().y}
+                      color={strokeColor()}
+                      isSelected={scriptStore.selectedConnectionId() === conn.id}
+                      onClick={() => scriptStore.setSelectedConnectionId(conn.id)}
+                    />
+                  </Show>
                 );
               }}
             </For>
@@ -294,6 +340,7 @@ export const NodeCanvas: Component = () => {
                 onPortMouseDown={handlePortMouseDown}
                 onPortMouseUp={handlePortMouseUp}
                 getPortPosition={getPortPosition}
+                scale={scale()}
               />
             )}
           </For>
@@ -379,6 +426,7 @@ interface NodeComponentProps {
     port: Port,
     isInput: boolean
   ) => { x: number; y: number };
+  scale: number;
 }
 
 const NodeComponent: Component<NodeComponentProps> = (props) => {
@@ -397,10 +445,12 @@ const NodeComponent: Component<NodeComponentProps> = (props) => {
     const startY = e.clientY;
     const startNodeX = props.node.x;
     const startNodeY = props.node.y;
+    const currentScale = props.scale;
 
     const handleMove = (e: MouseEvent) => {
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
+      // Apply scale factor to movement delta
+      const dx = (e.clientX - startX) / currentScale;
+      const dy = (e.clientY - startY) / currentScale;
       scriptStore.updateNode(props.node.id, {
         x: startNodeX + dx,
         y: startNodeY + dy,

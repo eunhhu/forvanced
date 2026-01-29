@@ -12,7 +12,7 @@ export const DesignCanvas: Component = () => {
 
   // Get window size from project
   const windowWidth = createMemo(() => projectStore.currentProject()?.ui.width ?? 400);
-  const windowHeight = createMemo(() => projectStore.currentProject()?.ui.height ?? 300);
+  const windowHeight = createMemo(() => projectStore.currentProject()?.ui.height ?? 500);
 
   const handleDragOver = (e: DragEvent) => {
     e.preventDefault();

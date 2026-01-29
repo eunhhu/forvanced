@@ -17,10 +17,18 @@ export type ScriptNodeType =
   | "memory_read"     // Read from address
   | "memory_write"    // Write to address
   | "memory_freeze"   // Freeze value at address
+  | "memory_alloc"    // Allocate memory
+  | "memory_protect"  // Change memory protection
+  // Pointer Operations
+  | "pointer_add"     // Add offset to pointer
+  | "pointer_read"    // Read from pointer (with type)
+  | "pointer_write"   // Write to pointer (with type)
   // Module/Symbol
   | "get_module"      // Get module by name
   | "find_symbol"     // Find symbol/export in module
   | "get_base_address" // Get module base address
+  | "enumerate_exports" // List all exports of a module
+  | "enumerate_modules" // List all loaded modules
   // Variables
   | "set_variable"    // Store value in variable
   | "get_variable"    // Retrieve value from variable
@@ -28,14 +36,29 @@ export type ScriptNodeType =
   | "math"            // Math operations (+, -, *, /, %)
   | "compare"         // Comparison (==, !=, <, >, <=, >=)
   | "logic"           // Logic operations (and, or, not)
+  // String Operations
+  | "string_format"   // Format string with values
+  | "string_concat"   // Concatenate strings
+  | "to_string"       // Convert value to string
   // Native
-  | "call_native"     // Call native function
-  // Hook
+  | "call_native"     // Call native function with NativeFunction
+  | "native_callback" // Create NativeCallback for hooks
+  // Interceptor
+  | "interceptor_attach" // Attach to function (onEnter/onLeave)
+  | "interceptor_replace" // Replace function implementation
+  | "interceptor_detach" // Detach from function
+  | "read_arg"        // Read argument in hook context
+  | "write_arg"       // Modify argument in hook context
+  | "read_retval"     // Read return value in hook context
+  | "replace_retval"  // Replace return value in hook context
+  // Hook (legacy)
   | "hook_function"   // Hook a function
   | "hook_callback"   // Define hook callback behavior
   // Output
   | "log"             // Log to console
   | "notify"          // Show notification
+  // UI Binding
+  | "bind_to_label"          // Show notification
 
 // Value Types
 export type ValueType =
@@ -242,6 +265,81 @@ export const nodeTemplates: NodeTemplate[] = [
     ],
     outputs: [{ name: "exec", type: "flow", direction: "output" }],
   },
+  {
+    type: "memory_alloc",
+    label: "Allocate Memory",
+    category: "Memory",
+    description: "Allocate memory with Memory.alloc()",
+    defaultConfig: { size: 256 },
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "size", type: "value", valueType: "uint32", direction: "input" },
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "address", type: "value", valueType: "pointer", direction: "output" },
+    ],
+  },
+  {
+    type: "memory_protect",
+    label: "Protect Memory",
+    category: "Memory",
+    description: "Change memory protection with Memory.protect()",
+    defaultConfig: { protection: "rwx" },
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "address", type: "value", valueType: "pointer", direction: "input" },
+      { name: "size", type: "value", valueType: "uint32", direction: "input" },
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "success", type: "value", valueType: "boolean", direction: "output" },
+    ],
+  },
+
+  // Pointer Operations
+  {
+    type: "pointer_add",
+    label: "Pointer Add",
+    category: "Pointer",
+    description: "Add offset to pointer address",
+    defaultConfig: {},
+    inputs: [
+      { name: "pointer", type: "value", valueType: "pointer", direction: "input" },
+      { name: "offset", type: "value", valueType: "int64", direction: "input" },
+    ],
+    outputs: [
+      { name: "result", type: "value", valueType: "pointer", direction: "output" },
+    ],
+  },
+  {
+    type: "pointer_read",
+    label: "Pointer Read",
+    category: "Pointer",
+    description: "Read value at pointer (readU32, readPointer, etc.)",
+    defaultConfig: { readType: "uint32" },
+    inputs: [
+      { name: "pointer", type: "value", valueType: "pointer", direction: "input" },
+    ],
+    outputs: [
+      { name: "value", type: "value", valueType: "any", direction: "output" },
+    ],
+  },
+  {
+    type: "pointer_write",
+    label: "Pointer Write",
+    category: "Pointer",
+    description: "Write value at pointer (writeU32, writePointer, etc.)",
+    defaultConfig: { writeType: "uint32" },
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "pointer", type: "value", valueType: "pointer", direction: "input" },
+      { name: "value", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+    ],
+  },
 
   // Module/Symbol
   {
@@ -290,6 +388,37 @@ export const nodeTemplates: NodeTemplate[] = [
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
       { name: "address", type: "value", valueType: "pointer", direction: "output" },
+    ],
+  },
+  {
+    type: "enumerate_modules",
+    label: "Enumerate Modules",
+    category: "Module",
+    description: "List all loaded modules with Process.enumerateModules()",
+    defaultConfig: {},
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "modules", type: "value", valueType: "any", direction: "output" },
+      { name: "count", type: "value", valueType: "int32", direction: "output" },
+    ],
+  },
+  {
+    type: "enumerate_exports",
+    label: "Enumerate Exports",
+    category: "Module",
+    description: "List all exports of a module",
+    defaultConfig: {},
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "moduleName", type: "value", valueType: "string", direction: "input" },
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "exports", type: "value", valueType: "any", direction: "output" },
+      { name: "count", type: "value", valueType: "int32", direction: "output" },
     ],
   },
 
@@ -354,20 +483,61 @@ export const nodeTemplates: NodeTemplate[] = [
     outputs: [{ name: "result", type: "value", valueType: "boolean", direction: "output" }],
   },
 
+  // String Operations
+  {
+    type: "string_format",
+    label: "Format String",
+    category: "String",
+    description: "Format string with placeholders ({0}, {1}, etc.)",
+    defaultConfig: { template: "Value: {0}" },
+    inputs: [
+      { name: "arg0", type: "value", valueType: "any", direction: "input" },
+      { name: "arg1", type: "value", valueType: "any", direction: "input" },
+      { name: "arg2", type: "value", valueType: "any", direction: "input" },
+      { name: "arg3", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [{ name: "result", type: "value", valueType: "string", direction: "output" }],
+  },
+  {
+    type: "string_concat",
+    label: "Concat Strings",
+    category: "String",
+    description: "Concatenate two strings",
+    defaultConfig: {},
+    inputs: [
+      { name: "a", type: "value", valueType: "string", direction: "input" },
+      { name: "b", type: "value", valueType: "string", direction: "input" },
+    ],
+    outputs: [{ name: "result", type: "value", valueType: "string", direction: "output" }],
+  },
+  {
+    type: "to_string",
+    label: "To String",
+    category: "String",
+    description: "Convert value to string (hex for pointers)",
+    defaultConfig: { format: "auto" }, // auto, hex, decimal
+    inputs: [
+      { name: "value", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [{ name: "result", type: "value", valueType: "string", direction: "output" }],
+  },
+
   // Native
   {
     type: "call_native",
     label: "Call Native",
     category: "Native",
-    description: "Call a native function",
-    defaultConfig: { returnType: "void", argTypes: [] },
+    description: "Call a native function with NativeFunction",
+    defaultConfig: {
+      returnType: "void",
+      argCount: 0,
+      argTypes: [] as string[], // Array of type strings for each argument
+      abi: "default", // default, sysv, stdcall, fastcall, thiscall, win64, unix64
+    },
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
       { name: "address", type: "value", valueType: "pointer", direction: "input" },
-      { name: "arg0", type: "value", valueType: "any", direction: "input" },
-      { name: "arg1", type: "value", valueType: "any", direction: "input" },
-      { name: "arg2", type: "value", valueType: "any", direction: "input" },
-      { name: "arg3", type: "value", valueType: "any", direction: "input" },
+      // Dynamic args will be added based on argCount
     ],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
@@ -375,12 +545,142 @@ export const nodeTemplates: NodeTemplate[] = [
     ],
   },
 
-  // Hook
+  // Interceptor (Frida-native hooking)
+  {
+    type: "interceptor_attach",
+    label: "Interceptor Attach",
+    category: "Interceptor",
+    description: "Attach to function with Interceptor.attach()",
+    defaultConfig: {
+      onEnter: true,
+      onLeave: true,
+      argCount: 0,
+    },
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "address", type: "value", valueType: "pointer", direction: "input" },
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "onEnter", type: "flow", direction: "output" },
+      { name: "onLeave", type: "flow", direction: "output" },
+      { name: "context", type: "value", valueType: "any", direction: "output" },
+    ],
+  },
+  {
+    type: "interceptor_replace",
+    label: "Interceptor Replace",
+    category: "Interceptor",
+    description: "Replace function with Interceptor.replace()",
+    defaultConfig: {
+      returnType: "void",
+      argCount: 0,
+      argTypes: [] as string[],
+    },
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "target", type: "value", valueType: "pointer", direction: "input" },
+      { name: "replacement", type: "value", valueType: "pointer", direction: "input" },
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+    ],
+  },
+  {
+    type: "interceptor_detach",
+    label: "Interceptor Detach",
+    category: "Interceptor",
+    description: "Detach all hooks with Interceptor.detachAll()",
+    defaultConfig: {},
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+    ],
+  },
+  {
+    type: "read_arg",
+    label: "Read Argument",
+    category: "Interceptor",
+    description: "Read function argument (args[index]) in hook context",
+    defaultConfig: { index: 0, asType: "pointer" },
+    inputs: [
+      { name: "context", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [
+      { name: "value", type: "value", valueType: "any", direction: "output" },
+    ],
+  },
+  {
+    type: "write_arg",
+    label: "Write Argument",
+    category: "Interceptor",
+    description: "Modify function argument in hook context",
+    defaultConfig: { index: 0 },
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "context", type: "value", valueType: "any", direction: "input" },
+      { name: "value", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+    ],
+  },
+  {
+    type: "read_retval",
+    label: "Read Return Value",
+    category: "Interceptor",
+    description: "Read return value in onLeave hook context",
+    defaultConfig: { asType: "pointer" },
+    inputs: [
+      { name: "context", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [
+      { name: "value", type: "value", valueType: "any", direction: "output" },
+    ],
+  },
+  {
+    type: "replace_retval",
+    label: "Replace Return Value",
+    category: "Interceptor",
+    description: "Replace return value with retval.replace()",
+    defaultConfig: {},
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "context", type: "value", valueType: "any", direction: "input" },
+      { name: "value", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+    ],
+  },
+  {
+    type: "native_callback",
+    label: "Native Callback",
+    category: "Native",
+    description: "Create NativeCallback for hooks or replacements",
+    defaultConfig: {
+      returnType: "void",
+      argCount: 0,
+      argTypes: [] as string[],
+    },
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "callback", type: "value", valueType: "pointer", direction: "output" },
+      { name: "onCall", type: "flow", direction: "output" },
+    ],
+  },
+
+  // Hook (legacy - kept for compatibility)
   {
     type: "hook_function",
-    label: "Hook Function",
+    label: "Hook Function (Legacy)",
     category: "Hook",
-    description: "Hook a function at address",
+    description: "Hook a function at address (use Interceptor Attach instead)",
     defaultConfig: { onEnter: true, onLeave: true },
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
@@ -418,6 +718,20 @@ export const nodeTemplates: NodeTemplate[] = [
       { name: "exec", type: "flow", direction: "input" },
       { name: "title", type: "value", valueType: "string", direction: "input" },
       { name: "message", type: "value", valueType: "string", direction: "input" },
+    ],
+    outputs: [{ name: "exec", type: "flow", direction: "output" }],
+  },
+
+  // UI Binding
+  {
+    type: "bind_to_label",
+    label: "Bind to Label",
+    category: "UI",
+    description: "Bind a value to a UI label component for display",
+    defaultConfig: { componentId: "", format: "{value}" },
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "value", type: "value", valueType: "any", direction: "input" },
     ],
     outputs: [{ name: "exec", type: "flow", direction: "output" }],
   },
@@ -504,6 +818,74 @@ function createScriptStore() {
       nodes: script.nodes.map((n) =>
         n.id === nodeId ? { ...n, ...updates } : n
       ),
+    });
+  }
+
+  // Update call_native node argument count
+  function updateNativeNodeArgCount(nodeId: string, argCount: number) {
+    const script = getCurrentScript();
+    if (!script) return;
+
+    const node = script.nodes.find((n) => n.id === nodeId);
+    if (!node || node.type !== "call_native") return;
+
+    // Keep existing base inputs (exec, address)
+    const baseInputs = node.inputs.filter(
+      (p) => p.name === "exec" || p.name === "address"
+    );
+
+    // Get current argTypes array, defaulting to empty
+    const currentArgTypes = (node.config.argTypes as string[]) || [];
+
+    // Create new arg inputs
+    const argInputs: Port[] = [];
+    for (let i = 0; i < argCount; i++) {
+      // Try to preserve existing arg port id if it exists
+      const existingArgPort = node.inputs.find((p) => p.name === `arg${i}`);
+      argInputs.push({
+        id: existingArgPort?.id || crypto.randomUUID(),
+        name: `arg${i}`,
+        type: "value",
+        valueType: "any",
+        direction: "input",
+      });
+    }
+
+    // Pad or trim argTypes array to match argCount
+    const newArgTypes = [...currentArgTypes];
+    while (newArgTypes.length < argCount) {
+      newArgTypes.push("pointer"); // Default type
+    }
+    newArgTypes.length = argCount; // Trim if needed
+
+    // Remove connections to deleted arg ports
+    const validArgNames = new Set([
+      "exec",
+      "address",
+      ...argInputs.map((p) => p.name),
+    ]);
+    const newConnections = script.connections.filter((conn) => {
+      if (conn.toNodeId !== nodeId) return true;
+      const port = node.inputs.find((p) => p.id === conn.toPortId);
+      if (!port) return true;
+      return validArgNames.has(port.name);
+    });
+
+    updateScript(script.id, {
+      nodes: script.nodes.map((n) =>
+        n.id === nodeId
+          ? {
+              ...n,
+              inputs: [...baseInputs, ...argInputs],
+              config: {
+                ...n.config,
+                argCount,
+                argTypes: newArgTypes,
+              },
+            }
+          : n
+      ),
+      connections: newConnections,
     });
   }
 
@@ -659,6 +1041,7 @@ function createScriptStore() {
     deleteScript,
     addNode,
     updateNode,
+    updateNativeNodeArgCount,
     deleteNode,
     addConnection,
     deleteConnection,
