@@ -1,13 +1,18 @@
-import { Component, For, Show, createSignal } from "solid-js";
+import { Component, For, Show, createSignal, createMemo } from "solid-js";
 import {
   designerStore,
   type UIComponent,
   type ComponentType,
 } from "@/stores/designer";
+import { projectStore } from "@/stores/project";
 import { TrashIcon } from "@/components/common/Icons";
 
 export const DesignCanvas: Component = () => {
   let contentAreaRef: HTMLDivElement | undefined;
+
+  // Get window size from project
+  const windowWidth = createMemo(() => projectStore.currentProject()?.ui.width ?? 400);
+  const windowHeight = createMemo(() => projectStore.currentProject()?.ui.height ?? 300);
 
   const handleDragOver = (e: DragEvent) => {
     e.preventDefault();
@@ -88,7 +93,7 @@ export const DesignCanvas: Component = () => {
 
       {/* Canvas */}
       <div
-        class="flex-1 relative overflow-auto bg-background canvas-drop-zone"
+        class="flex-1 relative overflow-hidden bg-background canvas-drop-zone"
         style={{
           "background-image":
             "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
@@ -98,47 +103,60 @@ export const DesignCanvas: Component = () => {
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
-        {/* Preview Frame */}
-        <div
-          class="absolute top-8 left-1/2 -translate-x-1/2 w-[400px] min-h-[600px] bg-surface rounded-lg shadow-lg border border-border"
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-        >
-          {/* Title Bar */}
-          <div class="h-8 border-b border-border flex items-center px-3">
-            <div class="flex gap-1.5">
-              <div class="w-3 h-3 rounded-full bg-error/50" />
-              <div class="w-3 h-3 rounded-full bg-warning/50" />
-              <div class="w-3 h-3 rounded-full bg-success/50" />
-            </div>
-            <div class="flex-1 text-center text-xs text-foreground-muted">
-              Trainer Preview
-            </div>
-          </div>
-
-          {/* Content Area - Drop Zone */}
-          <div
-            ref={contentAreaRef}
-            class="relative p-4 min-h-[568px] canvas-content"
-            onDragOver={handleDragOver}
-            onDragEnter={handleDragEnter}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            <For each={designerStore.components()}>
-              {(component) => (
-                <CanvasComponent component={component} />
-              )}
-            </For>
-
-            <Show when={designerStore.components().length === 0}>
-              <div class="absolute inset-0 flex items-center justify-center text-foreground-muted text-sm pointer-events-none">
-                <div class="text-center">
-                  <p>Drag components here</p>
-                  <p class="text-xs mt-1">to build your trainer UI</p>
+        {/* Scrollable container for overflow handling */}
+        <div class="absolute inset-0 overflow-auto">
+          {/* Centered content wrapper with padding */}
+          <div class="min-w-full min-h-full flex items-start justify-center p-8">
+            {/* Preview Frame */}
+            <div
+              class="bg-surface rounded-lg shadow-lg border border-border flex-shrink-0"
+              style={{
+                width: `${windowWidth()}px`,
+                "min-height": `${windowHeight() + 32}px`,
+              }}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+            >
+              {/* Title Bar */}
+              <div class="h-8 border-b border-border flex items-center px-3 rounded-t-lg">
+                <div class="flex gap-1.5">
+                  <div class="w-3 h-3 rounded-full bg-error/50" />
+                  <div class="w-3 h-3 rounded-full bg-warning/50" />
+                  <div class="w-3 h-3 rounded-full bg-success/50" />
+                </div>
+                <div class="flex-1 text-center text-xs text-foreground-muted">
+                  {windowWidth()} x {windowHeight()}
                 </div>
               </div>
-            </Show>
+
+              {/* Content Area - Drop Zone */}
+              <div
+                ref={contentAreaRef}
+                class="relative p-4 canvas-content overflow-hidden"
+                style={{
+                  "min-height": `${windowHeight()}px`,
+                }}
+                onDragOver={handleDragOver}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <For each={designerStore.components()}>
+                  {(component) => (
+                    <CanvasComponent component={component} />
+                  )}
+                </For>
+
+                <Show when={designerStore.components().length === 0}>
+                  <div class="absolute inset-0 flex items-center justify-center text-foreground-muted text-sm pointer-events-none">
+                    <div class="text-center">
+                      <p>Drag components here</p>
+                      <p class="text-xs mt-1">to build your trainer UI</p>
+                    </div>
+                  </div>
+                </Show>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -303,44 +321,54 @@ const ComponentPreview: Component<ComponentPreviewProps> = (props) => {
         </div>
       );
 
-    case "toggle":
+    case "toggle": {
+      const isOn = (c.props.defaultValue as boolean) ?? false;
       return (
-        <div class="w-full h-full flex items-center gap-3">
-          <div class="relative w-10 h-5 bg-background-secondary rounded-full">
-            <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-foreground-muted rounded-full transition-transform" />
+        <div class="w-full h-full flex items-center gap-3 pointer-events-none">
+          <div class={`relative w-10 h-5 rounded-full transition-colors ${isOn ? "bg-accent" : "bg-background-secondary"}`}>
+            <div class={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${isOn ? "translate-x-5" : "translate-x-0.5"}`} />
           </div>
           <span class="text-sm">{c.label}</span>
         </div>
       );
+    }
 
-    case "slider":
+    case "slider": {
+      const min = (c.props.min as number) ?? 0;
+      const max = (c.props.max as number) ?? 100;
+      const defaultVal = (c.props.defaultValue as number) ?? 50;
+      const percent = Math.min(100, Math.max(0, ((defaultVal - min) / (max - min)) * 100));
       return (
-        <div class="w-full h-full flex flex-col justify-center gap-1">
+        <div class="w-full h-full flex flex-col justify-center gap-1 pointer-events-none">
           <div class="flex justify-between text-xs">
             <span>{c.label}</span>
-            <span class="text-foreground-muted">
-              {(c.props.defaultValue as number) ?? 50}
-            </span>
+            <span class="text-foreground-muted">{defaultVal}</span>
           </div>
           <div class="relative h-2 bg-background-secondary rounded-full">
             <div
               class="absolute top-0 left-0 h-full bg-accent rounded-full"
-              style={{ width: "50%" }}
+              style={{ width: `${percent}%` }}
             />
             <div
               class="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow border border-border"
-              style={{ left: "calc(50% - 8px)" }}
+              style={{ left: `calc(${percent}% - 8px)` }}
             />
           </div>
         </div>
       );
+    }
 
-    case "input":
+    case "input": {
+      const defaultInputVal = (c.props.defaultValue as string) ?? "";
+      const placeholder = (c.props.placeholder as string) ?? "Enter value...";
       return (
-        <div class="w-full h-full px-3 bg-background border border-border rounded text-sm flex items-center text-foreground-muted pointer-events-none">
-          {c.label || (c.props.placeholder as string) || "Input"}
+        <div class="w-full h-full px-3 bg-background border border-border rounded text-sm flex items-center pointer-events-none">
+          <span class={defaultInputVal ? "text-foreground" : "text-foreground-muted"}>
+            {defaultInputVal || placeholder}
+          </span>
         </div>
       );
+    }
 
     case "dropdown":
       return (

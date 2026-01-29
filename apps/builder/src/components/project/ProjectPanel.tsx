@@ -173,6 +173,61 @@ export const ProjectPanel: Component = () => {
                 </div>
               </ProjectSection>
 
+              {/* Window Settings */}
+              <ProjectSection title="Window Settings">
+                <div class="space-y-3">
+                  <div class="flex items-center justify-between gap-4">
+                    <label class="text-sm text-foreground-muted">Width</label>
+                    <input
+                      type="number"
+                      class="w-24 px-2 py-1 text-sm bg-background border border-border rounded focus:outline-none focus:border-accent"
+                      value={project().ui.width}
+                      min={200}
+                      max={1920}
+                      onChange={(e) =>
+                        projectStore.updateUI({
+                          ...project().ui,
+                          width: Number(e.currentTarget.value),
+                        })
+                      }
+                    />
+                  </div>
+                  <div class="flex items-center justify-between gap-4">
+                    <label class="text-sm text-foreground-muted">Height</label>
+                    <input
+                      type="number"
+                      class="w-24 px-2 py-1 text-sm bg-background border border-border rounded focus:outline-none focus:border-accent"
+                      value={project().ui.height}
+                      min={150}
+                      max={1080}
+                      onChange={(e) =>
+                        projectStore.updateUI({
+                          ...project().ui,
+                          height: Number(e.currentTarget.value),
+                        })
+                      }
+                    />
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <label class="text-sm text-foreground-muted">Theme</label>
+                    <select
+                      class="px-2 py-1 text-sm bg-background border border-border rounded"
+                      value={project().ui.theme}
+                      onChange={(e) =>
+                        projectStore.updateUI({
+                          ...project().ui,
+                          theme: e.currentTarget.value,
+                        })
+                      }
+                    >
+                      <option value="dark">Dark</option>
+                      <option value="light">Light</option>
+                      <option value="system">System</option>
+                    </select>
+                  </div>
+                </div>
+              </ProjectSection>
+
               {/* Build Settings */}
               <ProjectSection title="Build Settings">
                 <div class="space-y-3">
