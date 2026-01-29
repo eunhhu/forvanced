@@ -13,18 +13,26 @@ import {
   IconFunction,
   IconTerminal,
   PlusIcon,
+  IconHash,
+  IconList,
+  IconBox,
+  IconArrowSwap,
 } from "@/components/common/Icons";
 
 // Category icons
 const categoryIcons: Record<string, Component<{ class?: string }>> = {
-  Events: IconZap,        // NEW: Event listeners (entry points)
+  Constants: IconHash,    // Literal values (string, number, boolean, pointer)
+  Events: IconZap,        // Event listeners (entry points)
   Flow: IconWorkflow,
   Memory: MemoryIcon,
   Pointer: MemoryIcon,
   Module: IconFunction,
   Variable: IconVariable,
+  Array: IconList,        // Array operations
+  Object: IconBox,        // Object operations
   Math: IconCalculator,
   String: IconTerminal,
+  Conversion: IconArrowSwap, // Type conversion
   Native: IconTerminal,
   Interceptor: IconZap,
   Output: IconGitBranch,
@@ -33,14 +41,18 @@ const categoryIcons: Record<string, Component<{ class?: string }>> = {
 
 // Category colors for visual distinction
 const categoryColors: Record<string, string> = {
-  Events: "text-emerald-400", // NEW: Prominent color for events
+  Constants: "text-pink-400",   // Prominent for data entry
+  Events: "text-emerald-400",   // Entry points
   Flow: "text-blue-400",
   Memory: "text-purple-400",
   Pointer: "text-violet-400",
   Module: "text-green-400",
   Variable: "text-yellow-400",
+  Array: "text-indigo-400",     // Collections
+  Object: "text-sky-400",       // Object operations
   Math: "text-orange-400",
   String: "text-teal-400",
+  Conversion: "text-lime-400",  // Type conversion
   Native: "text-red-400",
   Interceptor: "text-rose-400",
   Output: "text-cyan-400",
@@ -50,7 +62,7 @@ const categoryColors: Record<string, string> = {
 export const NodePalette: Component = () => {
   const [searchQuery, setSearchQuery] = createSignal("");
   const [expandedCategories, setExpandedCategories] = createSignal<Set<string>>(
-    new Set(["Events", "Flow", "Memory"])  // Events expanded by default
+    new Set(["Constants", "Events", "Flow", "Variable"])  // Important categories expanded by default
   );
 
   const categories = createMemo(() => scriptStore.getNodeCategories());

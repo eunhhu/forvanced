@@ -35,10 +35,20 @@ export type ScriptNodeType =
   | "event_detach"        // When detached from process
   | "event_hotkey"        // When hotkey is pressed
   | "event_interval"      // Periodic execution (timer)
+  // Constants (Literal Values)
+  | "const_string"        // String literal input
+  | "const_number"        // Number literal input
+  | "const_boolean"       // Boolean literal input
+  | "const_pointer"       // Pointer/Address literal (hex string)
   // Flow Control
   | "if"              // Conditional branch
+  | "switch"          // Multi-way branch (switch/case)
+  | "for_each"        // Iterate over array
+  | "for_range"       // Loop from start to end
   | "loop"            // Loop (while/for)
   | "delay"           // Wait for ms
+  | "break"           // Break from loop
+  | "continue"        // Continue to next iteration
   // Memory Operations
   | "memory_scan"     // Scan for value pattern
   | "memory_read"     // Read from address
@@ -59,6 +69,18 @@ export type ScriptNodeType =
   // Variables
   | "set_variable"    // Store value in variable
   | "get_variable"    // Retrieve value from variable
+  | "declare_variable" // Declare and initialize a variable
+  // Array Operations
+  | "array_create"    // Create an array
+  | "array_get"       // Get element at index
+  | "array_set"       // Set element at index
+  | "array_push"      // Add element to end
+  | "array_length"    // Get array length
+  | "array_find"      // Find element in array
+  // Object Operations
+  | "object_get"      // Get property from object
+  | "object_set"      // Set property on object
+  | "object_keys"     // Get all keys of object
   // Math/Logic
   | "math"            // Math operations (+, -, *, /, %)
   | "compare"         // Comparison (==, !=, <, >, <=, >=)
@@ -67,6 +89,10 @@ export type ScriptNodeType =
   | "string_format"   // Format string with values
   | "string_concat"   // Concatenate strings
   | "to_string"       // Convert value to string
+  | "parse_int"       // Parse string to integer
+  | "parse_float"     // Parse string to float
+  // Type Conversion
+  | "to_pointer"      // Convert number/string to pointer (ptr())
   // Native
   | "call_native"     // Call native function with NativeFunction
   | "native_callback" // Create NativeCallback for hooks
@@ -170,7 +196,57 @@ interface NodeTemplate {
 }
 
 export const nodeTemplates: NodeTemplate[] = [
+  // ============================================
+  // Constants (Literal Values) - Entry points for data
+  // ============================================
+  {
+    type: "const_string",
+    label: "String",
+    category: "Constants",
+    description: "A constant string value",
+    defaultConfig: { value: "" },
+    inputs: [],
+    outputs: [
+      { name: "value", type: "value", valueType: "string", direction: "output" },
+    ],
+  },
+  {
+    type: "const_number",
+    label: "Number",
+    category: "Constants",
+    description: "A constant number value",
+    defaultConfig: { value: 0, isFloat: false },
+    inputs: [],
+    outputs: [
+      { name: "value", type: "value", valueType: "any", direction: "output" },
+    ],
+  },
+  {
+    type: "const_boolean",
+    label: "Boolean",
+    category: "Constants",
+    description: "A constant boolean value (true/false)",
+    defaultConfig: { value: true },
+    inputs: [],
+    outputs: [
+      { name: "value", type: "value", valueType: "boolean", direction: "output" },
+    ],
+  },
+  {
+    type: "const_pointer",
+    label: "Address",
+    category: "Constants",
+    description: "A constant memory address (hex string like 0x12345678)",
+    defaultConfig: { value: "0x0" },
+    inputs: [],
+    outputs: [
+      { name: "value", type: "value", valueType: "pointer", direction: "output" },
+    ],
+  },
+
+  // ============================================
   // Event Listeners (Entry Points)
+  // ============================================
   {
     type: "event_ui",
     label: "UI Event",
@@ -239,7 +315,9 @@ export const nodeTemplates: NodeTemplate[] = [
       { name: "tick", type: "value", valueType: "int32", direction: "output" }, // Tick count
     ],
   },
+  // ============================================
   // Flow Control
+  // ============================================
   {
     type: "if",
     label: "If",
@@ -256,8 +334,60 @@ export const nodeTemplates: NodeTemplate[] = [
     ],
   },
   {
+    type: "switch",
+    label: "Switch",
+    category: "Flow",
+    description: "Multi-way branch based on value (like switch/case)",
+    defaultConfig: { caseCount: 3, caseValues: ["case1", "case2", "case3"] },
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "value", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [
+      { name: "case0", type: "flow", direction: "output" },
+      { name: "case1", type: "flow", direction: "output" },
+      { name: "case2", type: "flow", direction: "output" },
+      { name: "default", type: "flow", direction: "output" },
+    ],
+  },
+  {
+    type: "for_each",
+    label: "For Each",
+    category: "Flow",
+    description: "Iterate over each element in an array",
+    defaultConfig: { maxIterations: 10000 },
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "array", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [
+      { name: "body", type: "flow", direction: "output" },
+      { name: "done", type: "flow", direction: "output" },
+      { name: "element", type: "value", valueType: "any", direction: "output" },
+      { name: "index", type: "value", valueType: "int32", direction: "output" },
+    ],
+  },
+  {
+    type: "for_range",
+    label: "For Range",
+    category: "Flow",
+    description: "Loop from start to end (exclusive)",
+    defaultConfig: { maxIterations: 10000 },
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "start", type: "value", valueType: "int32", direction: "input" },
+      { name: "end", type: "value", valueType: "int32", direction: "input" },
+      { name: "step", type: "value", valueType: "int32", direction: "input" },
+    ],
+    outputs: [
+      { name: "body", type: "flow", direction: "output" },
+      { name: "done", type: "flow", direction: "output" },
+      { name: "index", type: "value", valueType: "int32", direction: "output" },
+    ],
+  },
+  {
     type: "loop",
-    label: "Loop",
+    label: "While Loop",
     category: "Flow",
     description: "Repeat execution while condition is true",
     defaultConfig: { maxIterations: 1000 },
@@ -270,6 +400,28 @@ export const nodeTemplates: NodeTemplate[] = [
       { name: "done", type: "flow", direction: "output" },
       { name: "index", type: "value", valueType: "int32", direction: "output" },
     ],
+  },
+  {
+    type: "break",
+    label: "Break",
+    category: "Flow",
+    description: "Break out of the current loop",
+    defaultConfig: {},
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "continue",
+    label: "Continue",
+    category: "Flow",
+    description: "Skip to next iteration of the loop",
+    defaultConfig: {},
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+    ],
+    outputs: [],
   },
   {
     type: "delay",
@@ -500,7 +652,28 @@ export const nodeTemplates: NodeTemplate[] = [
     ],
   },
 
+  // ============================================
   // Variables
+  // ============================================
+  {
+    type: "declare_variable",
+    label: "Declare Variable",
+    category: "Variable",
+    description: "Declare a new variable with initial value",
+    defaultConfig: {
+      variableName: "myVar",
+      variableType: "any" as ValueType,
+      inlineValue: "",  // For simple initial values
+    },
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "initialValue", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "value", type: "value", valueType: "any", direction: "output" },
+    ],
+  },
   {
     type: "set_variable",
     label: "Set Variable",
@@ -511,7 +684,10 @@ export const nodeTemplates: NodeTemplate[] = [
       { name: "exec", type: "flow", direction: "input" },
       { name: "value", type: "value", valueType: "any", direction: "input" },
     ],
-    outputs: [{ name: "exec", type: "flow", direction: "output" }],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "value", type: "value", valueType: "any", direction: "output" }, // Pass through for chaining
+    ],
   },
   {
     type: "get_variable",
@@ -523,6 +699,151 @@ export const nodeTemplates: NodeTemplate[] = [
     outputs: [{ name: "value", type: "value", valueType: "any", direction: "output" }],
   },
 
+  // ============================================
+  // Array Operations
+  // ============================================
+  {
+    type: "array_create",
+    label: "Create Array",
+    category: "Array",
+    description: "Create an empty array or from elements",
+    defaultConfig: { elementCount: 0 },
+    inputs: [
+      { name: "elem0", type: "value", valueType: "any", direction: "input" },
+      { name: "elem1", type: "value", valueType: "any", direction: "input" },
+      { name: "elem2", type: "value", valueType: "any", direction: "input" },
+      { name: "elem3", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [
+      { name: "array", type: "value", valueType: "any", direction: "output" },
+    ],
+  },
+  {
+    type: "array_get",
+    label: "Array Get",
+    category: "Array",
+    description: "Get element at index from array",
+    defaultConfig: {},
+    inputs: [
+      { name: "array", type: "value", valueType: "any", direction: "input" },
+      { name: "index", type: "value", valueType: "int32", direction: "input" },
+    ],
+    outputs: [
+      { name: "element", type: "value", valueType: "any", direction: "output" },
+    ],
+  },
+  {
+    type: "array_set",
+    label: "Array Set",
+    category: "Array",
+    description: "Set element at index in array",
+    defaultConfig: {},
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "array", type: "value", valueType: "any", direction: "input" },
+      { name: "index", type: "value", valueType: "int32", direction: "input" },
+      { name: "value", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "array", type: "value", valueType: "any", direction: "output" },
+    ],
+  },
+  {
+    type: "array_push",
+    label: "Array Push",
+    category: "Array",
+    description: "Add element to end of array",
+    defaultConfig: {},
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "array", type: "value", valueType: "any", direction: "input" },
+      { name: "value", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "array", type: "value", valueType: "any", direction: "output" },
+      { name: "length", type: "value", valueType: "int32", direction: "output" },
+    ],
+  },
+  {
+    type: "array_length",
+    label: "Array Length",
+    category: "Array",
+    description: "Get the length of an array",
+    defaultConfig: {},
+    inputs: [
+      { name: "array", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [
+      { name: "length", type: "value", valueType: "int32", direction: "output" },
+    ],
+  },
+  {
+    type: "array_find",
+    label: "Array Find",
+    category: "Array",
+    description: "Find element in array, returns index (-1 if not found)",
+    defaultConfig: {},
+    inputs: [
+      { name: "array", type: "value", valueType: "any", direction: "input" },
+      { name: "value", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [
+      { name: "index", type: "value", valueType: "int32", direction: "output" },
+      { name: "found", type: "value", valueType: "boolean", direction: "output" },
+    ],
+  },
+
+  // ============================================
+  // Object Operations
+  // ============================================
+  {
+    type: "object_get",
+    label: "Get Property",
+    category: "Object",
+    description: "Get a property value from an object",
+    defaultConfig: { propertyName: "" },
+    inputs: [
+      { name: "object", type: "value", valueType: "any", direction: "input" },
+      { name: "key", type: "value", valueType: "string", direction: "input" },
+    ],
+    outputs: [
+      { name: "value", type: "value", valueType: "any", direction: "output" },
+    ],
+  },
+  {
+    type: "object_set",
+    label: "Set Property",
+    category: "Object",
+    description: "Set a property value on an object",
+    defaultConfig: {},
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "object", type: "value", valueType: "any", direction: "input" },
+      { name: "key", type: "value", valueType: "string", direction: "input" },
+      { name: "value", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "object", type: "value", valueType: "any", direction: "output" },
+    ],
+  },
+  {
+    type: "object_keys",
+    label: "Object Keys",
+    category: "Object",
+    description: "Get all keys of an object as array",
+    defaultConfig: {},
+    inputs: [
+      { name: "object", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [
+      { name: "keys", type: "value", valueType: "any", direction: "output" },
+    ],
+  },
+
+  // ============================================
   // Math
   {
     type: "math",
@@ -599,7 +920,53 @@ export const nodeTemplates: NodeTemplate[] = [
     ],
     outputs: [{ name: "result", type: "value", valueType: "string", direction: "output" }],
   },
+  {
+    type: "parse_int",
+    label: "Parse Int",
+    category: "String",
+    description: "Parse string to integer (supports 0x hex prefix)",
+    defaultConfig: { radix: 10 },
+    inputs: [
+      { name: "string", type: "value", valueType: "string", direction: "input" },
+    ],
+    outputs: [
+      { name: "value", type: "value", valueType: "int64", direction: "output" },
+      { name: "success", type: "value", valueType: "boolean", direction: "output" },
+    ],
+  },
+  {
+    type: "parse_float",
+    label: "Parse Float",
+    category: "String",
+    description: "Parse string to floating point number",
+    defaultConfig: {},
+    inputs: [
+      { name: "string", type: "value", valueType: "string", direction: "input" },
+    ],
+    outputs: [
+      { name: "value", type: "value", valueType: "double", direction: "output" },
+      { name: "success", type: "value", valueType: "boolean", direction: "output" },
+    ],
+  },
 
+  // ============================================
+  // Type Conversion
+  // ============================================
+  {
+    type: "to_pointer",
+    label: "To Pointer",
+    category: "Conversion",
+    description: "Convert number or hex string to NativePointer (ptr())",
+    defaultConfig: {},
+    inputs: [
+      { name: "value", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [
+      { name: "pointer", type: "value", valueType: "pointer", direction: "output" },
+    ],
+  },
+
+  // ============================================
   // Native
   {
     type: "call_native",

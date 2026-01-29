@@ -190,6 +190,92 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
             </div>
           </PropertyRow>
 
+          {/* Constant Node Configs */}
+          <Show when={props.node.type === "const_string"}>
+            <PropertyRow label="Value">
+              <InspectorTextInput
+                placeholder="Enter string value"
+                value={(props.node.config.value as string) ?? ""}
+                onChange={(val) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: { ...props.node.config, value: val },
+                  })
+                }
+              />
+            </PropertyRow>
+          </Show>
+
+          <Show when={props.node.type === "const_number"}>
+            <PropertyRow label="Value">
+              <InspectorNumberInput
+                value={(props.node.config.value as number) ?? 0}
+                onChange={(val) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: { ...props.node.config, value: val },
+                  })
+                }
+              />
+            </PropertyRow>
+            <PropertyRow label="Float">
+              <input
+                type="checkbox"
+                checked={(props.node.config.isFloat as boolean) ?? false}
+                onChange={(e) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: { ...props.node.config, isFloat: e.currentTarget.checked },
+                  })
+                }
+              />
+            </PropertyRow>
+          </Show>
+
+          <Show when={props.node.type === "const_boolean"}>
+            <PropertyRow label="Value">
+              <button
+                class={`w-14 h-6 rounded-full transition-colors relative ${
+                  (props.node.config.value as boolean) ?? false
+                    ? "bg-accent"
+                    : "bg-background-secondary"
+                }`}
+                onClick={() =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: { ...props.node.config, value: !(props.node.config.value as boolean) },
+                  })
+                }
+              >
+                <div
+                  class={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                    (props.node.config.value as boolean) ?? false
+                      ? "translate-x-8"
+                      : "translate-x-1"
+                  }`}
+                />
+                <span class={`absolute inset-0 flex items-center justify-center text-[9px] font-medium ${
+                  (props.node.config.value as boolean) ? "text-white pr-5" : "text-foreground-muted pl-5"
+                }`}>
+                  {(props.node.config.value as boolean) ? "true" : "false"}
+                </span>
+              </button>
+            </PropertyRow>
+          </Show>
+
+          <Show when={props.node.type === "const_pointer"}>
+            <PropertyRow label="Address">
+              <InspectorTextInput
+                placeholder="0x12345678"
+                value={(props.node.config.value as string) ?? "0x0"}
+                onChange={(val) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: { ...props.node.config, value: val },
+                  })
+                }
+              />
+            </PropertyRow>
+            <div class="text-[9px] text-foreground-muted">
+              Enter hex address (e.g., 0x7FFF12345678)
+            </div>
+          </Show>
+
           {/* Event Node Configs */}
           <Show when={props.node.type === "event_ui"}>
             <EventUIConfig node={props.node} />
@@ -254,7 +340,7 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
             </PropertyRow>
           </Show>
 
-          <Show when={props.node.type === "loop"}>
+          <Show when={props.node.type === "loop" || props.node.type === "for_each" || props.node.type === "for_range"}>
             <PropertyRow label="Max Iterations">
               <InspectorNumberInput
                 value={(props.node.config.maxIterations as number) ?? 1000}
@@ -268,6 +354,13 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
                 }
               />
             </PropertyRow>
+            <div class="text-[9px] text-foreground-muted">
+              Safety limit to prevent infinite loops
+            </div>
+          </Show>
+
+          <Show when={props.node.type === "switch"}>
+            <SwitchNodeConfig node={props.node} />
           </Show>
 
           <Show when={props.node.type === "memory_scan"}>
@@ -447,6 +540,54 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
 
           <Show when={props.node.type === "set_variable" || props.node.type === "get_variable"}>
             <VariableSelector node={props.node} />
+          </Show>
+
+          <Show when={props.node.type === "declare_variable"}>
+            <PropertyRow label="Variable Name">
+              <InspectorTextInput
+                placeholder="myVariable"
+                value={(props.node.config.variableName as string) ?? ""}
+                onChange={(val) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: { ...props.node.config, variableName: val },
+                  })
+                }
+              />
+            </PropertyRow>
+            <PropertyRow label="Type">
+              <select
+                class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+                value={(props.node.config.variableType as string) ?? "any"}
+                onChange={(e) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: { ...props.node.config, variableType: e.currentTarget.value },
+                  })
+                }
+              >
+                <option value="any">any</option>
+                <option value="int32">int32</option>
+                <option value="int64">int64</option>
+                <option value="float">float</option>
+                <option value="double">double</option>
+                <option value="pointer">pointer</option>
+                <option value="string">string</option>
+                <option value="boolean">boolean</option>
+              </select>
+            </PropertyRow>
+            <PropertyRow label="Inline Value">
+              <InspectorTextInput
+                placeholder="Optional initial value"
+                value={(props.node.config.inlineValue as string) ?? ""}
+                onChange={(val) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: { ...props.node.config, inlineValue: val },
+                  })
+                }
+              />
+            </PropertyRow>
+            <div class="text-[9px] text-foreground-muted">
+              Inline value is used if no connection to initialValue input
+            </div>
           </Show>
 
           <Show when={props.node.type === "call_native"}>
@@ -631,6 +772,53 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
                 <option value="decimal">Decimal</option>
               </select>
             </PropertyRow>
+          </Show>
+
+          {/* Parse int radix */}
+          <Show when={props.node.type === "parse_int"}>
+            <PropertyRow label="Radix">
+              <select
+                class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+                value={String((props.node.config.radix as number) ?? 10)}
+                onChange={(e) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: {
+                      ...props.node.config,
+                      radix: Number(e.currentTarget.value),
+                    },
+                  })
+                }
+              >
+                <option value="10">Decimal (10)</option>
+                <option value="16">Hexadecimal (16)</option>
+                <option value="8">Octal (8)</option>
+                <option value="2">Binary (2)</option>
+              </select>
+            </PropertyRow>
+            <div class="text-[9px] text-foreground-muted">
+              Strings starting with 0x auto-detect as hex
+            </div>
+          </Show>
+
+          {/* Object property inline name */}
+          <Show when={props.node.type === "object_get"}>
+            <PropertyRow label="Property (inline)">
+              <InspectorTextInput
+                placeholder="Optional: property name"
+                value={(props.node.config.propertyName as string) ?? ""}
+                onChange={(val) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: {
+                      ...props.node.config,
+                      propertyName: val,
+                    },
+                  })
+                }
+              />
+            </PropertyRow>
+            <div class="text-[9px] text-foreground-muted">
+              Used if no connection to "key" input
+            </div>
           </Show>
 
           {/* Read/Write arg index */}
@@ -1068,6 +1256,52 @@ const VariableSelector: Component<VariableSelectorProps> = (props) => {
         </For>
       </select>
     </PropertyRow>
+  );
+};
+
+// Switch node configuration
+interface SwitchNodeConfigProps {
+  node: ScriptNode;
+}
+
+const SwitchNodeConfig: Component<SwitchNodeConfigProps> = (props) => {
+  const caseValues = () => (props.node.config.caseValues as string[]) ?? [];
+
+  const handleCaseValueChange = (index: number, value: string) => {
+    const newCaseValues = [...caseValues()];
+    newCaseValues[index] = value;
+    scriptStore.updateNode(props.node.id, {
+      config: {
+        ...props.node.config,
+        caseValues: newCaseValues,
+      },
+    });
+  };
+
+  return (
+    <>
+      <div class="text-[10px] text-foreground-muted font-medium pt-2">
+        Case Values
+      </div>
+      <div class="space-y-2">
+        <For each={caseValues()}>
+          {(value, index) => (
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] text-foreground-muted w-12">case{index()}</span>
+              <InspectorTextInput
+                class="flex-1 px-2 py-1 text-xs bg-background border border-border rounded"
+                placeholder={`Value for case ${index()}`}
+                value={value}
+                onChange={(val) => handleCaseValueChange(index(), val)}
+              />
+            </div>
+          )}
+        </For>
+      </div>
+      <div class="text-[9px] text-foreground-muted pt-1">
+        Match is checked as string equality. Use "default" output for no match.
+      </div>
+    </>
   );
 };
 
