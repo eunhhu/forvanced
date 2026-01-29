@@ -10,9 +10,15 @@ import { TrashIcon } from "@/components/common/Icons";
 export const DesignCanvas: Component = () => {
   let contentAreaRef: HTMLDivElement | undefined;
 
-  // Get window size from project
-  const windowWidth = createMemo(() => projectStore.currentProject()?.ui.width ?? 400);
-  const windowHeight = createMemo(() => projectStore.currentProject()?.ui.height ?? 500);
+  // Get window size from project - access ui object reactively
+  const windowWidth = createMemo(() => {
+    const width = projectStore.currentProject()?.ui?.width;
+    return width && width > 0 ? width : 400;
+  });
+  const windowHeight = createMemo(() => {
+    const height = projectStore.currentProject()?.ui?.height;
+    return height && height > 0 ? height : 500;
+  });
 
   const handleDragOver = (e: DragEvent) => {
     e.preventDefault();
@@ -66,10 +72,14 @@ export const DesignCanvas: Component = () => {
     designerStore.setDraggingComponentType(null);
   };
 
-  const handleCanvasClick = (e: MouseEvent) => {
-    // Deselect when clicking on empty canvas area
+  const handleCanvasMouseDown = (e: MouseEvent) => {
+    // Deselect when clicking on empty canvas area (not on components)
     const target = e.target as HTMLElement;
-    if (target.classList.contains("canvas-drop-zone") || target.classList.contains("canvas-content")) {
+    if (
+      target.classList.contains("canvas-drop-zone") ||
+      target.classList.contains("canvas-content") ||
+      target.classList.contains("canvas-background")
+    ) {
       designerStore.setSelectedId(null);
     }
   };
@@ -99,7 +109,7 @@ export const DesignCanvas: Component = () => {
             "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
           "background-size": "20px 20px",
         }}
-        onClick={handleCanvasClick}
+        onMouseDown={handleCanvasMouseDown}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
@@ -171,11 +181,20 @@ interface CanvasComponentProps {
 const CanvasComponent: Component<CanvasComponentProps> = (props) => {
   const [isEditing, setIsEditing] = createSignal(false);
   const [editValue, setEditValue] = createSignal("");
+  const [isDragging, setIsDragging] = createSignal(false);
 
   const isSelected = () => designerStore.selectedId() === props.component.id;
 
   const handleMouseDown = (e: MouseEvent) => {
+    // Ignore if clicking on delete button or resize handle
+    const target = e.target as HTMLElement;
+    if (target.closest("[data-action]")) {
+      return;
+    }
+
     e.stopPropagation();
+    e.preventDefault();
+
     designerStore.setSelectedId(props.component.id);
 
     if (e.detail === 2) {
@@ -185,6 +204,8 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
       return;
     }
 
+    // Start drag tracking
+    setIsDragging(true);
     designerStore.setIsDragging(true);
     const startX = e.clientX;
     const startY = e.clientY;
@@ -202,6 +223,7 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
     };
 
     const handleMouseUp = () => {
+      setIsDragging(false);
       designerStore.setIsDragging(false);
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
@@ -218,6 +240,7 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
 
   const handleDelete = (e: MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
     designerStore.deleteComponent(props.component.id);
   };
 
@@ -237,7 +260,12 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
       {/* Delete button */}
       <Show when={isSelected()}>
         <button
+          data-action="delete"
           class="absolute -top-2 -right-2 w-5 h-5 bg-error rounded-full flex items-center justify-center text-white hover:bg-error/80 transition-colors z-10"
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
           onClick={handleDelete}
         >
           <TrashIcon class="w-3 h-3" />
@@ -265,9 +293,11 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
       {/* Resize handle */}
       <Show when={isSelected()}>
         <div
-          class="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize"
+          data-action="resize"
+          class="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize flex items-center justify-center"
           onMouseDown={(e) => {
             e.stopPropagation();
+            e.preventDefault();
             const startX = e.clientX;
             const startY = e.clientY;
             const startW = props.component.width;

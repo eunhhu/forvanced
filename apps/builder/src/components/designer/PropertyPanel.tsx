@@ -1,4 +1,4 @@
-import { Component, For, Show, createSignal, createMemo } from "solid-js";
+import { Component, For, Show, createSignal, createMemo, createEffect, untrack, batch } from "solid-js";
 import {
   designerStore,
   fridaActions,
@@ -53,49 +53,25 @@ export const PropertyPanel: Component = () => {
                 />
                 <PropertyRow label="Position">
                   <div class="flex gap-2">
-                    <input
-                      type="number"
-                      class="w-16 px-2 py-1 text-xs bg-background border border-border rounded"
+                    <NumberInput
                       value={Math.round(c().x)}
-                      onChange={(e) =>
-                        designerStore.updateComponent(c().id, {
-                          x: Number(e.currentTarget.value),
-                        })
-                      }
+                      onChange={(val) => designerStore.updateComponent(c().id, { x: val })}
                     />
-                    <input
-                      type="number"
-                      class="w-16 px-2 py-1 text-xs bg-background border border-border rounded"
+                    <NumberInput
                       value={Math.round(c().y)}
-                      onChange={(e) =>
-                        designerStore.updateComponent(c().id, {
-                          y: Number(e.currentTarget.value),
-                        })
-                      }
+                      onChange={(val) => designerStore.updateComponent(c().id, { y: val })}
                     />
                   </div>
                 </PropertyRow>
                 <PropertyRow label="Size">
                   <div class="flex gap-2">
-                    <input
-                      type="number"
-                      class="w-16 px-2 py-1 text-xs bg-background border border-border rounded"
+                    <NumberInput
                       value={Math.round(c().width)}
-                      onChange={(e) =>
-                        designerStore.updateComponent(c().id, {
-                          width: Number(e.currentTarget.value),
-                        })
-                      }
+                      onChange={(val) => designerStore.updateComponent(c().id, { width: val })}
                     />
-                    <input
-                      type="number"
-                      class="w-16 px-2 py-1 text-xs bg-background border border-border rounded"
+                    <NumberInput
                       value={Math.round(c().height)}
-                      onChange={(e) =>
-                        designerStore.updateComponent(c().id, {
-                          height: Number(e.currentTarget.value),
-                        })
-                      }
+                      onChange={(val) => designerStore.updateComponent(c().id, { height: val })}
                     />
                   </div>
                 </PropertyRow>
@@ -132,49 +108,45 @@ export const PropertyPanel: Component = () => {
               <Show when={c().type === "slider"}>
                 <PropertySection title="Slider Settings">
                   <PropertyRow label="Min">
-                    <input
-                      type="number"
+                    <NumberInput
                       class="w-20 px-2 py-1 text-xs bg-background border border-border rounded"
                       value={(c().props.min as number) ?? 0}
-                      onChange={(e) =>
+                      onChange={(val) =>
                         designerStore.updateComponent(c().id, {
-                          props: { ...c().props, min: Number(e.currentTarget.value) },
+                          props: { ...c().props, min: val },
                         })
                       }
                     />
                   </PropertyRow>
                   <PropertyRow label="Max">
-                    <input
-                      type="number"
+                    <NumberInput
                       class="w-20 px-2 py-1 text-xs bg-background border border-border rounded"
                       value={(c().props.max as number) ?? 100}
-                      onChange={(e) =>
+                      onChange={(val) =>
                         designerStore.updateComponent(c().id, {
-                          props: { ...c().props, max: Number(e.currentTarget.value) },
+                          props: { ...c().props, max: val },
                         })
                       }
                     />
                   </PropertyRow>
                   <PropertyRow label="Step">
-                    <input
-                      type="number"
+                    <NumberInput
                       class="w-20 px-2 py-1 text-xs bg-background border border-border rounded"
                       value={(c().props.step as number) ?? 1}
-                      onChange={(e) =>
+                      onChange={(val) =>
                         designerStore.updateComponent(c().id, {
-                          props: { ...c().props, step: Number(e.currentTarget.value) },
+                          props: { ...c().props, step: val },
                         })
                       }
                     />
                   </PropertyRow>
                   <PropertyRow label="Default">
-                    <input
-                      type="number"
+                    <NumberInput
                       class="w-20 px-2 py-1 text-xs bg-background border border-border rounded"
                       value={(c().props.defaultValue as number) ?? 50}
-                      onChange={(e) =>
+                      onChange={(val) =>
                         designerStore.updateComponent(c().id, {
-                          props: { ...c().props, defaultValue: Number(e.currentTarget.value) },
+                          props: { ...c().props, defaultValue: val },
                         })
                       }
                     />
@@ -208,14 +180,13 @@ export const PropertyPanel: Component = () => {
               <Show when={c().type === "dropdown"}>
                 <PropertySection title="Dropdown Settings">
                   <PropertyRow label="Default Index">
-                    <input
-                      type="number"
+                    <NumberInput
                       class="w-20 px-2 py-1 text-xs bg-background border border-border rounded"
                       min={0}
                       value={(c().props.defaultIndex as number) ?? 0}
-                      onChange={(e) =>
+                      onChange={(val) =>
                         designerStore.updateComponent(c().id, {
-                          props: { ...c().props, defaultIndex: Number(e.currentTarget.value) },
+                          props: { ...c().props, defaultIndex: val },
                         })
                       }
                     />
@@ -271,23 +242,118 @@ const PropertyRow: Component<PropertyRowProps> = (props) => (
   </div>
 );
 
+// Uncontrolled number input that doesn't lose focus on external updates
+interface NumberInputProps {
+  value: number;
+  onChange: (value: number) => void;
+  class?: string;
+  min?: number;
+}
+
+const NumberInput: Component<NumberInputProps> = (props) => {
+  const [localValue, setLocalValue] = createSignal(String(props.value));
+  const [isFocused, setIsFocused] = createSignal(false);
+
+  createEffect(() => {
+    const val = props.value;
+    if (untrack(() => !isFocused())) {
+      setLocalValue(String(val));
+    }
+  });
+
+  return (
+    <input
+      type="number"
+      class={props.class ?? "w-16 px-2 py-1 text-xs bg-background border border-border rounded"}
+      min={props.min}
+      value={localValue()}
+      onFocus={() => setIsFocused(true)}
+      onInput={(e) => {
+        const strVal = e.currentTarget.value;
+        setLocalValue(strVal);
+        const num = Number(strVal);
+        if (!isNaN(num)) {
+          props.onChange(num);
+        }
+      }}
+      onBlur={() => setIsFocused(false)}
+    />
+  );
+};
+
+// Uncontrolled text input for binding params
+interface TextInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  class?: string;
+  type?: "text" | "number";
+}
+
+const TextInput: Component<TextInputProps> = (props) => {
+  const [localValue, setLocalValue] = createSignal(props.value);
+  const [isFocused, setIsFocused] = createSignal(false);
+
+  createEffect(() => {
+    const val = props.value;
+    if (untrack(() => !isFocused())) {
+      setLocalValue(val);
+    }
+  });
+
+  return (
+    <input
+      type={props.type ?? "text"}
+      class={props.class ?? "w-24 px-1.5 py-0.5 text-[10px] bg-background border border-border rounded"}
+      value={localValue()}
+      onFocus={() => setIsFocused(true)}
+      onInput={(e) => {
+        const val = e.currentTarget.value;
+        setLocalValue(val);
+        props.onChange(val);
+      }}
+      onBlur={() => setIsFocused(false)}
+    />
+  );
+};
+
 interface PropertyInputProps {
   label: string;
   value: string;
   onChange: (value: string) => void;
 }
 
-const PropertyInput: Component<PropertyInputProps> = (props) => (
-  <div class="flex items-center justify-between">
-    <label class="text-xs text-foreground-muted">{props.label}</label>
-    <input
-      type="text"
-      class="w-32 px-2 py-1 text-xs bg-background border border-border rounded focus:outline-none focus:border-accent"
-      value={props.value}
-      onInput={(e) => props.onChange(e.currentTarget.value)}
-    />
-  </div>
-);
+const PropertyInput: Component<PropertyInputProps> = (props) => {
+  let inputRef: HTMLInputElement | undefined;
+  const [localValue, setLocalValue] = createSignal(props.value);
+  const [isFocused, setIsFocused] = createSignal(false);
+
+  // Sync from props when not focused
+  createEffect(() => {
+    const val = props.value;
+    if (untrack(() => !isFocused())) {
+      setLocalValue(val);
+    }
+  });
+
+  return (
+    <div class="flex items-center justify-between">
+      <label class="text-xs text-foreground-muted">{props.label}</label>
+      <input
+        ref={inputRef}
+        type="text"
+        class="w-32 px-2 py-1 text-xs bg-background border border-border rounded focus:outline-none focus:border-accent"
+        value={localValue()}
+        onFocus={() => setIsFocused(true)}
+        onInput={(e) => {
+          const val = e.currentTarget.value;
+          setLocalValue(val);
+          props.onChange(val);
+        }}
+        onBlur={() => setIsFocused(false)}
+      />
+    </div>
+  );
+};
 
 // Action Bindings Section
 interface ActionBindingsSectionProps {
@@ -402,47 +468,83 @@ const BindingItem: Component<BindingItemProps> = (props) => {
         <div class="px-2 py-2 space-y-2 border-t border-border">
           <For each={action()!.params}>
             {(param) => (
-              <div class="flex items-center justify-between">
-                <label class="text-[10px] text-foreground-muted">{param.label}</label>
-                <Show
-                  when={param.type === "select"}
-                  fallback={
-                    <input
-                      type={param.type === "number" ? "number" : "text"}
-                      class="w-24 px-1.5 py-0.5 text-[10px] bg-background border border-border rounded"
-                      value={String(props.binding.params[param.name] ?? param.defaultValue ?? "")}
-                      onInput={(e) => {
-                        designerStore.updateBinding(props.componentId, props.binding.id, {
-                          params: {
-                            ...props.binding.params,
-                            [param.name]: e.currentTarget.value,
-                          },
-                        });
-                      }}
-                    />
-                  }
-                >
-                  <select
-                    class="w-24 px-1.5 py-0.5 text-[10px] bg-background border border-border rounded"
-                    value={String(props.binding.params[param.name] ?? param.defaultValue ?? "")}
-                    onChange={(e) => {
-                      designerStore.updateBinding(props.componentId, props.binding.id, {
-                        params: {
-                          ...props.binding.params,
-                          [param.name]: e.currentTarget.value,
-                        },
-                      });
-                    }}
-                  >
-                    <For each={param.options}>
-                      {(opt) => <option value={opt.value}>{opt.label}</option>}
-                    </For>
-                  </select>
-                </Show>
-              </div>
+              <BindingParamInput
+                param={param}
+                value={props.binding.params[param.name] ?? param.defaultValue ?? ""}
+                onChange={(val) => {
+                  designerStore.updateBinding(props.componentId, props.binding.id, {
+                    params: {
+                      ...props.binding.params,
+                      [param.name]: val,
+                    },
+                  });
+                }}
+              />
             )}
           </For>
         </div>
+      </Show>
+    </div>
+  );
+};
+
+// Binding parameter input with local state to prevent focus loss
+interface BindingParamInputProps {
+  param: {
+    name: string;
+    label: string;
+    type: "string" | "number" | "boolean" | "select";
+    options?: { value: string; label: string }[];
+    defaultValue?: string | number | boolean;
+  };
+  value: string | number | boolean;
+  onChange: (value: string | number | boolean) => void;
+}
+
+const BindingParamInput: Component<BindingParamInputProps> = (props) => {
+  const [localValue, setLocalValue] = createSignal(String(props.value));
+  const [isFocused, setIsFocused] = createSignal(false);
+
+  createEffect(() => {
+    const val = String(props.value);
+    if (untrack(() => !isFocused())) {
+      setLocalValue(val);
+    }
+  });
+
+  return (
+    <div class="flex items-center justify-between">
+      <label class="text-[10px] text-foreground-muted">{props.param.label}</label>
+      <Show
+        when={props.param.type === "select"}
+        fallback={
+          <input
+            type={props.param.type === "number" ? "number" : "text"}
+            class="w-24 px-1.5 py-0.5 text-[10px] bg-background border border-border rounded"
+            value={localValue()}
+            onFocus={() => setIsFocused(true)}
+            onInput={(e) => {
+              const val = e.currentTarget.value;
+              setLocalValue(val);
+              props.onChange(props.param.type === "number" ? Number(val) : val);
+            }}
+            onBlur={() => setIsFocused(false)}
+          />
+        }
+      >
+        <select
+          class="w-24 px-1.5 py-0.5 text-[10px] bg-background border border-border rounded"
+          value={localValue()}
+          onChange={(e) => {
+            const val = e.currentTarget.value;
+            setLocalValue(val);
+            props.onChange(val);
+          }}
+        >
+          <For each={props.param.options}>
+            {(opt) => <option value={opt.value}>{opt.label}</option>}
+          </For>
+        </select>
       </Show>
     </div>
   );

@@ -1,4 +1,4 @@
-import { Component, Show, createSignal, For, onMount } from "solid-js";
+import { Component, Show, createSignal, For, onMount, createEffect, untrack } from "solid-js";
 import { projectStore } from "@/stores/project";
 import {
   IconFolder,
@@ -200,23 +200,15 @@ export const ProjectPanel: Component = () => {
                       });
                     }}
                   />
-                  <div class="flex items-center justify-between">
-                    <label class="text-sm text-foreground-muted">Theme</label>
-                    <select
-                      class="px-2 py-1 text-sm bg-background border border-border rounded"
-                      value={project().ui.theme}
-                      onInput={(e) => {
-                        projectStore.updateUI({
-                          ...project().ui,
-                          theme: e.currentTarget.value,
-                        });
-                      }}
-                    >
-                      <option value="dark">Dark</option>
-                      <option value="light">Light</option>
-                      <option value="system">System</option>
-                    </select>
-                  </div>
+                  <ThemeSelect
+                    value={project().ui.theme}
+                    onChange={(val) => {
+                      projectStore.updateUI({
+                        ...project().ui,
+                        theme: val,
+                      });
+                    }}
+                  />
                 </div>
               </ProjectSection>
 
@@ -502,7 +494,47 @@ const ProjectField: Component<ProjectFieldProps> = (props) => {
   );
 };
 
-// Window size input - completely uncontrolled, no effects
+// Theme select component - properly controlled
+interface ThemeSelectProps {
+  value: string;
+  onChange: (value: string) => void;
+}
+
+const ThemeSelect: Component<ThemeSelectProps> = (props) => {
+  // Use local signal to properly control the select
+  const [localValue, setLocalValue] = createSignal(props.value);
+
+  // Sync with external value changes
+  const updateFromProps = () => {
+    if (localValue() !== props.value) {
+      setLocalValue(props.value);
+    }
+  };
+
+  // Check on every render
+  updateFromProps();
+
+  return (
+    <div class="flex items-center justify-between">
+      <label class="text-sm text-foreground-muted">Theme</label>
+      <select
+        class="px-2 py-1 text-sm bg-background border border-border rounded"
+        value={localValue()}
+        onChange={(e) => {
+          const newValue = e.currentTarget.value;
+          setLocalValue(newValue);
+          props.onChange(newValue);
+        }}
+      >
+        <option value="dark">Dark</option>
+        <option value="light">Light</option>
+        <option value="system">System</option>
+      </select>
+    </div>
+  );
+};
+
+// Window size input - uses createEffect for proper reactivity
 interface WindowSizeInputProps {
   label: string;
   value: number;
@@ -512,21 +544,29 @@ interface WindowSizeInputProps {
 }
 
 const WindowSizeInput: Component<WindowSizeInputProps> = (props) => {
-  let inputRef: HTMLInputElement | undefined;
+  // Local signal for the input value (string for input handling)
+  const [localValue, setLocalValue] = createSignal(String(props.value || 400));
+  const [isFocused, setIsFocused] = createSignal(false);
+
+  // Sync from props when not focused (external changes)
+  // Use untrack for isFocused to prevent infinite loop
+  createEffect(() => {
+    const propsVal = props.value;
+    if (untrack(() => !isFocused()) && propsVal > 0) {
+      setLocalValue(String(propsVal));
+    }
+  });
 
   const handleBlur = () => {
-    if (!inputRef) return;
-    const val = Number(inputRef.value);
+    setIsFocused(false);
+    const val = Number(localValue());
     if (!isNaN(val) && val > 0) {
       const clamped = Math.max(props.min, Math.min(props.max, val));
+      setLocalValue(String(clamped));
       props.onChange(clamped);
-      // Update input to show clamped value if different
-      if (inputRef.value !== String(clamped)) {
-        inputRef.value = String(clamped);
-      }
     } else {
       // Reset to current store value if invalid
-      inputRef.value = String(props.value);
+      setLocalValue(String(props.value || 400));
     }
   };
 
@@ -534,15 +574,13 @@ const WindowSizeInput: Component<WindowSizeInputProps> = (props) => {
     <div class="flex items-center justify-between gap-4">
       <label class="text-sm text-foreground-muted">{props.label}</label>
       <input
-        ref={(el) => {
-          inputRef = el;
-          // Set initial value when ref is assigned
-          el.value = String(props.value);
-        }}
         type="number"
         class="w-24 px-2 py-1 text-sm bg-background border border-border rounded focus:outline-none focus:border-accent"
         min={props.min}
         max={props.max}
+        value={localValue()}
+        onFocus={() => setIsFocused(true)}
+        onInput={(e) => setLocalValue(e.currentTarget.value)}
         onBlur={handleBlur}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
