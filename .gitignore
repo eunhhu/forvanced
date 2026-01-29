@@ -33,3 +33,5 @@ coverage/
 # Misc
 *.pem
 *.p12
+
+.playwright-mcp/

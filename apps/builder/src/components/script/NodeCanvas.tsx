@@ -4,8 +4,55 @@ import {
   type ScriptNode,
   type ScriptNodeType,
   type Port,
+  type ValueType,
 } from "@/stores/script";
 import { TrashIcon } from "@/components/common/Icons";
+
+// Port type colors for visual distinction
+const portTypeColors: Record<string, { border: string; bg: string }> = {
+  flow: { border: "border-blue-400", bg: "bg-blue-900" },
+  boolean: { border: "border-yellow-400", bg: "bg-yellow-900" },
+  string: { border: "border-green-400", bg: "bg-green-900" },
+  pointer: { border: "border-red-400", bg: "bg-red-900" },
+  int8: { border: "border-orange-400", bg: "bg-orange-900" },
+  uint8: { border: "border-orange-400", bg: "bg-orange-900" },
+  int16: { border: "border-orange-400", bg: "bg-orange-900" },
+  uint16: { border: "border-orange-400", bg: "bg-orange-900" },
+  int32: { border: "border-orange-400", bg: "bg-orange-900" },
+  uint32: { border: "border-orange-400", bg: "bg-orange-900" },
+  int64: { border: "border-orange-400", bg: "bg-orange-900" },
+  uint64: { border: "border-orange-400", bg: "bg-orange-900" },
+  float: { border: "border-cyan-400", bg: "bg-cyan-900" },
+  double: { border: "border-cyan-400", bg: "bg-cyan-900" },
+  any: { border: "border-purple-400", bg: "bg-purple-900" },
+};
+
+// Get color for a port based on its type
+function getPortColor(port: Port): { border: string; bg: string } {
+  if (port.type === "flow") {
+    return portTypeColors.flow;
+  }
+  return portTypeColors[port.valueType || "any"] || portTypeColors.any;
+}
+
+// Get stroke color for connection line based on port types
+function getConnectionColor(fromPort: Port | undefined): string {
+  if (!fromPort) return "#a855f7";
+  if (fromPort.type === "flow") return "#3b82f6";
+
+  const colorMap: Record<string, string> = {
+    boolean: "#facc15",
+    string: "#22c55e",
+    pointer: "#ef4444",
+    int8: "#f97316", uint8: "#f97316",
+    int16: "#f97316", uint16: "#f97316",
+    int32: "#f97316", uint32: "#f97316",
+    int64: "#f97316", uint64: "#f97316",
+    float: "#06b6d4", double: "#06b6d4",
+    any: "#a855f7",
+  };
+  return colorMap[fromPort.valueType || "any"] || "#a855f7";
+}
 
 // Node colors by category
 const nodeColors: Record<string, { bg: string; border: string; header: string }> = {
@@ -48,6 +95,13 @@ export const NodeCanvas: Component = () => {
     startY: number;
     currentX: number;
     currentY: number;
+  } | null>(null);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = createSignal<{
+    x: number;
+    y: number;
+    connectionId: string;
   } | null>(null);
 
   const currentScript = createMemo(() => scriptStore.getCurrentScript());
@@ -102,6 +156,29 @@ export const NodeCanvas: Component = () => {
     setIsPanning(false);
     // Clear dragging connection if not dropped on a valid port
     setDraggingConnection(null);
+    // Close context menu on click outside
+    setContextMenu(null);
+  };
+
+  // Handle right-click on connection to show context menu
+  const handleConnectionRightClick = (e: MouseEvent, connectionId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      connectionId,
+    });
+    scriptStore.setSelectedConnectionId(connectionId);
+  };
+
+  // Delete selected connection from context menu
+  const handleDeleteConnection = () => {
+    const menu = contextMenu();
+    if (menu) {
+      scriptStore.deleteConnection(menu.connectionId);
+      setContextMenu(null);
+    }
   };
 
   // Handle keyboard events for space pan
@@ -186,10 +263,40 @@ export const NodeCanvas: Component = () => {
     e.stopPropagation();
     const dc = draggingConnection();
     if (dc && port.direction === "input") {
-      // Create connection
-      scriptStore.addConnection(dc.fromNodeId, dc.fromPortId, nodeId, port.id);
+      // Create connection (validation happens inside addConnection)
+      const result = scriptStore.addConnection(dc.fromNodeId, dc.fromPortId, nodeId, port.id);
+      if (!result) {
+        // Connection failed - show brief visual feedback
+        // The validation error is already logged to console
+      }
     }
     setDraggingConnection(null);
+  };
+
+  // Check if a port is compatible with the currently dragging connection
+  const isPortCompatible = (nodeId: string, port: Port): boolean => {
+    const dc = draggingConnection();
+    if (!dc) return false;
+    if (port.direction !== "input") return false;
+    if (dc.fromNodeId === nodeId) return false; // Can't connect to self
+
+    // Type compatibility check
+    if (dc.fromPort.type !== port.type) return false;
+    if (dc.fromPort.type === "value") {
+      const fromType = dc.fromPort.valueType;
+      const toType = port.valueType;
+      // "any" is compatible with everything
+      if (fromType === "any" || toType === "any") return true;
+      if (fromType === toType) return true;
+      // Numeric types are compatible with each other
+      const numericTypes = ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float", "double"];
+      if (numericTypes.includes(fromType || "") && numericTypes.includes(toType || "")) return true;
+      // Pointer can convert to/from numeric
+      if ((fromType === "pointer" && numericTypes.includes(toType || "")) ||
+          (toType === "pointer" && numericTypes.includes(fromType || ""))) return true;
+      return false;
+    }
+    return true;
   };
 
   onMount(() => {
@@ -288,8 +395,8 @@ export const NodeCanvas: Component = () => {
           {/* SVG for connections */}
           <svg
             ref={svgRef}
-            class="absolute inset-0 pointer-events-none"
-            style={{ width: "10000px", height: "10000px", overflow: "visible" }}
+            class="absolute inset-0"
+            style={{ width: "10000px", height: "10000px", overflow: "visible", "pointer-events": "none" }}
           >
             {/* Render connections */}
             <For each={currentScript()?.connections ?? []}>
@@ -320,8 +427,7 @@ export const NodeCanvas: Component = () => {
                   return getPortPosition(node, port, true);
                 };
 
-                const isFlow = () => fromPort()?.type === "flow";
-                const strokeColor = () => isFlow() ? "#3b82f6" : "#a855f7";
+                const strokeColor = () => getConnectionColor(fromPort());
 
                 return (
                   <Show when={fromNode() && toNode() && fromPort() && toPort()}>
@@ -333,6 +439,7 @@ export const NodeCanvas: Component = () => {
                       color={strokeColor()}
                       isSelected={scriptStore.selectedConnectionId() === conn.id}
                       onClick={() => scriptStore.setSelectedConnectionId(conn.id)}
+                      onContextMenu={(e) => handleConnectionRightClick(e, conn.id)}
                     />
                   </Show>
                 );
@@ -347,7 +454,7 @@ export const NodeCanvas: Component = () => {
                   y1={dc().startY}
                   x2={dc().currentX}
                   y2={dc().currentY}
-                  color={dc().fromPort.type === "flow" ? "#3b82f6" : "#a855f7"}
+                  color={getConnectionColor(dc().fromPort)}
                   isDashed
                 />
               )}
@@ -365,6 +472,8 @@ export const NodeCanvas: Component = () => {
                 onPortMouseUp={handlePortMouseUp}
                 getPortPosition={getPortPosition}
                 scale={scale()}
+                isDraggingConnection={!!draggingConnection()}
+                isPortCompatible={(port) => isPortCompatible(node.id, port)}
               />
             )}
           </For>
@@ -378,6 +487,30 @@ export const NodeCanvas: Component = () => {
               <p class="text-xs mt-1">to build your script flow</p>
             </div>
           </div>
+        </Show>
+
+        {/* Context menu for connections */}
+        <Show when={contextMenu()}>
+          {(menu) => (
+            <div
+              class="fixed z-50 min-w-32 py-1 bg-surface border border-border rounded-lg shadow-lg"
+              style={{
+                left: `${menu().x}px`,
+                top: `${menu().y}px`,
+              }}
+            >
+              <button
+                class="w-full px-3 py-1.5 text-left text-xs hover:bg-surface-hover flex items-center gap-2 text-error"
+                onClick={handleDeleteConnection}
+              >
+                <TrashIcon class="w-3 h-3" />
+                Delete Connection
+              </button>
+              <div class="px-3 py-1 text-[10px] text-foreground-muted border-t border-border mt-1 pt-1">
+                Tip: Select and press Delete key
+              </div>
+            </div>
+          )}
         </Show>
       </div>
     </div>
@@ -394,6 +527,7 @@ interface ConnectionLineProps {
   isSelected?: boolean;
   isDashed?: boolean;
   onClick?: () => void;
+  onContextMenu?: (e: MouseEvent) => void;
 }
 
 const ConnectionLine: Component<ConnectionLineProps> = (props) => {
@@ -418,6 +552,7 @@ const ConnectionLine: Component<ConnectionLineProps> = (props) => {
         stroke-width="12"
         style={{ cursor: "pointer" }}
         onClick={props.onClick}
+        onContextMenu={props.onContextMenu}
       />
       {/* Visible path */}
       <path
@@ -428,6 +563,17 @@ const ConnectionLine: Component<ConnectionLineProps> = (props) => {
         stroke-dasharray={props.isDashed ? "5,5" : undefined}
         style={{ "pointer-events": "none" }}
       />
+      {/* Selection indicator */}
+      <Show when={props.isSelected}>
+        <path
+          d={path()}
+          fill="none"
+          stroke="white"
+          stroke-width={5}
+          stroke-opacity={0.3}
+          style={{ "pointer-events": "none" }}
+        />
+      </Show>
     </g>
   );
 };
@@ -451,6 +597,8 @@ interface NodeComponentProps {
     isInput: boolean
   ) => { x: number; y: number };
   scale: number;
+  isDraggingConnection: boolean;
+  isPortCompatible: (port: Port) => boolean;
 }
 
 const NodeComponent: Component<NodeComponentProps> = (props) => {
@@ -461,6 +609,7 @@ const NodeComponent: Component<NodeComponentProps> = (props) => {
 
   const handleMouseDown = (e: MouseEvent) => {
     if (e.button !== 0) return;
+    e.preventDefault(); // Prevent text selection and default drag behavior
     e.stopPropagation();
     props.onSelect();
 
@@ -471,24 +620,31 @@ const NodeComponent: Component<NodeComponentProps> = (props) => {
     const startNodeY = props.node.y;
     const currentScale = props.scale;
 
+    // Flag to track if we actually moved (not just a click)
+    let hasMoved = false;
+
     const handleMove = (e: MouseEvent) => {
+      e.preventDefault();
+      hasMoved = true;
       // Apply scale factor to movement delta
       const dx = (e.clientX - startX) / currentScale;
       const dy = (e.clientY - startY) / currentScale;
       scriptStore.updateNode(props.node.id, {
-        x: startNodeX + dx,
-        y: startNodeY + dy,
+        x: Math.round(startNodeX + dx),
+        y: Math.round(startNodeY + dy),
       });
     };
 
-    const handleUp = () => {
+    const handleUp = (e: MouseEvent) => {
+      e.preventDefault();
       setIsDragging(false);
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleUp);
+      window.removeEventListener("mousemove", handleMove, true);
+      window.removeEventListener("mouseup", handleUp, true);
     };
 
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", handleUp);
+    // Use capture phase to ensure we get events before anything else
+    window.addEventListener("mousemove", handleMove, true);
+    window.addEventListener("mouseup", handleUp, true);
   };
 
   const handleDelete = (e: MouseEvent) => {
@@ -528,37 +684,50 @@ const NodeComponent: Component<NodeComponentProps> = (props) => {
       <div class="relative py-1">
         {/* Input ports */}
         <For each={props.node.inputs}>
-          {(port) => (
-            <div class="flex items-center h-6 px-2">
-              <div
-                class={`w-3 h-3 rounded-full border-2 -ml-4 cursor-pointer ${
-                  port.type === "flow"
-                    ? "border-blue-400 bg-blue-900"
-                    : "border-purple-400 bg-purple-900"
-                }`}
-                onMouseUp={(e) => props.onPortMouseUp(e, props.node.id, port)}
-              />
-              <span class="text-[10px] text-foreground-muted ml-2">{port.name}</span>
-            </div>
-          )}
+          {(port) => {
+            const portColor = getPortColor(port);
+            const isCompatible = () => props.isDraggingConnection && props.isPortCompatible(port);
+            const isIncompatible = () => props.isDraggingConnection && !props.isPortCompatible(port);
+            return (
+              <div class="flex items-center h-6 px-2 group">
+                <div
+                  class={`w-3 h-3 rounded-full border-2 -ml-4 cursor-pointer transition-all ${portColor.border} ${portColor.bg} ${
+                    isCompatible() ? "scale-150 ring-2 ring-green-400 ring-offset-1 ring-offset-transparent" :
+                    isIncompatible() ? "opacity-30" : "hover:scale-125"
+                  }`}
+                  onMouseUp={(e) => props.onPortMouseUp(e, props.node.id, port)}
+                  title={port.valueType ? `${port.name} (${port.valueType})` : port.name}
+                />
+                <span class={`text-[10px] ml-2 ${isIncompatible() ? "opacity-30" : "text-foreground-muted"}`}>
+                  {port.name}
+                  {port.valueType && port.valueType !== "any" && (
+                    <span class="text-[8px] opacity-60 ml-1">({port.valueType})</span>
+                  )}
+                </span>
+              </div>
+            );
+          }}
         </For>
 
         {/* Output ports */}
         <For each={props.node.outputs}>
           {(port) => {
             const pos = () => props.getPortPosition(props.node, port, false);
+            const portColor = getPortColor(port);
             return (
-              <div class="flex items-center justify-end h-6 px-2">
-                <span class="text-[10px] text-foreground-muted mr-2">{port.name}</span>
+              <div class="flex items-center justify-end h-6 px-2 group">
+                <span class="text-[10px] text-foreground-muted mr-2">
+                  {port.valueType && port.valueType !== "any" && (
+                    <span class="text-[8px] opacity-60 mr-1">({port.valueType})</span>
+                  )}
+                  {port.name}
+                </span>
                 <div
-                  class={`w-3 h-3 rounded-full border-2 -mr-4 cursor-pointer ${
-                    port.type === "flow"
-                      ? "border-blue-400 bg-blue-900"
-                      : "border-purple-400 bg-purple-900"
-                  }`}
+                  class={`w-3 h-3 rounded-full border-2 -mr-4 cursor-pointer transition-transform hover:scale-125 ${portColor.border} ${portColor.bg}`}
                   onMouseDown={(e) => {
                     props.onPortMouseDown(e, props.node.id, port, pos().x, pos().y);
                   }}
+                  title={port.valueType ? `${port.name} (${port.valueType})` : port.name}
                 />
               </div>
             );

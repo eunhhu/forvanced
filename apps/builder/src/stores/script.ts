@@ -290,16 +290,15 @@ export const nodeTemplates: NodeTemplate[] = [
     label: "Memory Scan",
     category: "Memory",
     description: "Scan memory for value/pattern",
-    defaultConfig: { scanType: "value", protection: "rw-" },
+    defaultConfig: { scanType: "value", protection: "rw-", valueType: "int32" },
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
-      { name: "value", type: "value", valueType: "any", direction: "input" },
-      { name: "type", type: "value", valueType: "string", direction: "input" },
+      { name: "value", type: "value", valueType: "int32", direction: "input" }, // Dynamic based on config
     ],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
-      { name: "results", type: "value", valueType: "pointer", direction: "output" },
-      { name: "count", type: "value", valueType: "int32", direction: "output" },
+      { name: "results", type: "value", valueType: "pointer", direction: "output" }, // Array of pointers
+      { name: "count", type: "value", valueType: "uint32", direction: "output" },
     ],
   },
   {
@@ -314,7 +313,7 @@ export const nodeTemplates: NodeTemplate[] = [
     ],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
-      { name: "value", type: "value", valueType: "any", direction: "output" },
+      { name: "value", type: "value", valueType: "int32", direction: "output" }, // Dynamic based on config
     ],
   },
   {
@@ -326,7 +325,7 @@ export const nodeTemplates: NodeTemplate[] = [
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
       { name: "address", type: "value", valueType: "pointer", direction: "input" },
-      { name: "value", type: "value", valueType: "any", direction: "input" },
+      { name: "value", type: "value", valueType: "int32", direction: "input" }, // Dynamic based on config
     ],
     outputs: [{ name: "exec", type: "flow", direction: "output" }],
   },
@@ -870,6 +869,23 @@ function createScriptStore() {
     }
   }
 
+  // Update port types when config.valueType changes (for memory nodes)
+  function updatePortTypesForValueType(node: ScriptNode, valueType: ValueType): ScriptNode {
+    const updatePort = (port: Port): Port => {
+      // Update "value" named ports that should match the config type
+      if (port.type === "value" && port.name === "value") {
+        return { ...port, valueType };
+      }
+      return port;
+    };
+
+    return {
+      ...node,
+      inputs: node.inputs.map(updatePort),
+      outputs: node.outputs.map(updatePort),
+    };
+  }
+
   // Create node from template
   function createNode(type: ScriptNodeType, x: number, y: number): ScriptNode {
     const template = nodeTemplates.find((t) => t.type === type);
@@ -905,9 +921,21 @@ function createScriptStore() {
     const script = getCurrentScript();
     if (!script) return;
 
+    const node = script.nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+
+    // If config.valueType changed, update port types for memory nodes
+    let updatedNode = { ...node, ...updates };
+    if (updates.config && "valueType" in updates.config) {
+      const newValueType = updates.config.valueType as ValueType;
+      if (["memory_read", "memory_write", "memory_scan", "memory_freeze"].includes(node.type)) {
+        updatedNode = updatePortTypesForValueType(updatedNode, newValueType);
+      }
+    }
+
     updateScript(script.id, {
       nodes: script.nodes.map((n) =>
-        n.id === nodeId ? { ...n, ...updates } : n
+        n.id === nodeId ? updatedNode : n
       ),
     });
   }
