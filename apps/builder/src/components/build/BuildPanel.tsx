@@ -1,4 +1,4 @@
-import { Component, createSignal, Show, For } from "solid-js";
+import { Component, createSignal, Show, For, createEffect, untrack } from "solid-js";
 import { projectStore } from "@/stores/project";
 
 // Check if running in Tauri environment (evaluated at call time)
@@ -221,11 +221,9 @@ export const BuildPanel: Component = () => {
                     Output Directory
                   </label>
                   <div class="flex gap-2">
-                    <input
-                      type="text"
-                      class="flex-1 px-3 py-2 bg-background border border-border rounded focus:outline-none focus:border-accent"
+                    <BuildOutputDirInput
                       value={outputDir()}
-                      onInput={(e) => setOutputDir(e.currentTarget.value)}
+                      onChange={setOutputDir}
                     />
                     <button
                       class="px-3 py-2 bg-surface border border-border rounded hover:bg-surface-hover transition-colors"
@@ -446,6 +444,39 @@ export const BuildPanel: Component = () => {
         </div>
       </Show>
     </div>
+  );
+};
+
+// Uncontrolled text input for output directory
+interface BuildOutputDirInputProps {
+  value: string;
+  onChange: (value: string) => void;
+}
+
+const BuildOutputDirInput: Component<BuildOutputDirInputProps> = (props) => {
+  const [localValue, setLocalValue] = createSignal(props.value);
+  const [isFocused, setIsFocused] = createSignal(false);
+
+  createEffect(() => {
+    const val = props.value;
+    if (untrack(() => !isFocused())) {
+      setLocalValue(val);
+    }
+  });
+
+  return (
+    <input
+      type="text"
+      class="flex-1 px-3 py-2 bg-background border border-border rounded focus:outline-none focus:border-accent"
+      value={localValue()}
+      onFocus={() => setIsFocused(true)}
+      onInput={(e) => {
+        const val = e.currentTarget.value;
+        setLocalValue(val);
+        props.onChange(val);
+      }}
+      onBlur={() => setIsFocused(false)}
+    />
   );
 };
 

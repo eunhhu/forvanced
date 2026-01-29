@@ -97,11 +97,9 @@ export const NodeCanvas: Component = () => {
     }
   };
 
-  const handleMouseUp = (e: MouseEvent) => {
-    // Only stop panning if not holding space/alt
-    if (!e.altKey && !isSpaceDown()) {
-      setIsPanning(false);
-    }
+  const handleMouseUp = () => {
+    // Always stop panning on mouse up
+    setIsPanning(false);
     // Clear dragging connection if not dropped on a valid port
     setDraggingConnection(null);
   };
@@ -134,6 +132,9 @@ export const NodeCanvas: Component = () => {
   const handleKeyUp = (e: KeyboardEvent) => {
     if (e.code === "Space") {
       setIsSpaceDown(false);
+    }
+    // Stop panning when Alt is released (for Alt+drag panning)
+    if (e.key === "Alt") {
       setIsPanning(false);
     }
   };

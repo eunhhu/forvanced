@@ -467,6 +467,16 @@ interface ProjectFieldProps {
 }
 
 const ProjectField: Component<ProjectFieldProps> = (props) => {
+  const [localValue, setLocalValue] = createSignal(props.value);
+  const [isFocused, setIsFocused] = createSignal(false);
+
+  createEffect(() => {
+    const val = props.value;
+    if (untrack(() => !isFocused())) {
+      setLocalValue(val);
+    }
+  });
+
   return (
     <div class="flex items-start justify-between gap-4">
       <label class="text-sm text-foreground-muted pt-1.5">{props.label}</label>
@@ -476,18 +486,30 @@ const ProjectField: Component<ProjectFieldProps> = (props) => {
           <input
             type="text"
             class="flex-1 max-w-[200px] px-2 py-1 text-sm bg-background border border-border rounded focus:outline-none focus:border-accent"
-            value={props.value}
+            value={localValue()}
             placeholder={props.placeholder}
-            onInput={(e) => props.onChange(e.currentTarget.value)}
+            onFocus={() => setIsFocused(true)}
+            onInput={(e) => {
+              const val = e.currentTarget.value;
+              setLocalValue(val);
+              props.onChange(val);
+            }}
+            onBlur={() => setIsFocused(false)}
           />
         }
       >
         <textarea
           class="flex-1 max-w-[200px] px-2 py-1 text-sm bg-background border border-border rounded focus:outline-none focus:border-accent resize-none"
           rows={2}
-          value={props.value}
+          value={localValue()}
           placeholder={props.placeholder}
-          onInput={(e) => props.onChange(e.currentTarget.value)}
+          onFocus={() => setIsFocused(true)}
+          onInput={(e) => {
+            const val = e.currentTarget.value;
+            setLocalValue(val);
+            props.onChange(val);
+          }}
+          onBlur={() => setIsFocused(false)}
         />
       </Show>
     </div>

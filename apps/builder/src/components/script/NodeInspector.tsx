@@ -1,4 +1,4 @@
-import { Component, For, Show, createMemo, createSignal } from "solid-js";
+import { Component, For, Show, createMemo, createSignal, createEffect, untrack } from "solid-js";
 import {
   scriptStore,
   type ScriptNode,
@@ -12,6 +12,83 @@ import {
   PlusIcon,
   TrashIcon,
 } from "@/components/common/Icons";
+
+// Uncontrolled text input that doesn't lose focus on external updates
+interface InspectorTextInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  class?: string;
+  placeholder?: string;
+}
+
+const InspectorTextInput: Component<InspectorTextInputProps> = (props) => {
+  const [localValue, setLocalValue] = createSignal(props.value);
+  const [isFocused, setIsFocused] = createSignal(false);
+
+  createEffect(() => {
+    const val = props.value;
+    if (untrack(() => !isFocused())) {
+      setLocalValue(val);
+    }
+  });
+
+  return (
+    <input
+      type="text"
+      class={props.class ?? "w-full px-2 py-1 text-xs bg-background border border-border rounded focus:outline-none focus:border-accent"}
+      placeholder={props.placeholder}
+      value={localValue()}
+      onFocus={() => setIsFocused(true)}
+      onInput={(e) => {
+        const val = e.currentTarget.value;
+        setLocalValue(val);
+        props.onChange(val);
+      }}
+      onBlur={() => setIsFocused(false)}
+    />
+  );
+};
+
+// Uncontrolled number input that doesn't lose focus on external updates
+interface InspectorNumberInputProps {
+  value: number;
+  onChange: (value: number) => void;
+  class?: string;
+  min?: number;
+  max?: number;
+}
+
+const InspectorNumberInput: Component<InspectorNumberInputProps> = (props) => {
+  const [localValue, setLocalValue] = createSignal(String(props.value));
+  const [isFocused, setIsFocused] = createSignal(false);
+
+  createEffect(() => {
+    const val = props.value;
+    if (untrack(() => !isFocused())) {
+      setLocalValue(String(val));
+    }
+  });
+
+  return (
+    <input
+      type="number"
+      class={props.class ?? "w-full px-2 py-1 text-xs bg-background border border-border rounded focus:outline-none focus:border-accent"}
+      min={props.min}
+      max={props.max}
+      value={localValue()}
+      onFocus={() => setIsFocused(true)}
+      onInput={(e) => {
+        const strVal = e.currentTarget.value;
+        setLocalValue(strVal);
+        const num = Number(strVal);
+        if (!isNaN(num)) {
+          props.onChange(num);
+        }
+      }}
+      onBlur={() => setIsFocused(false)}
+    />
+  );
+};
 
 export const NodeInspector: Component = () => {
   const currentScript = createMemo(() => scriptStore.getCurrentScript());
@@ -135,12 +212,11 @@ const ScriptSettingsSection: Component = () => {
           {/* Component ID for UI events */}
           <Show when={["on_button_click", "on_toggle_change", "on_slider_change"].includes(currentScript()?.trigger.type ?? "")}>
             <PropertyRow label="Component ID">
-              <input
-                type="text"
+              <InspectorTextInput
                 class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
                 placeholder="UI component ID"
                 value={currentScript()?.trigger.componentId ?? ""}
-                onInput={(e) => handleTriggerConfigChange("componentId", e.currentTarget.value)}
+                onChange={(val) => handleTriggerConfigChange("componentId", val)}
               />
             </PropertyRow>
           </Show>
@@ -148,12 +224,11 @@ const ScriptSettingsSection: Component = () => {
           {/* Hotkey for hotkey events */}
           <Show when={currentScript()?.trigger.type === "on_hotkey"}>
             <PropertyRow label="Hotkey">
-              <input
-                type="text"
+              <InspectorTextInput
                 class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
                 placeholder="e.g., Ctrl+F1"
                 value={currentScript()?.trigger.hotkey ?? ""}
-                onInput={(e) => handleTriggerConfigChange("hotkey", e.currentTarget.value)}
+                onChange={(val) => handleTriggerConfigChange("hotkey", val)}
               />
             </PropertyRow>
           </Show>
@@ -161,12 +236,11 @@ const ScriptSettingsSection: Component = () => {
           {/* Interval for interval events */}
           <Show when={currentScript()?.trigger.type === "on_interval"}>
             <PropertyRow label="Interval (ms)">
-              <input
-                type="number"
+              <InspectorNumberInput
                 class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
                 min={10}
                 value={currentScript()?.trigger.intervalMs ?? 1000}
-                onInput={(e) => handleTriggerConfigChange("intervalMs", Number(e.currentTarget.value))}
+                onChange={(val) => handleTriggerConfigChange("intervalMs", val)}
               />
             </PropertyRow>
           </Show>
@@ -208,13 +282,11 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
         <div class="px-3 pb-3 space-y-3">
           {/* Node Label */}
           <PropertyRow label="Label">
-            <input
-              type="text"
-              class="w-full px-2 py-1 text-xs bg-background border border-border rounded focus:outline-none focus:border-accent"
+            <InspectorTextInput
               value={props.node.label}
-              onInput={(e) =>
+              onChange={(val) =>
                 scriptStore.updateNode(props.node.id, {
-                  label: e.currentTarget.value,
+                  label: val,
                 })
               }
             />
@@ -230,15 +302,13 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
           {/* Node-specific config */}
           <Show when={props.node.type === "delay"}>
             <PropertyRow label="Delay (ms)">
-              <input
-                type="number"
-                class="w-full px-2 py-1 text-xs bg-background border border-border rounded focus:outline-none focus:border-accent"
+              <InspectorNumberInput
                 value={(props.node.config.ms as number) ?? 100}
-                onInput={(e) =>
+                onChange={(val) =>
                   scriptStore.updateNode(props.node.id, {
                     config: {
                       ...props.node.config,
-                      ms: Number(e.currentTarget.value),
+                      ms: val,
                     },
                   })
                 }
@@ -248,15 +318,13 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
 
           <Show when={props.node.type === "loop"}>
             <PropertyRow label="Max Iterations">
-              <input
-                type="number"
-                class="w-full px-2 py-1 text-xs bg-background border border-border rounded focus:outline-none focus:border-accent"
+              <InspectorNumberInput
                 value={(props.node.config.maxIterations as number) ?? 1000}
-                onInput={(e) =>
+                onChange={(val) =>
                   scriptStore.updateNode(props.node.id, {
                     config: {
                       ...props.node.config,
-                      maxIterations: Number(e.currentTarget.value),
+                      maxIterations: val,
                     },
                   })
                 }
@@ -335,15 +403,13 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
 
           <Show when={props.node.type === "memory_freeze"}>
             <PropertyRow label="Interval (ms)">
-              <input
-                type="number"
-                class="w-full px-2 py-1 text-xs bg-background border border-border rounded focus:outline-none focus:border-accent"
+              <InspectorNumberInput
                 value={(props.node.config.intervalMs as number) ?? 100}
-                onInput={(e) =>
+                onChange={(val) =>
                   scriptStore.updateNode(props.node.id, {
                     config: {
                       ...props.node.config,
-                      intervalMs: Number(e.currentTarget.value),
+                      intervalMs: val,
                     },
                   })
                 }
@@ -506,15 +572,14 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
           {/* Memory alloc */}
           <Show when={props.node.type === "memory_alloc"}>
             <PropertyRow label="Default Size">
-              <input
-                type="number"
+              <InspectorNumberInput
                 class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
                 value={(props.node.config.size as number) ?? 256}
-                onInput={(e) =>
+                onChange={(val) =>
                   scriptStore.updateNode(props.node.id, {
                     config: {
                       ...props.node.config,
-                      size: Number(e.currentTarget.value),
+                      size: val,
                     },
                   })
                 }
@@ -589,16 +654,15 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
           {/* String format template */}
           <Show when={props.node.type === "string_format"}>
             <PropertyRow label="Template">
-              <input
-                type="text"
+              <InspectorTextInput
                 class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
                 placeholder="Value: {0}"
                 value={(props.node.config.template as string) ?? "Value: {0}"}
-                onInput={(e) =>
+                onChange={(val) =>
                   scriptStore.updateNode(props.node.id, {
                     config: {
                       ...props.node.config,
-                      template: e.currentTarget.value,
+                      template: val,
                     },
                   })
                 }
@@ -634,17 +698,16 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
           {/* Read/Write arg index */}
           <Show when={props.node.type === "read_arg" || props.node.type === "write_arg"}>
             <PropertyRow label="Arg Index">
-              <input
-                type="number"
+              <InspectorNumberInput
                 class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
                 min={0}
                 max={15}
                 value={(props.node.config.index as number) ?? 0}
-                onInput={(e) =>
+                onChange={(val) =>
                   scriptStore.updateNode(props.node.id, {
                     config: {
                       ...props.node.config,
-                      index: Number(e.currentTarget.value),
+                      index: val,
                     },
                   })
                 }
@@ -678,16 +741,15 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
           {/* Function Define */}
           <Show when={props.node.type === "function_define"}>
             <PropertyRow label="Function Name">
-              <input
-                type="text"
+              <InspectorTextInput
                 class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
                 placeholder="myFunction"
                 value={(props.node.config.functionName as string) ?? ""}
-                onInput={(e) =>
+                onChange={(val) =>
                   scriptStore.updateNode(props.node.id, {
                     config: {
                       ...props.node.config,
-                      functionName: e.currentTarget.value,
+                      functionName: val,
                     },
                   })
                 }
@@ -719,16 +781,15 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
           {/* Function Call */}
           <Show when={props.node.type === "function_call"}>
             <PropertyRow label="Function Name">
-              <input
-                type="text"
+              <InspectorTextInput
                 class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
                 placeholder="Function to call"
                 value={(props.node.config.functionName as string) ?? ""}
-                onInput={(e) =>
+                onChange={(val) =>
                   scriptStore.updateNode(props.node.id, {
                     config: {
                       ...props.node.config,
-                      functionName: e.currentTarget.value,
+                      functionName: val,
                     },
                   })
                 }

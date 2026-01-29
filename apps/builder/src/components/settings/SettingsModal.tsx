@@ -1,4 +1,4 @@
-import { Component, createSignal, Show, For } from "solid-js";
+import { Component, createSignal, Show, For, createEffect, untrack } from "solid-js";
 import { IconSettings, IconFolder } from "@/components/common/Icons";
 
 // Check if running in Tauri environment
@@ -180,15 +180,11 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
                     label="Recent Projects Limit"
                     description="Maximum number of recent projects to remember"
                   >
-                    <input
-                      type="number"
-                      min="1"
-                      max="50"
-                      class="w-20 px-3 py-2 bg-background border border-border rounded text-sm focus:outline-none focus:border-accent"
+                    <SettingsNumberInput
+                      min={1}
+                      max={50}
                       value={settings().recentProjectsLimit}
-                      onInput={(e) =>
-                        updateSetting("recentProjectsLimit", parseInt(e.currentTarget.value) || 10)
-                      }
+                      onChange={(val) => updateSetting("recentProjectsLimit", val)}
                     />
                   </SettingItem>
                 </div>
@@ -225,11 +221,9 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
                     description="Default directory for build output"
                   >
                     <div class="flex gap-2">
-                      <input
-                        type="text"
-                        class="flex-1 px-3 py-2 bg-background border border-border rounded text-sm focus:outline-none focus:border-accent"
+                      <SettingsTextInput
                         value={settings().defaultOutputDir}
-                        onInput={(e) => updateSetting("defaultOutputDir", e.currentTarget.value)}
+                        onChange={(val) => updateSetting("defaultOutputDir", val)}
                       />
                       <button
                         class="px-3 py-2 bg-surface border border-border rounded hover:bg-surface-hover transition-colors"
@@ -327,6 +321,79 @@ const ToggleSwitch: Component<ToggleSwitchProps> = (props) => {
         }`}
       />
     </button>
+  );
+};
+
+// Uncontrolled number input that doesn't lose focus
+interface SettingsNumberInputProps {
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+}
+
+const SettingsNumberInput: Component<SettingsNumberInputProps> = (props) => {
+  const [localValue, setLocalValue] = createSignal(String(props.value));
+  const [isFocused, setIsFocused] = createSignal(false);
+
+  createEffect(() => {
+    const val = props.value;
+    if (untrack(() => !isFocused())) {
+      setLocalValue(String(val));
+    }
+  });
+
+  return (
+    <input
+      type="number"
+      min={props.min}
+      max={props.max}
+      class="w-20 px-3 py-2 bg-background border border-border rounded text-sm focus:outline-none focus:border-accent"
+      value={localValue()}
+      onFocus={() => setIsFocused(true)}
+      onInput={(e) => {
+        const strVal = e.currentTarget.value;
+        setLocalValue(strVal);
+        const num = parseInt(strVal);
+        if (!isNaN(num)) {
+          props.onChange(num);
+        }
+      }}
+      onBlur={() => setIsFocused(false)}
+    />
+  );
+};
+
+// Uncontrolled text input that doesn't lose focus
+interface SettingsTextInputProps {
+  value: string;
+  onChange: (value: string) => void;
+}
+
+const SettingsTextInput: Component<SettingsTextInputProps> = (props) => {
+  const [localValue, setLocalValue] = createSignal(props.value);
+  const [isFocused, setIsFocused] = createSignal(false);
+
+  createEffect(() => {
+    const val = props.value;
+    if (untrack(() => !isFocused())) {
+      setLocalValue(val);
+    }
+  });
+
+  return (
+    <input
+      type="text"
+      class="flex-1 px-3 py-2 bg-background border border-border rounded text-sm focus:outline-none focus:border-accent"
+      value={localValue()}
+      onFocus={() => setIsFocused(true)}
+      onInput={(e) => {
+        const val = e.currentTarget.value;
+        setLocalValue(val);
+        props.onChange(val);
+      }}
+      onBlur={() => setIsFocused(false)}
+    />
   );
 };
 
