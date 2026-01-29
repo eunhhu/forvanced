@@ -21,15 +21,15 @@ import {
 
 // Category icons
 const categoryIcons: Record<string, Component<{ class?: string }>> = {
-  Constants: IconHash,    // Literal values (string, number, boolean, pointer)
-  Events: IconZap,        // Event listeners (entry points)
+  Constants: IconHash, // Literal values (string, number, boolean, pointer)
+  Events: IconZap, // Event listeners (entry points)
   Flow: IconWorkflow,
   Memory: MemoryIcon,
   Pointer: MemoryIcon,
   Module: IconFunction,
   Variable: IconVariable,
-  Array: IconList,        // Array operations
-  Object: IconBox,        // Object operations
+  Array: IconList, // Array operations
+  Object: IconBox, // Object operations
   Math: IconCalculator,
   String: IconTerminal,
   Conversion: IconArrowSwap, // Type conversion
@@ -41,18 +41,18 @@ const categoryIcons: Record<string, Component<{ class?: string }>> = {
 
 // Category colors for visual distinction
 const categoryColors: Record<string, string> = {
-  Constants: "text-pink-400",   // Prominent for data entry
-  Events: "text-emerald-400",   // Entry points
+  Constants: "text-pink-400", // Prominent for data entry
+  Events: "text-emerald-400", // Entry points
   Flow: "text-blue-400",
   Memory: "text-purple-400",
   Pointer: "text-violet-400",
   Module: "text-green-400",
   Variable: "text-yellow-400",
-  Array: "text-indigo-400",     // Collections
-  Object: "text-sky-400",       // Object operations
+  Array: "text-indigo-400", // Collections
+  Object: "text-sky-400", // Object operations
   Math: "text-orange-400",
   String: "text-teal-400",
-  Conversion: "text-lime-400",  // Type conversion
+  Conversion: "text-lime-400", // Type conversion
   Native: "text-red-400",
   Interceptor: "text-rose-400",
   Output: "text-cyan-400",
@@ -62,7 +62,7 @@ const categoryColors: Record<string, string> = {
 export const NodePalette: Component = () => {
   const [searchQuery, setSearchQuery] = createSignal("");
   const [expandedCategories, setExpandedCategories] = createSignal<Set<string>>(
-    new Set(["Constants", "Events", "Flow", "Variable"])  // Important categories expanded by default
+    new Set(["Constants", "Events", "Flow", "Variable"]), // Important categories expanded by default
   );
 
   const categories = createMemo(() => scriptStore.getNodeCategories());
@@ -77,7 +77,7 @@ export const NodePalette: Component = () => {
         nodes: cat.nodes.filter(
           (n) =>
             n.label.toLowerCase().includes(query) ||
-            n.description.toLowerCase().includes(query)
+            n.description.toLowerCase().includes(query),
         ),
       }))
       .filter((cat) => cat.nodes.length > 0);
@@ -152,7 +152,9 @@ export const NodePalette: Component = () => {
                     >
                       <ChevronDownIcon class="w-3 h-3" />
                     </Show>
-                    <Icon class={`w-3.5 h-3.5 ${categoryColors[cat.category]}`} />
+                    <Icon
+                      class={`w-3.5 h-3.5 ${categoryColors[cat.category]}`}
+                    />
                     <span class="text-xs font-medium">{cat.category}</span>
                     <span class="text-[10px] text-foreground-muted ml-auto">
                       {cat.nodes.length}

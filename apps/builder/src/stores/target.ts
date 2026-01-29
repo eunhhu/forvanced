@@ -7,7 +7,8 @@ import {
 } from "@/lib/tauri";
 
 // Current adapter
-const [currentAdapterId, setCurrentAdapterId] = createSignal<string>("local_pc");
+const [currentAdapterId, setCurrentAdapterId] =
+  createSignal<string>("local_pc");
 
 // Connection state
 const [sessionId, setSessionId] = createSignal<string | null>(null);
@@ -23,7 +24,7 @@ const [processes, { refetch: refetchProcesses }] = createResource(
       console.error("Failed to enumerate processes:", error);
       return [];
     }
-  }
+  },
 );
 
 // Actions

@@ -1,4 +1,12 @@
-import { Component, Show, createSignal, For, onMount, createEffect, untrack } from "solid-js";
+import {
+  Component,
+  Show,
+  createSignal,
+  For,
+  onMount,
+  createEffect,
+  untrack,
+} from "solid-js";
 import { projectStore } from "@/stores/project";
 import {
   IconFolder,
@@ -49,7 +57,12 @@ export const ProjectPanel: Component = () => {
     <div class="h-full flex flex-col">
       <Show
         when={projectStore.currentProject()}
-        fallback={<WelcomeScreen onNew={() => setShowNewModal(true)} onOpen={handleOpenProject} />}
+        fallback={
+          <WelcomeScreen
+            onNew={() => setShowNewModal(true)}
+            onOpen={handleOpenProject}
+          />
+        }
       >
         {(project) => (
           <>
@@ -60,7 +73,10 @@ export const ProjectPanel: Component = () => {
                   <h2 class="text-lg font-semibold flex items-center gap-2">
                     {project().name}
                     <Show when={projectStore.isDirty()}>
-                      <span class="w-2 h-2 rounded-full bg-warning" title="Unsaved changes" />
+                      <span
+                        class="w-2 h-2 rounded-full bg-warning"
+                        title="Unsaved changes"
+                      />
                     </Show>
                   </h2>
                   <p class="text-sm text-foreground-muted">
@@ -92,7 +108,9 @@ export const ProjectPanel: Component = () => {
                   <ProjectField
                     label="Description"
                     value={project().description ?? ""}
-                    onChange={(v) => projectStore.updateProject({ description: v || null })}
+                    onChange={(v) =>
+                      projectStore.updateProject({ description: v || null })
+                    }
                     multiline
                   />
                   <ProjectField
@@ -103,7 +121,9 @@ export const ProjectPanel: Component = () => {
                   <ProjectField
                     label="Author"
                     value={project().author ?? ""}
-                    onChange={(v) => projectStore.updateProject({ author: v || null })}
+                    onChange={(v) =>
+                      projectStore.updateProject({ author: v || null })
+                    }
                   />
                 </div>
               </ProjectSection>
@@ -125,7 +145,9 @@ export const ProjectPanel: Component = () => {
                     placeholder="e.g., game.exe"
                   />
                   <div class="flex items-center justify-between">
-                    <label class="text-sm text-foreground-muted">Auto Attach</label>
+                    <label class="text-sm text-foreground-muted">
+                      Auto Attach
+                    </label>
                     <button
                       class={`w-10 h-5 rounded-full transition-colors relative ${
                         project().config.target.auto_attach
@@ -229,7 +251,9 @@ export const ProjectPanel: Component = () => {
                     placeholder="Trainer name"
                   />
                   <div class="flex items-center justify-between">
-                    <label class="text-sm text-foreground-muted">Bundle Frida</label>
+                    <label class="text-sm text-foreground-muted">
+                      Bundle Frida
+                    </label>
                     <button
                       class={`w-10 h-5 rounded-full transition-colors relative ${
                         project().config.build.bundle_frida
@@ -262,12 +286,17 @@ export const ProjectPanel: Component = () => {
                 <div class="grid grid-cols-2 gap-3 text-sm">
                   <div class="p-3 bg-background rounded-lg">
                     <div class="text-foreground-muted">Components</div>
-                    <div class="text-xl font-semibold">{project().ui.components.length}</div>
+                    <div class="text-xl font-semibold">
+                      {project().ui.components.length}
+                    </div>
                   </div>
                   <div class="p-3 bg-background rounded-lg">
                     <div class="text-foreground-muted">Actions</div>
                     <div class="text-xl font-semibold">
-                      {project().ui.components.reduce((sum, c) => sum + c.bindings.length, 0)}
+                      {project().ui.components.reduce(
+                        (sum, c) => sum + c.bindings.length,
+                        0,
+                      )}
                     </div>
                   </div>
                 </div>
@@ -281,10 +310,16 @@ export const ProjectPanel: Component = () => {
       <Show when={showNewModal()}>
         <div
           class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-          onClick={(e) => e.target === e.currentTarget && setShowNewModal(false)}
+          onClick={(e) =>
+            e.target === e.currentTarget && setShowNewModal(false)
+          }
           onKeyDown={(e) => e.key === "Escape" && setShowNewModal(false)}
         >
-          <div role="dialog" aria-modal="true" class="bg-surface rounded-lg shadow-xl w-96 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            class="bg-surface rounded-lg shadow-xl w-96 p-4"
+          >
             <h3 class="font-medium mb-4">New Project</h3>
             <input
               type="text"
@@ -372,7 +407,8 @@ const WelcomeScreen: Component<WelcomeScreenProps> = (props) => {
             </div>
             <h2 class="text-xl font-semibold mb-2">Welcome to Forvanced</h2>
             <p class="text-foreground-muted">
-              Create a new trainer project or open an existing one to get started.
+              Create a new trainer project or open an existing one to get
+              started.
             </p>
           </div>
 
@@ -395,10 +431,14 @@ const WelcomeScreen: Component<WelcomeScreenProps> = (props) => {
           </div>
 
           {/* Recent Projects */}
-          <Show when={projectStore.recentProjects().length > 0 || isLoadingRecent()}>
+          <Show
+            when={projectStore.recentProjects().length > 0 || isLoadingRecent()}
+          >
             <div class="bg-surface rounded-lg border border-border">
               <div class="px-4 py-3 border-b border-border">
-                <h3 class="text-sm font-medium text-foreground-muted">Recent Projects</h3>
+                <h3 class="text-sm font-medium text-foreground-muted">
+                  Recent Projects
+                </h3>
               </div>
               <div class="max-h-64 overflow-y-auto">
                 <Show
@@ -417,7 +457,9 @@ const WelcomeScreen: Component<WelcomeScreenProps> = (props) => {
                       >
                         <div class="flex-1 min-w-0">
                           <div class="font-medium truncate">{project.name}</div>
-                          <div class="text-xs text-foreground-muted truncate">{project.path}</div>
+                          <div class="text-xs text-foreground-muted truncate">
+                            {project.path}
+                          </div>
                         </div>
                         <div class="flex items-center gap-3 ml-4">
                           <span class="text-xs text-foreground-muted">
@@ -452,7 +494,9 @@ interface ProjectSectionProps {
 const ProjectSection: Component<ProjectSectionProps> = (props) => {
   return (
     <div>
-      <h3 class="text-sm font-medium text-foreground-muted mb-3">{props.title}</h3>
+      <h3 class="text-sm font-medium text-foreground-muted mb-3">
+        {props.title}
+      </h3>
       <div class="bg-surface rounded-lg p-4">{props.children}</div>
     </div>
   );

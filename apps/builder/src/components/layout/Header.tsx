@@ -27,11 +27,17 @@ export const Header: Component = () => {
             <IconFolder class="w-4 h-4 text-accent" />
             <span class="font-medium text-foreground">{projectName()}</span>
             <Show when={isDirty()}>
-              <span class="w-2 h-2 rounded-full bg-warning" title="Unsaved changes" />
+              <span
+                class="w-2 h-2 rounded-full bg-warning"
+                title="Unsaved changes"
+              />
             </Show>
           </div>
           <Show when={fileName()}>
-            <div class="text-xs text-foreground-muted" title={projectPath() || ""}>
+            <div
+              class="text-xs text-foreground-muted"
+              title={projectPath() || ""}
+            >
               {fileName()}
             </div>
           </Show>

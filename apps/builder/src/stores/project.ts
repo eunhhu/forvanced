@@ -6,7 +6,10 @@ function isTauri(): boolean {
 }
 
 // Dynamic invoke wrapper
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+async function invoke<T>(
+  cmd: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
   if (!isTauri()) {
     console.log(`[Mock] ${cmd}`, args);
     return getMockProjectResponse<T>(cmd, args);
@@ -16,7 +19,10 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 }
 
 // Mock responses for project commands
-function getMockProjectResponse<T>(cmd: string, args?: Record<string, unknown>): T {
+function getMockProjectResponse<T>(
+  cmd: string,
+  args?: Record<string, unknown>,
+): T {
   const now = Date.now();
   const mocks: Record<string, unknown> = {
     create_project: {
@@ -61,8 +67,19 @@ function getMockProjectResponse<T>(cmd: string, args?: Record<string, unknown>):
       version: "1.0.0",
       author: null,
       config: {
-        target: { process_name: null, process_patterns: [], adapter_type: "local_pc", adapter_config: {}, auto_attach: false },
-        build: { output_name: null, targets: ["windows"], icon: null, bundle_frida: false },
+        target: {
+          process_name: null,
+          process_patterns: [],
+          adapter_type: "local_pc",
+          adapter_config: {},
+          auto_attach: false,
+        },
+        build: {
+          output_name: null,
+          targets: ["windows"],
+          icon: null,
+          bundle_frida: false,
+        },
         hotkeys: { enabled: true, bindings: [] },
       },
       ui: { components: [], width: 400, height: 500, theme: "dark" },
@@ -72,8 +89,16 @@ function getMockProjectResponse<T>(cmd: string, args?: Record<string, unknown>):
     close_project: undefined,
     update_project: undefined,
     get_recent_projects: [
-      { name: "Example Project", path: "/mock/example.forvanced", last_opened: Date.now() - 86400000 },
-      { name: "My Trainer", path: "/mock/trainer.forvanced", last_opened: Date.now() - 172800000 },
+      {
+        name: "Example Project",
+        path: "/mock/example.forvanced",
+        last_opened: Date.now() - 86400000,
+      },
+      {
+        name: "My Trainer",
+        path: "/mock/trainer.forvanced",
+        last_opened: Date.now() - 172800000,
+      },
     ],
     remove_recent_project: undefined,
   };
@@ -197,19 +222,60 @@ export type ComponentEvent = "onClick" | "onToggle" | "onChange" | "onSlide";
 
 export type FridaAction =
   | { type: "memory_read"; address: string; value_type: ValueType }
-  | { type: "memory_write"; address: string; value: string; value_type: ValueType }
-  | { type: "memory_freeze"; address: string; value: string; value_type: ValueType; interval_ms: number }
+  | {
+      type: "memory_write";
+      address: string;
+      value: string;
+      value_type: ValueType;
+    }
+  | {
+      type: "memory_freeze";
+      address: string;
+      value: string;
+      value_type: ValueType;
+      interval_ms: number;
+    }
   | { type: "memory_unfreeze"; address: string }
   | { type: "pattern_scan"; pattern: string; protection: string }
   | { type: "value_scan"; value: string; value_type: ValueType }
-  | { type: "hook_function"; address: string; log_enter: boolean; log_leave: boolean }
+  | {
+      type: "hook_function";
+      address: string;
+      log_enter: boolean;
+      log_leave: boolean;
+    }
   | { type: "replace_return"; address: string; return_value: string }
   | { type: "nop_function"; address: string }
-  | { type: "java_hook_method"; class_name: string; method_name: string; overload: string | null }
-  | { type: "java_modify_return"; class_name: string; method_name: string; return_value: string }
-  | { type: "java_call_method"; class_name: string; method_name: string; is_static: boolean }
-  | { type: "objc_hook_method"; class_name: string; selector: string; is_class_method: boolean }
-  | { type: "objc_modify_return"; class_name: string; selector: string; return_value: string }
+  | {
+      type: "java_hook_method";
+      class_name: string;
+      method_name: string;
+      overload: string | null;
+    }
+  | {
+      type: "java_modify_return";
+      class_name: string;
+      method_name: string;
+      return_value: string;
+    }
+  | {
+      type: "java_call_method";
+      class_name: string;
+      method_name: string;
+      is_static: boolean;
+    }
+  | {
+      type: "objc_hook_method";
+      class_name: string;
+      selector: string;
+      is_class_method: boolean;
+    }
+  | {
+      type: "objc_modify_return";
+      class_name: string;
+      selector: string;
+      return_value: string;
+    }
   | { type: "swift_hook_function"; mangled_name: string }
   | { type: "list_modules" }
   | { type: "find_export"; module_name: string; export_name: string }
@@ -230,12 +296,16 @@ export type ValueType =
   | "string";
 
 function createProjectStore() {
-  const [currentProject, setCurrentProject] = createSignal<Project | null>(null);
+  const [currentProject, setCurrentProject] = createSignal<Project | null>(
+    null,
+  );
   const [projectPath, setProjectPath] = createSignal<string | null>(null);
   const [isDirty, setIsDirty] = createSignal(false);
   const [isLoading, setIsLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
-  const [recentProjects, setRecentProjects] = createSignal<RecentProjectEntry[]>([]);
+  const [recentProjects, setRecentProjects] = createSignal<
+    RecentProjectEntry[]
+  >([]);
 
   async function createNew(name: string): Promise<Project> {
     setIsLoading(true);
@@ -361,7 +431,9 @@ function createProjectStore() {
 
   async function fetchRecentProjects(): Promise<RecentProjectEntry[]> {
     try {
-      const projects = await invoke<RecentProjectEntry[]>("get_recent_projects");
+      const projects = await invoke<RecentProjectEntry[]>(
+        "get_recent_projects",
+      );
       setRecentProjects(projects);
       return projects;
     } catch (e) {

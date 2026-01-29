@@ -16,7 +16,7 @@ export const ProcessList: Component = () => {
     return processes().filter(
       (p) =>
         p.name.toLowerCase().includes(query) ||
-        p.pid.toString().includes(query)
+        p.pid.toString().includes(query),
     );
   });
 

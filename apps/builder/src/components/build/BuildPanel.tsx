@@ -1,4 +1,11 @@
-import { Component, createSignal, Show, For, createEffect, untrack } from "solid-js";
+import {
+  Component,
+  createSignal,
+  Show,
+  For,
+  createEffect,
+  untrack,
+} from "solid-js";
 import { projectStore } from "@/stores/project";
 
 // Check if running in Tauri environment (evaluated at call time)
@@ -7,7 +14,10 @@ function isTauri(): boolean {
 }
 
 // Dynamic invoke wrapper
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+async function invoke<T>(
+  cmd: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
   if (!isTauri()) {
     console.log(`[Mock] ${cmd}`, args);
     return getMockBuildResponse<T>(cmd, args);
@@ -17,7 +27,10 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 }
 
 // Mock responses for build commands
-function getMockBuildResponse<T>(cmd: string, args?: Record<string, unknown>): T {
+function getMockBuildResponse<T>(
+  cmd: string,
+  args?: Record<string, unknown>,
+): T {
   const mocks: Record<string, unknown> = {
     build_trainer: {
       project_dir: "/mock/output/trainer",
@@ -375,7 +388,7 @@ export const BuildPanel: Component = () => {
                       <div class="font-medium">
                         {project().ui.components.reduce(
                           (sum, c) => sum + c.bindings.length,
-                          0
+                          0,
                         )}
                       </div>
                     </div>

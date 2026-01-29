@@ -16,7 +16,10 @@ function isTauri(): boolean {
 }
 
 // Dynamic import for Tauri API
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+async function invoke<T>(
+  cmd: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
   if (!isTauri()) {
     // Return mock data in browser environment (for E2E tests)
     console.log(`[Mock] ${cmd}`, args);
@@ -52,8 +55,19 @@ function getMockResponse<T>(cmd: string, args?: Record<string, unknown>): T {
       description: null,
       author: null,
       config: {
-        target: { process_name: null, process_patterns: [], adapter_type: "local_pc", adapter_config: {}, auto_attach: false },
-        build: { output_name: null, targets: ["windows"], icon: null, bundle_frida: false },
+        target: {
+          process_name: null,
+          process_patterns: [],
+          adapter_type: "local_pc",
+          adapter_config: {},
+          auto_attach: false,
+        },
+        build: {
+          output_name: null,
+          targets: ["windows"],
+          icon: null,
+          bundle_frida: false,
+        },
         hotkeys: { enabled: true, bindings: [] },
       },
       ui: { components: [], width: 400, height: 500, theme: "dark" },
@@ -68,8 +82,19 @@ function getMockResponse<T>(cmd: string, args?: Record<string, unknown>): T {
       description: null,
       author: null,
       config: {
-        target: { process_name: null, process_patterns: [], adapter_type: "local_pc", adapter_config: {}, auto_attach: false },
-        build: { output_name: null, targets: ["windows"], icon: null, bundle_frida: false },
+        target: {
+          process_name: null,
+          process_patterns: [],
+          adapter_type: "local_pc",
+          adapter_config: {},
+          auto_attach: false,
+        },
+        build: {
+          output_name: null,
+          targets: ["windows"],
+          icon: null,
+          bundle_frida: false,
+        },
         hotkeys: { enabled: true, bindings: [] },
       },
       ui: { components: [], width: 400, height: 500, theme: "dark" },
@@ -112,14 +137,14 @@ export async function getCurrentAdapter(): Promise<string | null> {
 // Script commands
 export async function injectScript(
   sessionId: string,
-  script: string
+  script: string,
 ): Promise<string> {
   return invoke<string>("inject_script", { sessionId, script });
 }
 
 export async function unloadScript(
   sessionId: string,
-  scriptId: string
+  scriptId: string,
 ): Promise<void> {
   return invoke<void>("unload_script", { sessionId, scriptId });
 }

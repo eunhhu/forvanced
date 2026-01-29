@@ -1,4 +1,12 @@
-import { Component, For, Show, createMemo, createSignal, createEffect, untrack } from "solid-js";
+import {
+  Component,
+  For,
+  Show,
+  createMemo,
+  createSignal,
+  createEffect,
+  untrack,
+} from "solid-js";
 import {
   scriptStore,
   type ScriptNode,
@@ -36,7 +44,10 @@ const InspectorTextInput: Component<InspectorTextInputProps> = (props) => {
   return (
     <input
       type="text"
-      class={props.class ?? "w-full px-2 py-1 text-xs bg-background border border-border rounded focus:outline-none focus:border-accent"}
+      class={
+        props.class ??
+        "w-full px-2 py-1 text-xs bg-background border border-border rounded focus:outline-none focus:border-accent"
+      }
       placeholder={props.placeholder}
       value={localValue()}
       onFocus={() => setIsFocused(true)}
@@ -73,7 +84,10 @@ const InspectorNumberInput: Component<InspectorNumberInputProps> = (props) => {
   return (
     <input
       type="number"
-      class={props.class ?? "w-full px-2 py-1 text-xs bg-background border border-border rounded focus:outline-none focus:border-accent"}
+      class={
+        props.class ??
+        "w-full px-2 py-1 text-xs bg-background border border-border rounded focus:outline-none focus:border-accent"
+      }
       min={props.min}
       max={props.max}
       value={localValue()}
@@ -150,7 +164,7 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
   const [isOpen, setIsOpen] = createSignal(true);
 
   const template = createMemo(() =>
-    nodeTemplates.find((t) => t.type === props.node.type)
+    nodeTemplates.find((t) => t.type === props.node.type),
   );
 
   return (
@@ -160,10 +174,7 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
         class="w-full px-3 py-2 flex items-center gap-2 hover:bg-surface-hover transition-colors"
         onClick={() => setIsOpen(!isOpen())}
       >
-        <Show
-          when={isOpen()}
-          fallback={<ChevronRightIcon class="w-3 h-3" />}
-        >
+        <Show when={isOpen()} fallback={<ChevronRightIcon class="w-3 h-3" />}>
           <ChevronDownIcon class="w-3 h-3" />
         </Show>
         <span class="text-xs font-medium">Node Properties</span>
@@ -222,7 +233,10 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
                 checked={(props.node.config.isFloat as boolean) ?? false}
                 onChange={(e) =>
                   scriptStore.updateNode(props.node.id, {
-                    config: { ...props.node.config, isFloat: e.currentTarget.checked },
+                    config: {
+                      ...props.node.config,
+                      isFloat: e.currentTarget.checked,
+                    },
                   })
                 }
               />
@@ -233,26 +247,33 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
             <PropertyRow label="Value">
               <button
                 class={`w-14 h-6 rounded-full transition-colors relative ${
-                  (props.node.config.value as boolean) ?? false
+                  ((props.node.config.value as boolean) ?? false)
                     ? "bg-accent"
                     : "bg-background-secondary"
                 }`}
                 onClick={() =>
                   scriptStore.updateNode(props.node.id, {
-                    config: { ...props.node.config, value: !(props.node.config.value as boolean) },
+                    config: {
+                      ...props.node.config,
+                      value: !(props.node.config.value as boolean),
+                    },
                   })
                 }
               >
                 <div
                   class={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                    (props.node.config.value as boolean) ?? false
+                    ((props.node.config.value as boolean) ?? false)
                       ? "translate-x-8"
                       : "translate-x-1"
                   }`}
                 />
-                <span class={`absolute inset-0 flex items-center justify-center text-[9px] font-medium ${
-                  (props.node.config.value as boolean) ? "text-white pr-5" : "text-foreground-muted pl-5"
-                }`}>
+                <span
+                  class={`absolute inset-0 flex items-center justify-center text-[9px] font-medium ${
+                    (props.node.config.value as boolean)
+                      ? "text-white pr-5"
+                      : "text-foreground-muted pl-5"
+                  }`}
+                >
                   {(props.node.config.value as boolean) ? "true" : "false"}
                 </span>
               </button>
@@ -316,7 +337,10 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
                 checked={(props.node.config.autoStart as boolean) ?? true}
                 onChange={(e) =>
                   scriptStore.updateNode(props.node.id, {
-                    config: { ...props.node.config, autoStart: e.currentTarget.checked },
+                    config: {
+                      ...props.node.config,
+                      autoStart: e.currentTarget.checked,
+                    },
                   })
                 }
               />
@@ -340,7 +364,13 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
             </PropertyRow>
           </Show>
 
-          <Show when={props.node.type === "loop" || props.node.type === "for_each" || props.node.type === "for_range"}>
+          <Show
+            when={
+              props.node.type === "loop" ||
+              props.node.type === "for_each" ||
+              props.node.type === "for_range"
+            }
+          >
             <PropertyRow label="Max Iterations">
               <InspectorNumberInput
                 value={(props.node.config.maxIterations as number) ?? 1000}
@@ -402,7 +432,13 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
             </PropertyRow>
           </Show>
 
-          <Show when={props.node.type === "memory_read" || props.node.type === "memory_write" || props.node.type === "memory_freeze"}>
+          <Show
+            when={
+              props.node.type === "memory_read" ||
+              props.node.type === "memory_write" ||
+              props.node.type === "memory_freeze"
+            }
+          >
             <PropertyRow label="Value Type">
               <select
                 class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
@@ -538,7 +574,12 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
             </PropertyRow>
           </Show>
 
-          <Show when={props.node.type === "set_variable" || props.node.type === "get_variable"}>
+          <Show
+            when={
+              props.node.type === "set_variable" ||
+              props.node.type === "get_variable"
+            }
+          >
             <VariableSelector node={props.node} />
           </Show>
 
@@ -560,7 +601,10 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
                 value={(props.node.config.variableType as string) ?? "any"}
                 onChange={(e) =>
                   scriptStore.updateNode(props.node.id, {
-                    config: { ...props.node.config, variableType: e.currentTarget.value },
+                    config: {
+                      ...props.node.config,
+                      variableType: e.currentTarget.value,
+                    },
                   })
                 }
               >
@@ -822,7 +866,11 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
           </Show>
 
           {/* Read/Write arg index */}
-          <Show when={props.node.type === "read_arg" || props.node.type === "write_arg"}>
+          <Show
+            when={
+              props.node.type === "read_arg" || props.node.type === "write_arg"
+            }
+          >
             <PropertyRow label="Arg Index">
               <InspectorNumberInput
                 class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
@@ -841,7 +889,12 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
             </PropertyRow>
           </Show>
 
-          <Show when={props.node.type === "read_arg" || props.node.type === "read_retval"}>
+          <Show
+            when={
+              props.node.type === "read_arg" ||
+              props.node.type === "read_retval"
+            }
+          >
             <PropertyRow label="Read As">
               <select
                 class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
@@ -1089,15 +1142,21 @@ const NativeFunctionConfig: Component<NativeFunctionConfigProps> = (props) => {
       {/* Argument types */}
       <Show when={argCount() > 0}>
         <div class="space-y-2 pt-2 border-t border-border/50">
-          <div class="text-[10px] text-foreground-muted font-medium">Argument Types</div>
+          <div class="text-[10px] text-foreground-muted font-medium">
+            Argument Types
+          </div>
           <For each={Array.from({ length: argCount() }, (_, i) => i)}>
             {(index) => (
               <div class="flex items-center gap-2">
-                <span class="text-[10px] text-foreground-muted w-8">arg{index}</span>
+                <span class="text-[10px] text-foreground-muted w-8">
+                  arg{index}
+                </span>
                 <select
                   class="flex-1 px-2 py-1 text-xs bg-background border border-border rounded"
                   value={argTypes()[index] ?? "pointer"}
-                  onChange={(e) => handleArgTypeChange(index, e.currentTarget.value)}
+                  onChange={(e) =>
+                    handleArgTypeChange(index, e.currentTarget.value)
+                  }
                 >
                   <For each={FRIDA_TYPES.filter((t) => t !== "void")}>
                     {(type) => <option value={type}>{type}</option>}
@@ -1122,7 +1181,9 @@ const EventUIConfig: Component<EventUIConfigProps> = (props) => {
   const uiComponents = createMemo(() => designerStore.components());
 
   // Event types based on component type
-  const getEventTypesForComponent = (componentType: string): { value: UIEventType; label: string }[] => {
+  const getEventTypesForComponent = (
+    componentType: string,
+  ): { value: UIEventType; label: string }[] => {
     switch (componentType) {
       case "button":
         return [{ value: "click", label: "Click" }];
@@ -1207,7 +1268,12 @@ const EventUIConfig: Component<EventUIConfigProps> = (props) => {
           <Show when={(props.node.config.eventType as string) === "toggle"}>
             Output: <code>value</code> = boolean (true/false)
           </Show>
-          <Show when={(props.node.config.eventType as string) === "slide" || (props.node.config.eventType as string) === "slide_end"}>
+          <Show
+            when={
+              (props.node.config.eventType as string) === "slide" ||
+              (props.node.config.eventType as string) === "slide_end"
+            }
+          >
             Output: <code>value</code> = number (slider value)
           </Show>
           <Show when={(props.node.config.eventType as string) === "change"}>
@@ -1287,7 +1353,9 @@ const SwitchNodeConfig: Component<SwitchNodeConfigProps> = (props) => {
         <For each={caseValues()}>
           {(value, index) => (
             <div class="flex items-center gap-2">
-              <span class="text-[10px] text-foreground-muted w-12">case{index()}</span>
+              <span class="text-[10px] text-foreground-muted w-12">
+                case{index()}
+              </span>
               <InspectorTextInput
                 class="flex-1 px-2 py-1 text-xs bg-background border border-border rounded"
                 placeholder={`Value for case ${index()}`}
@@ -1326,10 +1394,7 @@ const VariablesSection: Component = () => {
         class="w-full px-3 py-2 flex items-center gap-2 hover:bg-surface-hover transition-colors"
         onClick={() => setIsOpen(!isOpen())}
       >
-        <Show
-          when={isOpen()}
-          fallback={<ChevronRightIcon class="w-3 h-3" />}
-        >
+        <Show when={isOpen()} fallback={<ChevronRightIcon class="w-3 h-3" />}>
           <ChevronDownIcon class="w-3 h-3" />
         </Show>
         <span class="text-xs font-medium">Variables</span>
@@ -1378,7 +1443,9 @@ const VariablesSection: Component = () => {
               <select
                 class="flex-1 px-2 py-1 text-xs bg-background border border-border rounded"
                 value={newVarType()}
-                onChange={(e) => setNewVarType(e.currentTarget.value as ValueType)}
+                onChange={(e) =>
+                  setNewVarType(e.currentTarget.value as ValueType)
+                }
               >
                 <option value="int32">int32</option>
                 <option value="int64">int64</option>

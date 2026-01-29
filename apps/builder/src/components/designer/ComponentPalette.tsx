@@ -76,9 +76,7 @@ export const ComponentPalette: Component = () => {
     <div class="w-56 border-r border-border bg-surface flex flex-col">
       <div class="p-3 border-b border-border">
         <h3 class="font-medium text-sm">Components</h3>
-        <p class="text-xs text-foreground-muted mt-1">
-          Drag to canvas to add
-        </p>
+        <p class="text-xs text-foreground-muted mt-1">Drag to canvas to add</p>
       </div>
 
       <div class="flex-1 overflow-y-auto p-2 space-y-1">
@@ -106,7 +104,8 @@ export const ComponentPalette: Component = () => {
 
       <div class="p-3 border-t border-border">
         <div class="text-xs text-foreground-muted">
-          <span class="font-medium">Tip:</span> Double-click component to edit label
+          <span class="font-medium">Tip:</span> Double-click component to edit
+          label
         </div>
       </div>
     </div>

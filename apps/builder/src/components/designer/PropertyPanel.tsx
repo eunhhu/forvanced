@@ -1,9 +1,14 @@
-import { Component, For, Show, createSignal, createMemo, createEffect, untrack } from "solid-js";
-import { designerStore } from "@/stores/designer";
 import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-} from "@/components/common/Icons";
+  Component,
+  For,
+  Show,
+  createSignal,
+  createMemo,
+  createEffect,
+  untrack,
+} from "solid-js";
+import { designerStore } from "@/stores/designer";
+import { ChevronDownIcon, ChevronRightIcon } from "@/components/common/Icons";
 
 export const PropertyPanel: Component = () => {
   const component = createMemo(() => designerStore.getSelectedComponent());
@@ -14,7 +19,8 @@ export const PropertyPanel: Component = () => {
         <h3 class="font-medium text-sm">Properties</h3>
         <Show when={component()}>
           <p class="text-xs text-foreground-muted mt-1">
-            {component()!.type.charAt(0).toUpperCase() + component()!.type.slice(1)}
+            {component()!.type.charAt(0).toUpperCase() +
+              component()!.type.slice(1)}
           </p>
         </Show>
       </div>
@@ -26,7 +32,9 @@ export const PropertyPanel: Component = () => {
             <div class="flex-1 flex items-center justify-center p-4">
               <div class="text-center text-foreground-muted text-sm">
                 <p>No component selected</p>
-                <p class="text-xs mt-1">Click a component to edit its properties</p>
+                <p class="text-xs mt-1">
+                  Click a component to edit its properties
+                </p>
               </div>
             </div>
           }
@@ -46,11 +54,15 @@ export const PropertyPanel: Component = () => {
                   <div class="flex gap-2">
                     <NumberInput
                       value={Math.round(c().x)}
-                      onChange={(val) => designerStore.updateComponent(c().id, { x: val })}
+                      onChange={(val) =>
+                        designerStore.updateComponent(c().id, { x: val })
+                      }
                     />
                     <NumberInput
                       value={Math.round(c().y)}
-                      onChange={(val) => designerStore.updateComponent(c().id, { y: val })}
+                      onChange={(val) =>
+                        designerStore.updateComponent(c().id, { y: val })
+                      }
                     />
                   </div>
                 </PropertyRow>
@@ -58,11 +70,15 @@ export const PropertyPanel: Component = () => {
                   <div class="flex gap-2">
                     <NumberInput
                       value={Math.round(c().width)}
-                      onChange={(val) => designerStore.updateComponent(c().id, { width: val })}
+                      onChange={(val) =>
+                        designerStore.updateComponent(c().id, { width: val })
+                      }
                     />
                     <NumberInput
                       value={Math.round(c().height)}
-                      onChange={(val) => designerStore.updateComponent(c().id, { height: val })}
+                      onChange={(val) =>
+                        designerStore.updateComponent(c().id, { height: val })
+                      }
                     />
                   </div>
                 </PropertyRow>
@@ -74,19 +90,22 @@ export const PropertyPanel: Component = () => {
                   <PropertyRow label="Default">
                     <button
                       class={`w-10 h-5 rounded-full transition-colors relative ${
-                        (c().props.defaultValue as boolean) ?? false
+                        ((c().props.defaultValue as boolean) ?? false)
                           ? "bg-accent"
                           : "bg-background-secondary"
                       }`}
                       onClick={() =>
                         designerStore.updateComponent(c().id, {
-                          props: { ...c().props, defaultValue: !(c().props.defaultValue as boolean) },
+                          props: {
+                            ...c().props,
+                            defaultValue: !(c().props.defaultValue as boolean),
+                          },
                         })
                       }
                     >
                       <div
                         class={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
-                          (c().props.defaultValue as boolean) ?? false
+                          ((c().props.defaultValue as boolean) ?? false)
                             ? "translate-x-5"
                             : "translate-x-0.5"
                         }`}
@@ -189,12 +208,15 @@ export const PropertyPanel: Component = () => {
               <PropertySection title="Actions">
                 <div class="text-[10px] text-foreground-muted space-y-2">
                   <p>
-                    To add actions to this component, go to the <strong>Script</strong> tab
-                    and use the <strong>UI Event</strong> node.
+                    To add actions to this component, go to the{" "}
+                    <strong>Script</strong> tab and use the{" "}
+                    <strong>UI Event</strong> node.
                   </p>
                   <div class="p-2 bg-background/50 rounded text-[9px]">
                     <strong>Component ID:</strong>
-                    <code class="ml-1 px-1 py-0.5 bg-accent/10 rounded">{c().id}</code>
+                    <code class="ml-1 px-1 py-0.5 bg-accent/10 rounded">
+                      {c().id}
+                    </code>
                   </div>
                 </div>
               </PropertySection>
@@ -266,7 +288,10 @@ const NumberInput: Component<NumberInputProps> = (props) => {
   return (
     <input
       type="number"
-      class={props.class ?? "w-16 px-2 py-1 text-xs bg-background border border-border rounded"}
+      class={
+        props.class ??
+        "w-16 px-2 py-1 text-xs bg-background border border-border rounded"
+      }
       min={props.min}
       value={localValue()}
       onFocus={() => setIsFocused(true)}
@@ -305,7 +330,10 @@ const TextInput: Component<TextInputProps> = (props) => {
   return (
     <input
       type={props.type ?? "text"}
-      class={props.class ?? "w-24 px-1.5 py-0.5 text-[10px] bg-background border border-border rounded"}
+      class={
+        props.class ??
+        "w-24 px-1.5 py-0.5 text-[10px] bg-background border border-border rounded"
+      }
       value={localValue()}
       onFocus={() => setIsFocused(true)}
       onInput={(e) => {

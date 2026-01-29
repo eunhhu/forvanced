@@ -33,7 +33,14 @@ export interface FridaAction {
 
 export interface FridaActionParam {
   name: string;
-  type: "address" | "value" | "string" | "number" | "boolean" | "pattern" | "select";
+  type:
+    | "address"
+    | "value"
+    | "string"
+    | "number"
+    | "boolean"
+    | "pattern"
+    | "select";
   label: string;
   options?: { value: string; label: string }[]; // For select type
   defaultValue?: string | number | boolean;
@@ -73,7 +80,8 @@ function createDesignerStore() {
   const [dragOffset, setDragOffset] = createSignal({ x: 0, y: 0 });
 
   // Track the component type being dragged from palette (workaround for WebView dataTransfer issues)
-  const [draggingComponentType, setDraggingComponentType] = createSignal<ComponentType | null>(null);
+  const [draggingComponentType, setDraggingComponentType] =
+    createSignal<ComponentType | null>(null);
 
   // Flag to prevent sync loop when loading from project
   let isLoadingFromProject = false;
@@ -89,7 +97,7 @@ function createDesignerStore() {
   function addComponent(
     type: ComponentType,
     x: number,
-    y: number
+    y: number,
   ): UIComponent {
     const defaultProps = getDefaultProps(type);
     const component: UIComponent = {
@@ -111,7 +119,7 @@ function createDesignerStore() {
   // Update component
   function updateComponent(id: string, updates: Partial<UIComponent>) {
     setComponents((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, ...updates } : c))
+      prev.map((c) => (c.id === id ? { ...c, ...updates } : c)),
     );
   }
 
@@ -470,7 +478,12 @@ export const fridaActions: FridaAction[] = [
     description: "Replace function return value",
     params: [
       { name: "address", type: "address", label: "Address", required: true },
-      { name: "returnValue", type: "value", label: "Return Value", required: true },
+      {
+        name: "returnValue",
+        type: "value",
+        label: "Return Value",
+        required: true,
+      },
     ],
   },
   {
@@ -490,8 +503,18 @@ export const fridaActions: FridaAction[] = [
     name: "Hook Java Method",
     description: "Hook a Java method on Android",
     params: [
-      { name: "className", type: "string", label: "Class Name", required: true },
-      { name: "methodName", type: "string", label: "Method Name", required: true },
+      {
+        name: "className",
+        type: "string",
+        label: "Class Name",
+        required: true,
+      },
+      {
+        name: "methodName",
+        type: "string",
+        label: "Method Name",
+        required: true,
+      },
       {
         name: "overload",
         type: "string",
@@ -506,9 +529,24 @@ export const fridaActions: FridaAction[] = [
     name: "Modify Java Return",
     description: "Modify Java method return value",
     params: [
-      { name: "className", type: "string", label: "Class Name", required: true },
-      { name: "methodName", type: "string", label: "Method Name", required: true },
-      { name: "returnValue", type: "value", label: "Return Value", required: true },
+      {
+        name: "className",
+        type: "string",
+        label: "Class Name",
+        required: true,
+      },
+      {
+        name: "methodName",
+        type: "string",
+        label: "Method Name",
+        required: true,
+      },
+      {
+        name: "returnValue",
+        type: "value",
+        label: "Return Value",
+        required: true,
+      },
     ],
   },
   {
@@ -517,9 +555,24 @@ export const fridaActions: FridaAction[] = [
     name: "Call Java Method",
     description: "Invoke a Java method",
     params: [
-      { name: "className", type: "string", label: "Class Name", required: true },
-      { name: "methodName", type: "string", label: "Method Name", required: true },
-      { name: "isStatic", type: "boolean", label: "Is Static", defaultValue: false },
+      {
+        name: "className",
+        type: "string",
+        label: "Class Name",
+        required: true,
+      },
+      {
+        name: "methodName",
+        type: "string",
+        label: "Method Name",
+        required: true,
+      },
+      {
+        name: "isStatic",
+        type: "boolean",
+        label: "Is Static",
+        defaultValue: false,
+      },
     ],
   },
 
@@ -530,9 +583,19 @@ export const fridaActions: FridaAction[] = [
     name: "Hook ObjC Method",
     description: "Hook an Objective-C method",
     params: [
-      { name: "className", type: "string", label: "Class Name", required: true },
+      {
+        name: "className",
+        type: "string",
+        label: "Class Name",
+        required: true,
+      },
       { name: "selector", type: "string", label: "Selector", required: true },
-      { name: "isClassMethod", type: "boolean", label: "Class Method", defaultValue: false },
+      {
+        name: "isClassMethod",
+        type: "boolean",
+        label: "Class Method",
+        defaultValue: false,
+      },
     ],
   },
   {
@@ -541,9 +604,19 @@ export const fridaActions: FridaAction[] = [
     name: "Modify ObjC Return",
     description: "Modify Objective-C method return value",
     params: [
-      { name: "className", type: "string", label: "Class Name", required: true },
+      {
+        name: "className",
+        type: "string",
+        label: "Class Name",
+        required: true,
+      },
       { name: "selector", type: "string", label: "Selector", required: true },
-      { name: "returnValue", type: "value", label: "Return Value", required: true },
+      {
+        name: "returnValue",
+        type: "value",
+        label: "Return Value",
+        required: true,
+      },
     ],
   },
 
@@ -554,7 +627,12 @@ export const fridaActions: FridaAction[] = [
     name: "Hook Swift Function",
     description: "Hook a Swift function by mangled name",
     params: [
-      { name: "mangledName", type: "string", label: "Mangled Name", required: true },
+      {
+        name: "mangledName",
+        type: "string",
+        label: "Mangled Name",
+        required: true,
+      },
     ],
   },
 
@@ -572,14 +650,26 @@ export const fridaActions: FridaAction[] = [
     name: "Find Export",
     description: "Find exported function address",
     params: [
-      { name: "moduleName", type: "string", label: "Module Name", required: true },
-      { name: "exportName", type: "string", label: "Export Name", required: true },
+      {
+        name: "moduleName",
+        type: "string",
+        label: "Module Name",
+        required: true,
+      },
+      {
+        name: "exportName",
+        type: "string",
+        label: "Export Name",
+        required: true,
+      },
     ],
   },
 ];
 
 // Export actions grouped by category
-export function getActionsByCategory(category: FridaActionCategory): FridaAction[] {
+export function getActionsByCategory(
+  category: FridaActionCategory,
+): FridaAction[] {
   return fridaActions.filter((a) => a.category === category);
 }
 

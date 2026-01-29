@@ -6,18 +6,18 @@ import { createSignal, createRoot } from "solid-js";
 
 // UI Event Types - Events emitted by UI components
 export type UIEventType =
-  | "click"           // Button click
-  | "toggle"          // Toggle on/off (boolean value)
-  | "change"          // Input/dropdown value change (any value)
-  | "slide"           // Slider value change (number value)
-  | "slide_end";      // Slider released (number value)
+  | "click" // Button click
+  | "toggle" // Toggle on/off (boolean value)
+  | "change" // Input/dropdown value change (any value)
+  | "slide" // Slider value change (number value)
+  | "slide_end"; // Slider released (number value)
 
 // System Event Types - Events from the runtime
 export type SystemEventType =
-  | "attach"          // When attached to process
-  | "detach"          // When detached from process
-  | "hotkey"          // When hotkey is pressed
-  | "interval";       // Periodic timer tick
+  | "attach" // When attached to process
+  | "detach" // When detached from process
+  | "hotkey" // When hotkey is pressed
+  | "interval"; // Periodic timer tick
 
 // Combined Event Type
 export type EventType = UIEventType | SystemEventType;
@@ -30,97 +30,104 @@ export interface ScriptMetadata {
 // Node Types - What kind of operation
 export type ScriptNodeType =
   // Event Listeners (Entry Points - replaces start/end)
-  | "event_ui"            // Listen to UI component events (click, toggle, change, slide)
-  | "event_attach"        // When attached to process
-  | "event_detach"        // When detached from process
-  | "event_hotkey"        // When hotkey is pressed
-  | "event_interval"      // Periodic execution (timer)
+  | "event_ui" // Listen to UI component events (click, toggle, change, slide)
+  | "event_attach" // When attached to process
+  | "event_detach" // When detached from process
+  | "event_hotkey" // When hotkey is pressed
+  | "event_interval" // Periodic execution (timer)
   // Constants (Literal Values)
-  | "const_string"        // String literal input
-  | "const_number"        // Number literal input
-  | "const_boolean"       // Boolean literal input
-  | "const_pointer"       // Pointer/Address literal (hex string)
+  | "const_string" // String literal input
+  | "const_number" // Number literal input
+  | "const_boolean" // Boolean literal input
+  | "const_pointer" // Pointer/Address literal (hex string)
   // Flow Control
-  | "if"              // Conditional branch
-  | "switch"          // Multi-way branch (switch/case)
-  | "for_each"        // Iterate over array
-  | "for_range"       // Loop from start to end
-  | "loop"            // Loop (while/for)
-  | "delay"           // Wait for ms
-  | "break"           // Break from loop
-  | "continue"        // Continue to next iteration
+  | "if" // Conditional branch
+  | "switch" // Multi-way branch (switch/case)
+  | "for_each" // Iterate over array
+  | "for_range" // Loop from start to end
+  | "loop" // Loop (while/for)
+  | "delay" // Wait for ms
+  | "break" // Break from loop
+  | "continue" // Continue to next iteration
   // Memory Operations
-  | "memory_scan"     // Scan for value pattern
-  | "memory_read"     // Read from address
-  | "memory_write"    // Write to address
-  | "memory_freeze"   // Freeze value at address
-  | "memory_alloc"    // Allocate memory
-  | "memory_protect"  // Change memory protection
+  | "memory_scan" // Scan for value pattern
+  | "memory_read" // Read from address
+  | "memory_write" // Write to address
+  | "memory_freeze" // Freeze value at address
+  | "memory_alloc" // Allocate memory
+  | "memory_protect" // Change memory protection
   // Pointer Operations
-  | "pointer_add"     // Add offset to pointer
-  | "pointer_read"    // Read from pointer (with type)
-  | "pointer_write"   // Write to pointer (with type)
+  | "pointer_add" // Add offset to pointer
+  | "pointer_read" // Read from pointer (with type)
+  | "pointer_write" // Write to pointer (with type)
   // Module/Symbol
-  | "get_module"      // Get module by name
-  | "find_symbol"     // Find symbol/export in module
+  | "get_module" // Get module by name
+  | "find_symbol" // Find symbol/export in module
   | "get_base_address" // Get module base address
   | "enumerate_exports" // List all exports of a module
   | "enumerate_modules" // List all loaded modules
   // Variables
-  | "set_variable"    // Store value in variable
-  | "get_variable"    // Retrieve value from variable
+  | "set_variable" // Store value in variable
+  | "get_variable" // Retrieve value from variable
   | "declare_variable" // Declare and initialize a variable
   // Array Operations
-  | "array_create"    // Create an array
-  | "array_get"       // Get element at index
-  | "array_set"       // Set element at index
-  | "array_push"      // Add element to end
-  | "array_length"    // Get array length
-  | "array_find"      // Find element in array
+  | "array_create" // Create an array
+  | "array_get" // Get element at index
+  | "array_set" // Set element at index
+  | "array_push" // Add element to end
+  | "array_length" // Get array length
+  | "array_find" // Find element in array
   // Object Operations
-  | "object_get"      // Get property from object
-  | "object_set"      // Set property on object
-  | "object_keys"     // Get all keys of object
+  | "object_get" // Get property from object
+  | "object_set" // Set property on object
+  | "object_keys" // Get all keys of object
   // Math/Logic
-  | "math"            // Math operations (+, -, *, /, %)
-  | "compare"         // Comparison (==, !=, <, >, <=, >=)
-  | "logic"           // Logic operations (and, or, not)
+  | "math" // Math operations (+, -, *, /, %)
+  | "compare" // Comparison (==, !=, <, >, <=, >=)
+  | "logic" // Logic operations (and, or, not)
   // String Operations
-  | "string_format"   // Format string with values
-  | "string_concat"   // Concatenate strings
-  | "to_string"       // Convert value to string
-  | "parse_int"       // Parse string to integer
-  | "parse_float"     // Parse string to float
+  | "string_format" // Format string with values
+  | "string_concat" // Concatenate strings
+  | "to_string" // Convert value to string
+  | "parse_int" // Parse string to integer
+  | "parse_float" // Parse string to float
   // Type Conversion
-  | "to_pointer"      // Convert number/string to pointer (ptr())
+  | "to_pointer" // Convert number/string to pointer (ptr())
   // Native
-  | "call_native"     // Call native function with NativeFunction
+  | "call_native" // Call native function with NativeFunction
   | "native_callback" // Create NativeCallback for hooks
   // Interceptor
   | "interceptor_attach" // Attach to function (onEnter/onLeave)
   | "interceptor_replace" // Replace function implementation
   | "interceptor_detach" // Detach from function
-  | "read_arg"        // Read argument in hook context
-  | "write_arg"       // Modify argument in hook context
-  | "read_retval"     // Read return value in hook context
-  | "replace_retval"  // Replace return value in hook context
+  | "read_arg" // Read argument in hook context
+  | "write_arg" // Modify argument in hook context
+  | "read_retval" // Read return value in hook context
+  | "replace_retval" // Replace return value in hook context
   // Output
-  | "log"             // Log to console
-  | "notify"          // Show notification
+  | "log" // Log to console
+  | "notify" // Show notification
   // Functions (reusable code blocks)
-  | "function_define"   // Define a reusable function
-  | "function_call"     // Call a defined function
-  | "function_return"   // Return from function          // Show notification
+  | "function_define" // Define a reusable function
+  | "function_call" // Call a defined function
+  | "function_return"; // Return from function          // Show notification
 
 // Value Types
 export type ValueType =
-  | "int8" | "uint8"
-  | "int16" | "uint16"
-  | "int32" | "uint32"
-  | "int64" | "uint64"
-  | "float" | "double"
-  | "pointer" | "string"
-  | "boolean" | "any";
+  | "int8"
+  | "uint8"
+  | "int16"
+  | "uint16"
+  | "int32"
+  | "uint32"
+  | "int64"
+  | "uint64"
+  | "float"
+  | "double"
+  | "pointer"
+  | "string"
+  | "boolean"
+  | "any";
 
 // Port Types (for connections)
 export type PortType = "flow" | "value";
@@ -130,7 +137,7 @@ export interface Port {
   id: string;
   name: string;
   type: PortType;
-  valueType?: ValueType;  // For value ports
+  valueType?: ValueType; // For value ports
   direction: "input" | "output";
 }
 
@@ -207,7 +214,12 @@ export const nodeTemplates: NodeTemplate[] = [
     defaultConfig: { value: "" },
     inputs: [],
     outputs: [
-      { name: "value", type: "value", valueType: "string", direction: "output" },
+      {
+        name: "value",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      },
     ],
   },
   {
@@ -229,7 +241,12 @@ export const nodeTemplates: NodeTemplate[] = [
     defaultConfig: { value: true },
     inputs: [],
     outputs: [
-      { name: "value", type: "value", valueType: "boolean", direction: "output" },
+      {
+        name: "value",
+        type: "value",
+        valueType: "boolean",
+        direction: "output",
+      },
     ],
   },
   {
@@ -240,7 +257,12 @@ export const nodeTemplates: NodeTemplate[] = [
     defaultConfig: { value: "0x0" },
     inputs: [],
     outputs: [
-      { name: "value", type: "value", valueType: "pointer", direction: "output" },
+      {
+        name: "value",
+        type: "value",
+        valueType: "pointer",
+        direction: "output",
+      },
     ],
   },
 
@@ -253,14 +275,19 @@ export const nodeTemplates: NodeTemplate[] = [
     category: "Events",
     description: "Triggered when a UI component fires an event",
     defaultConfig: {
-      componentId: "",      // Selected from dropdown
-      eventType: "click",   // click, toggle, change, slide
+      componentId: "", // Selected from dropdown
+      eventType: "click", // click, toggle, change, slide
     },
     inputs: [],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
-      { name: "value", type: "value", valueType: "any", direction: "output" },      // Event value (boolean for toggle, number for slider, string for input)
-      { name: "componentId", type: "value", valueType: "string", direction: "output" }, // The component ID for reference
+      { name: "value", type: "value", valueType: "any", direction: "output" }, // Event value (boolean for toggle, number for slider, string for input)
+      {
+        name: "componentId",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      }, // The component ID for reference
     ],
   },
   {
@@ -272,7 +299,12 @@ export const nodeTemplates: NodeTemplate[] = [
     inputs: [],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
-      { name: "processName", type: "value", valueType: "string", direction: "output" },
+      {
+        name: "processName",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      },
       { name: "pid", type: "value", valueType: "int32", direction: "output" },
     ],
   },
@@ -283,9 +315,7 @@ export const nodeTemplates: NodeTemplate[] = [
     description: "Triggered when detached from a process",
     defaultConfig: {},
     inputs: [],
-    outputs: [
-      { name: "exec", type: "flow", direction: "output" },
-    ],
+    outputs: [{ name: "exec", type: "flow", direction: "output" }],
   },
   {
     type: "event_hotkey",
@@ -293,12 +323,10 @@ export const nodeTemplates: NodeTemplate[] = [
     category: "Events",
     description: "Triggered when a hotkey is pressed",
     defaultConfig: {
-      hotkey: "",           // e.g., "Ctrl+F1"
+      hotkey: "", // e.g., "Ctrl+F1"
     },
     inputs: [],
-    outputs: [
-      { name: "exec", type: "flow", direction: "output" },
-    ],
+    outputs: [{ name: "exec", type: "flow", direction: "output" }],
   },
   {
     type: "event_interval",
@@ -306,8 +334,8 @@ export const nodeTemplates: NodeTemplate[] = [
     category: "Events",
     description: "Triggered periodically at a set interval",
     defaultConfig: {
-      intervalMs: 1000,     // Default 1 second
-      autoStart: true,      // Start automatically on attach
+      intervalMs: 1000, // Default 1 second
+      autoStart: true, // Start automatically on attach
     },
     inputs: [],
     outputs: [
@@ -326,7 +354,12 @@ export const nodeTemplates: NodeTemplate[] = [
     defaultConfig: {},
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
-      { name: "condition", type: "value", valueType: "boolean", direction: "input" },
+      {
+        name: "condition",
+        type: "value",
+        valueType: "boolean",
+        direction: "input",
+      },
     ],
     outputs: [
       { name: "true", type: "flow", direction: "output" },
@@ -393,7 +426,12 @@ export const nodeTemplates: NodeTemplate[] = [
     defaultConfig: { maxIterations: 1000 },
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
-      { name: "condition", type: "value", valueType: "boolean", direction: "input" },
+      {
+        name: "condition",
+        type: "value",
+        valueType: "boolean",
+        direction: "input",
+      },
     ],
     outputs: [
       { name: "body", type: "flow", direction: "output" },
@@ -407,9 +445,7 @@ export const nodeTemplates: NodeTemplate[] = [
     category: "Flow",
     description: "Break out of the current loop",
     defaultConfig: {},
-    inputs: [
-      { name: "exec", type: "flow", direction: "input" },
-    ],
+    inputs: [{ name: "exec", type: "flow", direction: "input" }],
     outputs: [],
   },
   {
@@ -418,9 +454,7 @@ export const nodeTemplates: NodeTemplate[] = [
     category: "Flow",
     description: "Skip to next iteration of the loop",
     defaultConfig: {},
-    inputs: [
-      { name: "exec", type: "flow", direction: "input" },
-    ],
+    inputs: [{ name: "exec", type: "flow", direction: "input" }],
     outputs: [],
   },
   {
@@ -449,8 +483,18 @@ export const nodeTemplates: NodeTemplate[] = [
     ],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
-      { name: "results", type: "value", valueType: "pointer", direction: "output" }, // Array of pointers
-      { name: "count", type: "value", valueType: "uint32", direction: "output" },
+      {
+        name: "results",
+        type: "value",
+        valueType: "pointer",
+        direction: "output",
+      }, // Array of pointers
+      {
+        name: "count",
+        type: "value",
+        valueType: "uint32",
+        direction: "output",
+      },
     ],
   },
   {
@@ -461,7 +505,12 @@ export const nodeTemplates: NodeTemplate[] = [
     defaultConfig: { valueType: "int32" },
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
-      { name: "address", type: "value", valueType: "pointer", direction: "input" },
+      {
+        name: "address",
+        type: "value",
+        valueType: "pointer",
+        direction: "input",
+      },
     ],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
@@ -476,7 +525,12 @@ export const nodeTemplates: NodeTemplate[] = [
     defaultConfig: { valueType: "int32" },
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
-      { name: "address", type: "value", valueType: "pointer", direction: "input" },
+      {
+        name: "address",
+        type: "value",
+        valueType: "pointer",
+        direction: "input",
+      },
       { name: "value", type: "value", valueType: "int32", direction: "input" }, // Dynamic based on config
     ],
     outputs: [{ name: "exec", type: "flow", direction: "output" }],
@@ -489,9 +543,19 @@ export const nodeTemplates: NodeTemplate[] = [
     defaultConfig: { valueType: "int32", intervalMs: 100 },
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
-      { name: "address", type: "value", valueType: "pointer", direction: "input" },
+      {
+        name: "address",
+        type: "value",
+        valueType: "pointer",
+        direction: "input",
+      },
       { name: "value", type: "value", valueType: "any", direction: "input" },
-      { name: "enabled", type: "value", valueType: "boolean", direction: "input" },
+      {
+        name: "enabled",
+        type: "value",
+        valueType: "boolean",
+        direction: "input",
+      },
     ],
     outputs: [{ name: "exec", type: "flow", direction: "output" }],
   },
@@ -507,7 +571,12 @@ export const nodeTemplates: NodeTemplate[] = [
     ],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
-      { name: "address", type: "value", valueType: "pointer", direction: "output" },
+      {
+        name: "address",
+        type: "value",
+        valueType: "pointer",
+        direction: "output",
+      },
     ],
   },
   {
@@ -518,12 +587,22 @@ export const nodeTemplates: NodeTemplate[] = [
     defaultConfig: { protection: "rwx" },
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
-      { name: "address", type: "value", valueType: "pointer", direction: "input" },
+      {
+        name: "address",
+        type: "value",
+        valueType: "pointer",
+        direction: "input",
+      },
       { name: "size", type: "value", valueType: "uint32", direction: "input" },
     ],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
-      { name: "success", type: "value", valueType: "boolean", direction: "output" },
+      {
+        name: "success",
+        type: "value",
+        valueType: "boolean",
+        direction: "output",
+      },
     ],
   },
 
@@ -535,11 +614,21 @@ export const nodeTemplates: NodeTemplate[] = [
     description: "Add offset to pointer address",
     defaultConfig: {},
     inputs: [
-      { name: "pointer", type: "value", valueType: "pointer", direction: "input" },
+      {
+        name: "pointer",
+        type: "value",
+        valueType: "pointer",
+        direction: "input",
+      },
       { name: "offset", type: "value", valueType: "int64", direction: "input" },
     ],
     outputs: [
-      { name: "result", type: "value", valueType: "pointer", direction: "output" },
+      {
+        name: "result",
+        type: "value",
+        valueType: "pointer",
+        direction: "output",
+      },
     ],
   },
   {
@@ -549,7 +638,12 @@ export const nodeTemplates: NodeTemplate[] = [
     description: "Read value at pointer (readU32, readPointer, etc.)",
     defaultConfig: { readType: "uint32" },
     inputs: [
-      { name: "pointer", type: "value", valueType: "pointer", direction: "input" },
+      {
+        name: "pointer",
+        type: "value",
+        valueType: "pointer",
+        direction: "input",
+      },
     ],
     outputs: [
       { name: "value", type: "value", valueType: "any", direction: "output" },
@@ -563,12 +657,15 @@ export const nodeTemplates: NodeTemplate[] = [
     defaultConfig: { writeType: "uint32" },
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
-      { name: "pointer", type: "value", valueType: "pointer", direction: "input" },
+      {
+        name: "pointer",
+        type: "value",
+        valueType: "pointer",
+        direction: "input",
+      },
       { name: "value", type: "value", valueType: "any", direction: "input" },
     ],
-    outputs: [
-      { name: "exec", type: "flow", direction: "output" },
-    ],
+    outputs: [{ name: "exec", type: "flow", direction: "output" }],
   },
 
   // Module/Symbol
@@ -584,8 +681,18 @@ export const nodeTemplates: NodeTemplate[] = [
     ],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
-      { name: "module", type: "value", valueType: "pointer", direction: "output" },
-      { name: "base", type: "value", valueType: "pointer", direction: "output" },
+      {
+        name: "module",
+        type: "value",
+        valueType: "pointer",
+        direction: "output",
+      },
+      {
+        name: "base",
+        type: "value",
+        valueType: "pointer",
+        direction: "output",
+      },
       { name: "size", type: "value", valueType: "uint64", direction: "output" },
     ],
   },
@@ -597,12 +704,27 @@ export const nodeTemplates: NodeTemplate[] = [
     defaultConfig: {},
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
-      { name: "module", type: "value", valueType: "string", direction: "input" },
-      { name: "symbol", type: "value", valueType: "string", direction: "input" },
+      {
+        name: "module",
+        type: "value",
+        valueType: "string",
+        direction: "input",
+      },
+      {
+        name: "symbol",
+        type: "value",
+        valueType: "string",
+        direction: "input",
+      },
     ],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
-      { name: "address", type: "value", valueType: "pointer", direction: "output" },
+      {
+        name: "address",
+        type: "value",
+        valueType: "pointer",
+        direction: "output",
+      },
     ],
   },
   {
@@ -613,11 +735,21 @@ export const nodeTemplates: NodeTemplate[] = [
     defaultConfig: {},
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
-      { name: "moduleName", type: "value", valueType: "string", direction: "input" },
+      {
+        name: "moduleName",
+        type: "value",
+        valueType: "string",
+        direction: "input",
+      },
     ],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
-      { name: "address", type: "value", valueType: "pointer", direction: "output" },
+      {
+        name: "address",
+        type: "value",
+        valueType: "pointer",
+        direction: "output",
+      },
     ],
   },
   {
@@ -626,9 +758,7 @@ export const nodeTemplates: NodeTemplate[] = [
     category: "Module",
     description: "List all loaded modules with Process.enumerateModules()",
     defaultConfig: {},
-    inputs: [
-      { name: "exec", type: "flow", direction: "input" },
-    ],
+    inputs: [{ name: "exec", type: "flow", direction: "input" }],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
       { name: "modules", type: "value", valueType: "any", direction: "output" },
@@ -643,7 +773,12 @@ export const nodeTemplates: NodeTemplate[] = [
     defaultConfig: {},
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
-      { name: "moduleName", type: "value", valueType: "string", direction: "input" },
+      {
+        name: "moduleName",
+        type: "value",
+        valueType: "string",
+        direction: "input",
+      },
     ],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
@@ -663,11 +798,16 @@ export const nodeTemplates: NodeTemplate[] = [
     defaultConfig: {
       variableName: "myVar",
       variableType: "any" as ValueType,
-      inlineValue: "",  // For simple initial values
+      inlineValue: "", // For simple initial values
     },
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
-      { name: "initialValue", type: "value", valueType: "any", direction: "input" },
+      {
+        name: "initialValue",
+        type: "value",
+        valueType: "any",
+        direction: "input",
+      },
     ],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
@@ -696,7 +836,9 @@ export const nodeTemplates: NodeTemplate[] = [
     description: "Retrieve a value from a variable",
     defaultConfig: { variableId: "" },
     inputs: [],
-    outputs: [{ name: "value", type: "value", valueType: "any", direction: "output" }],
+    outputs: [
+      { name: "value", type: "value", valueType: "any", direction: "output" },
+    ],
   },
 
   // ============================================
@@ -763,7 +905,12 @@ export const nodeTemplates: NodeTemplate[] = [
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
       { name: "array", type: "value", valueType: "any", direction: "output" },
-      { name: "length", type: "value", valueType: "int32", direction: "output" },
+      {
+        name: "length",
+        type: "value",
+        valueType: "int32",
+        direction: "output",
+      },
     ],
   },
   {
@@ -776,7 +923,12 @@ export const nodeTemplates: NodeTemplate[] = [
       { name: "array", type: "value", valueType: "any", direction: "input" },
     ],
     outputs: [
-      { name: "length", type: "value", valueType: "int32", direction: "output" },
+      {
+        name: "length",
+        type: "value",
+        valueType: "int32",
+        direction: "output",
+      },
     ],
   },
   {
@@ -791,7 +943,12 @@ export const nodeTemplates: NodeTemplate[] = [
     ],
     outputs: [
       { name: "index", type: "value", valueType: "int32", direction: "output" },
-      { name: "found", type: "value", valueType: "boolean", direction: "output" },
+      {
+        name: "found",
+        type: "value",
+        valueType: "boolean",
+        direction: "output",
+      },
     ],
   },
 
@@ -855,7 +1012,9 @@ export const nodeTemplates: NodeTemplate[] = [
       { name: "a", type: "value", valueType: "any", direction: "input" },
       { name: "b", type: "value", valueType: "any", direction: "input" },
     ],
-    outputs: [{ name: "result", type: "value", valueType: "any", direction: "output" }],
+    outputs: [
+      { name: "result", type: "value", valueType: "any", direction: "output" },
+    ],
   },
   {
     type: "compare",
@@ -867,7 +1026,14 @@ export const nodeTemplates: NodeTemplate[] = [
       { name: "a", type: "value", valueType: "any", direction: "input" },
       { name: "b", type: "value", valueType: "any", direction: "input" },
     ],
-    outputs: [{ name: "result", type: "value", valueType: "boolean", direction: "output" }],
+    outputs: [
+      {
+        name: "result",
+        type: "value",
+        valueType: "boolean",
+        direction: "output",
+      },
+    ],
   },
   {
     type: "logic",
@@ -879,7 +1045,14 @@ export const nodeTemplates: NodeTemplate[] = [
       { name: "a", type: "value", valueType: "boolean", direction: "input" },
       { name: "b", type: "value", valueType: "boolean", direction: "input" },
     ],
-    outputs: [{ name: "result", type: "value", valueType: "boolean", direction: "output" }],
+    outputs: [
+      {
+        name: "result",
+        type: "value",
+        valueType: "boolean",
+        direction: "output",
+      },
+    ],
   },
 
   // String Operations
@@ -895,7 +1068,14 @@ export const nodeTemplates: NodeTemplate[] = [
       { name: "arg2", type: "value", valueType: "any", direction: "input" },
       { name: "arg3", type: "value", valueType: "any", direction: "input" },
     ],
-    outputs: [{ name: "result", type: "value", valueType: "string", direction: "output" }],
+    outputs: [
+      {
+        name: "result",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      },
+    ],
   },
   {
     type: "string_concat",
@@ -907,7 +1087,14 @@ export const nodeTemplates: NodeTemplate[] = [
       { name: "a", type: "value", valueType: "string", direction: "input" },
       { name: "b", type: "value", valueType: "string", direction: "input" },
     ],
-    outputs: [{ name: "result", type: "value", valueType: "string", direction: "output" }],
+    outputs: [
+      {
+        name: "result",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      },
+    ],
   },
   {
     type: "to_string",
@@ -918,7 +1105,14 @@ export const nodeTemplates: NodeTemplate[] = [
     inputs: [
       { name: "value", type: "value", valueType: "any", direction: "input" },
     ],
-    outputs: [{ name: "result", type: "value", valueType: "string", direction: "output" }],
+    outputs: [
+      {
+        name: "result",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      },
+    ],
   },
   {
     type: "parse_int",
@@ -927,11 +1121,21 @@ export const nodeTemplates: NodeTemplate[] = [
     description: "Parse string to integer (supports 0x hex prefix)",
     defaultConfig: { radix: 10 },
     inputs: [
-      { name: "string", type: "value", valueType: "string", direction: "input" },
+      {
+        name: "string",
+        type: "value",
+        valueType: "string",
+        direction: "input",
+      },
     ],
     outputs: [
       { name: "value", type: "value", valueType: "int64", direction: "output" },
-      { name: "success", type: "value", valueType: "boolean", direction: "output" },
+      {
+        name: "success",
+        type: "value",
+        valueType: "boolean",
+        direction: "output",
+      },
     ],
   },
   {
@@ -941,11 +1145,26 @@ export const nodeTemplates: NodeTemplate[] = [
     description: "Parse string to floating point number",
     defaultConfig: {},
     inputs: [
-      { name: "string", type: "value", valueType: "string", direction: "input" },
+      {
+        name: "string",
+        type: "value",
+        valueType: "string",
+        direction: "input",
+      },
     ],
     outputs: [
-      { name: "value", type: "value", valueType: "double", direction: "output" },
-      { name: "success", type: "value", valueType: "boolean", direction: "output" },
+      {
+        name: "value",
+        type: "value",
+        valueType: "double",
+        direction: "output",
+      },
+      {
+        name: "success",
+        type: "value",
+        valueType: "boolean",
+        direction: "output",
+      },
     ],
   },
 
@@ -962,7 +1181,12 @@ export const nodeTemplates: NodeTemplate[] = [
       { name: "value", type: "value", valueType: "any", direction: "input" },
     ],
     outputs: [
-      { name: "pointer", type: "value", valueType: "pointer", direction: "output" },
+      {
+        name: "pointer",
+        type: "value",
+        valueType: "pointer",
+        direction: "output",
+      },
     ],
   },
 
@@ -981,7 +1205,12 @@ export const nodeTemplates: NodeTemplate[] = [
     },
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
-      { name: "address", type: "value", valueType: "pointer", direction: "input" },
+      {
+        name: "address",
+        type: "value",
+        valueType: "pointer",
+        direction: "input",
+      },
       // Dynamic args will be added based on argCount
     ],
     outputs: [
@@ -1003,7 +1232,12 @@ export const nodeTemplates: NodeTemplate[] = [
     },
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
-      { name: "address", type: "value", valueType: "pointer", direction: "input" },
+      {
+        name: "address",
+        type: "value",
+        valueType: "pointer",
+        direction: "input",
+      },
     ],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
@@ -1024,12 +1258,20 @@ export const nodeTemplates: NodeTemplate[] = [
     },
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
-      { name: "target", type: "value", valueType: "pointer", direction: "input" },
-      { name: "replacement", type: "value", valueType: "pointer", direction: "input" },
+      {
+        name: "target",
+        type: "value",
+        valueType: "pointer",
+        direction: "input",
+      },
+      {
+        name: "replacement",
+        type: "value",
+        valueType: "pointer",
+        direction: "input",
+      },
     ],
-    outputs: [
-      { name: "exec", type: "flow", direction: "output" },
-    ],
+    outputs: [{ name: "exec", type: "flow", direction: "output" }],
   },
   {
     type: "interceptor_detach",
@@ -1037,12 +1279,8 @@ export const nodeTemplates: NodeTemplate[] = [
     category: "Interceptor",
     description: "Detach all hooks with Interceptor.detachAll()",
     defaultConfig: {},
-    inputs: [
-      { name: "exec", type: "flow", direction: "input" },
-    ],
-    outputs: [
-      { name: "exec", type: "flow", direction: "output" },
-    ],
+    inputs: [{ name: "exec", type: "flow", direction: "input" }],
+    outputs: [{ name: "exec", type: "flow", direction: "output" }],
   },
   {
     type: "read_arg",
@@ -1068,9 +1306,7 @@ export const nodeTemplates: NodeTemplate[] = [
       { name: "context", type: "value", valueType: "any", direction: "input" },
       { name: "value", type: "value", valueType: "any", direction: "input" },
     ],
-    outputs: [
-      { name: "exec", type: "flow", direction: "output" },
-    ],
+    outputs: [{ name: "exec", type: "flow", direction: "output" }],
   },
   {
     type: "read_retval",
@@ -1096,9 +1332,7 @@ export const nodeTemplates: NodeTemplate[] = [
       { name: "context", type: "value", valueType: "any", direction: "input" },
       { name: "value", type: "value", valueType: "any", direction: "input" },
     ],
-    outputs: [
-      { name: "exec", type: "flow", direction: "output" },
-    ],
+    outputs: [{ name: "exec", type: "flow", direction: "output" }],
   },
   {
     type: "native_callback",
@@ -1110,12 +1344,15 @@ export const nodeTemplates: NodeTemplate[] = [
       argCount: 0,
       argTypes: [] as string[],
     },
-    inputs: [
-      { name: "exec", type: "flow", direction: "input" },
-    ],
+    inputs: [{ name: "exec", type: "flow", direction: "input" }],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
-      { name: "callback", type: "value", valueType: "pointer", direction: "output" },
+      {
+        name: "callback",
+        type: "value",
+        valueType: "pointer",
+        direction: "output",
+      },
       { name: "onCall", type: "flow", direction: "output" },
     ],
   },
@@ -1129,7 +1366,12 @@ export const nodeTemplates: NodeTemplate[] = [
     defaultConfig: {},
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
-      { name: "message", type: "value", valueType: "string", direction: "input" },
+      {
+        name: "message",
+        type: "value",
+        valueType: "string",
+        direction: "input",
+      },
     ],
     outputs: [{ name: "exec", type: "flow", direction: "output" }],
   },
@@ -1142,7 +1384,12 @@ export const nodeTemplates: NodeTemplate[] = [
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
       { name: "title", type: "value", valueType: "string", direction: "input" },
-      { name: "message", type: "value", valueType: "string", direction: "input" },
+      {
+        name: "message",
+        type: "value",
+        valueType: "string",
+        direction: "input",
+      },
     ],
     outputs: [{ name: "exec", type: "flow", direction: "output" }],
   },
@@ -1200,9 +1447,13 @@ export const nodeTemplates: NodeTemplate[] = [
 
 function createScriptStore() {
   const [scripts, setScripts] = createSignal<Script[]>([]);
-  const [currentScriptId, setCurrentScriptId] = createSignal<string | null>(null);
+  const [currentScriptId, setCurrentScriptId] = createSignal<string | null>(
+    null,
+  );
   const [selectedNodeId, setSelectedNodeId] = createSignal<string | null>(null);
-  const [selectedConnectionId, setSelectedConnectionId] = createSignal<string | null>(null);
+  const [selectedConnectionId, setSelectedConnectionId] = createSignal<
+    string | null
+  >(null);
 
   // Get current script
   function getCurrentScript(): Script | null {
@@ -1237,7 +1488,10 @@ function createScriptStore() {
   }
 
   // Update port types when config.valueType changes (for memory nodes)
-  function updatePortTypesForValueType(node: ScriptNode, valueType: ValueType): ScriptNode {
+  function updatePortTypesForValueType(
+    node: ScriptNode,
+    valueType: ValueType,
+  ): ScriptNode {
     const updatePort = (port: Port): Port => {
       // Update "value" named ports that should match the config type
       if (port.type === "value" && port.name === "value") {
@@ -1271,7 +1525,11 @@ function createScriptStore() {
   }
 
   // Add node to current script
-  function addNode(type: ScriptNodeType, x: number, y: number): ScriptNode | null {
+  function addNode(
+    type: ScriptNodeType,
+    x: number,
+    y: number,
+  ): ScriptNode | null {
     const script = getCurrentScript();
     if (!script) return null;
 
@@ -1295,15 +1553,20 @@ function createScriptStore() {
     let updatedNode = { ...node, ...updates };
     if (updates.config && "valueType" in updates.config) {
       const newValueType = updates.config.valueType as ValueType;
-      if (["memory_read", "memory_write", "memory_scan", "memory_freeze"].includes(node.type)) {
+      if (
+        [
+          "memory_read",
+          "memory_write",
+          "memory_scan",
+          "memory_freeze",
+        ].includes(node.type)
+      ) {
         updatedNode = updatePortTypesForValueType(updatedNode, newValueType);
       }
     }
 
     updateScript(script.id, {
-      nodes: script.nodes.map((n) =>
-        n.id === nodeId ? updatedNode : n
-      ),
+      nodes: script.nodes.map((n) => (n.id === nodeId ? updatedNode : n)),
     });
   }
 
@@ -1317,7 +1580,7 @@ function createScriptStore() {
 
     // Keep existing base inputs (exec, address)
     const baseInputs = node.inputs.filter(
-      (p) => p.name === "exec" || p.name === "address"
+      (p) => p.name === "exec" || p.name === "address",
     );
 
     // Get current argTypes array, defaulting to empty
@@ -1369,7 +1632,7 @@ function createScriptStore() {
                 argTypes: newArgTypes,
               },
             }
-          : n
+          : n,
       ),
       connections: newConnections,
     });
@@ -1382,7 +1645,7 @@ function createScriptStore() {
 
     // Also delete connections to/from this node
     const newConnections = script.connections.filter(
-      (c) => c.fromNodeId !== nodeId && c.toNodeId !== nodeId
+      (c) => c.fromNodeId !== nodeId && c.toNodeId !== nodeId,
     );
 
     updateScript(script.id, {
@@ -1402,17 +1665,40 @@ function createScriptStore() {
   }
 
   // Check if two value types are compatible
-  function areTypesCompatible(fromType: ValueType | undefined, toType: ValueType | undefined): boolean {
+  function areTypesCompatible(
+    fromType: ValueType | undefined,
+    toType: ValueType | undefined,
+  ): boolean {
     // If either is "any", always compatible
     if (fromType === "any" || toType === "any") return true;
     // If types are the same, compatible
     if (fromType === toType) return true;
     // Numeric types can be implicitly converted
-    const numericTypes: ValueType[] = ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float", "double"];
-    if (fromType && toType && numericTypes.includes(fromType) && numericTypes.includes(toType)) return true;
+    const numericTypes: ValueType[] = [
+      "int8",
+      "uint8",
+      "int16",
+      "uint16",
+      "int32",
+      "uint32",
+      "int64",
+      "uint64",
+      "float",
+      "double",
+    ];
+    if (
+      fromType &&
+      toType &&
+      numericTypes.includes(fromType) &&
+      numericTypes.includes(toType)
+    )
+      return true;
     // Pointer can be converted to/from numeric types (for address arithmetic)
-    if ((fromType === "pointer" && toType && numericTypes.includes(toType)) ||
-        (toType === "pointer" && fromType && numericTypes.includes(fromType))) return true;
+    if (
+      (fromType === "pointer" && toType && numericTypes.includes(toType)) ||
+      (toType === "pointer" && fromType && numericTypes.includes(fromType))
+    )
+      return true;
     return false;
   }
 
@@ -1421,7 +1707,7 @@ function createScriptStore() {
     fromNodeId: string,
     fromPortId: string,
     toNodeId: string,
-    toPortId: string
+    toPortId: string,
   ): ConnectionValidation {
     const script = getCurrentScript();
     if (!script) return { valid: false, error: "No active script" };
@@ -1443,7 +1729,10 @@ function createScriptStore() {
 
     // Check port types match (flow vs value)
     if (fromPort.type !== toPort.type) {
-      return { valid: false, error: `Cannot connect ${fromPort.type} to ${toPort.type}` };
+      return {
+        valid: false,
+        error: `Cannot connect ${fromPort.type} to ${toPort.type}`,
+      };
     }
 
     // For value ports, check value type compatibility
@@ -1462,7 +1751,7 @@ function createScriptStore() {
         c.fromNodeId === fromNodeId &&
         c.fromPortId === fromPortId &&
         c.toNodeId === toNodeId &&
-        c.toPortId === toPortId
+        c.toPortId === toPortId,
     );
     if (exists) return { valid: false, error: "Connection already exists" };
 
@@ -1474,9 +1763,14 @@ function createScriptStore() {
     fromNodeId: string,
     fromPortId: string,
     toNodeId: string,
-    toPortId: string
+    toPortId: string,
   ): Connection | null {
-    const validation = validateConnection(fromNodeId, fromPortId, toNodeId, toPortId);
+    const validation = validateConnection(
+      fromNodeId,
+      fromPortId,
+      toNodeId,
+      toPortId,
+    );
     if (!validation.valid) {
       console.warn("Connection rejected:", validation.error);
       return null;
@@ -1490,7 +1784,7 @@ function createScriptStore() {
     let newConnections = [...script.connections];
     if (toPort.type === "flow") {
       newConnections = newConnections.filter(
-        (c) => !(c.toNodeId === toNodeId && c.toPortId === toPortId)
+        (c) => !(c.toNodeId === toNodeId && c.toPortId === toPortId),
       );
     }
 
@@ -1554,7 +1848,7 @@ function createScriptStore() {
   // Update script
   function updateScript(scriptId: string, updates: Partial<Script>) {
     setScripts((prev) =>
-      prev.map((s) => (s.id === scriptId ? { ...s, ...updates } : s))
+      prev.map((s) => (s.id === scriptId ? { ...s, ...updates } : s)),
     );
   }
 

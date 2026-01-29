@@ -72,13 +72,15 @@ const App: Component = () => {
             <Show when={activeTab() === "build"}>
               <BuildPanel />
             </Show>
-
           </Show>
         </main>
       </div>
 
       {/* Settings Modal */}
-      <SettingsModal isOpen={showSettings()} onClose={() => setShowSettings(false)} />
+      <SettingsModal
+        isOpen={showSettings()}
+        onClose={() => setShowSettings(false)}
+      />
     </div>
   );
 };

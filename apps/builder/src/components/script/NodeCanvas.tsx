@@ -1,4 +1,12 @@
-import { Component, For, Show, createSignal, createMemo, onMount, onCleanup } from "solid-js";
+import {
+  Component,
+  For,
+  Show,
+  createSignal,
+  createMemo,
+  onMount,
+  onCleanup,
+} from "solid-js";
 import {
   scriptStore,
   type ScriptNode,
@@ -44,31 +52,91 @@ function getConnectionColor(fromPort: Port | undefined): string {
     boolean: "#facc15",
     string: "#22c55e",
     pointer: "#ef4444",
-    int8: "#f97316", uint8: "#f97316",
-    int16: "#f97316", uint16: "#f97316",
-    int32: "#f97316", uint32: "#f97316",
-    int64: "#f97316", uint64: "#f97316",
-    float: "#06b6d4", double: "#06b6d4",
+    int8: "#f97316",
+    uint8: "#f97316",
+    int16: "#f97316",
+    uint16: "#f97316",
+    int32: "#f97316",
+    uint32: "#f97316",
+    int64: "#f97316",
+    uint64: "#f97316",
+    float: "#06b6d4",
+    double: "#06b6d4",
     any: "#a855f7",
   };
   return colorMap[fromPort.valueType || "any"] || "#a855f7";
 }
 
 // Node colors by category
-const nodeColors: Record<string, { bg: string; border: string; header: string }> = {
-  Flow: { bg: "bg-blue-900/30", border: "border-blue-500/50", header: "bg-blue-500/20" },
-  Memory: { bg: "bg-purple-900/30", border: "border-purple-500/50", header: "bg-purple-500/20" },
-  Pointer: { bg: "bg-violet-900/30", border: "border-violet-500/50", header: "bg-violet-500/20" },
-  Module: { bg: "bg-green-900/30", border: "border-green-500/50", header: "bg-green-500/20" },
-  Variable: { bg: "bg-yellow-900/30", border: "border-yellow-500/50", header: "bg-yellow-500/20" },
-  Math: { bg: "bg-orange-900/30", border: "border-orange-500/50", header: "bg-orange-500/20" },
-  String: { bg: "bg-teal-900/30", border: "border-teal-500/50", header: "bg-teal-500/20" },
-  Native: { bg: "bg-red-900/30", border: "border-red-500/50", header: "bg-red-500/20" },
-  Interceptor: { bg: "bg-rose-900/30", border: "border-rose-500/50", header: "bg-rose-500/20" },
-  Hook: { bg: "bg-pink-900/30", border: "border-pink-500/50", header: "bg-pink-500/20" },
-  Output: { bg: "bg-cyan-900/30", border: "border-cyan-500/50", header: "bg-cyan-500/20" },
-  UI: { bg: "bg-indigo-900/30", border: "border-indigo-500/50", header: "bg-indigo-500/20" },
-  Function: { bg: "bg-amber-900/30", border: "border-amber-500/50", header: "bg-amber-500/20" },
+const nodeColors: Record<
+  string,
+  { bg: string; border: string; header: string }
+> = {
+  Flow: {
+    bg: "bg-blue-900/30",
+    border: "border-blue-500/50",
+    header: "bg-blue-500/20",
+  },
+  Memory: {
+    bg: "bg-purple-900/30",
+    border: "border-purple-500/50",
+    header: "bg-purple-500/20",
+  },
+  Pointer: {
+    bg: "bg-violet-900/30",
+    border: "border-violet-500/50",
+    header: "bg-violet-500/20",
+  },
+  Module: {
+    bg: "bg-green-900/30",
+    border: "border-green-500/50",
+    header: "bg-green-500/20",
+  },
+  Variable: {
+    bg: "bg-yellow-900/30",
+    border: "border-yellow-500/50",
+    header: "bg-yellow-500/20",
+  },
+  Math: {
+    bg: "bg-orange-900/30",
+    border: "border-orange-500/50",
+    header: "bg-orange-500/20",
+  },
+  String: {
+    bg: "bg-teal-900/30",
+    border: "border-teal-500/50",
+    header: "bg-teal-500/20",
+  },
+  Native: {
+    bg: "bg-red-900/30",
+    border: "border-red-500/50",
+    header: "bg-red-500/20",
+  },
+  Interceptor: {
+    bg: "bg-rose-900/30",
+    border: "border-rose-500/50",
+    header: "bg-rose-500/20",
+  },
+  Hook: {
+    bg: "bg-pink-900/30",
+    border: "border-pink-500/50",
+    header: "bg-pink-500/20",
+  },
+  Output: {
+    bg: "bg-cyan-900/30",
+    border: "border-cyan-500/50",
+    header: "bg-cyan-500/20",
+  },
+  UI: {
+    bg: "bg-indigo-900/30",
+    border: "border-indigo-500/50",
+    header: "bg-indigo-500/20",
+  },
+  Function: {
+    bg: "bg-amber-900/30",
+    border: "border-amber-500/50",
+    header: "bg-amber-500/20",
+  },
 };
 
 // Get category for node type
@@ -119,7 +187,11 @@ export const NodeCanvas: Component = () => {
 
   // Handle canvas panning
   const handleMouseDown = (e: MouseEvent) => {
-    if (e.button === 1 || (e.button === 0 && e.altKey) || (e.button === 0 && isSpaceDown())) {
+    if (
+      e.button === 1 ||
+      (e.button === 0 && e.altKey) ||
+      (e.button === 0 && isSpaceDown())
+    ) {
       // Middle click or Alt+Left click or Space+Left click to pan
       e.preventDefault();
       setIsPanning(true);
@@ -185,7 +257,11 @@ export const NodeCanvas: Component = () => {
   const handleKeyDown = (e: KeyboardEvent) => {
     // Don't intercept if user is typing in an input
     const target = e.target as HTMLElement;
-    if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
+    if (
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.isContentEditable
+    ) {
       return;
     }
 
@@ -194,12 +270,20 @@ export const NodeCanvas: Component = () => {
       setIsSpaceDown(true);
     }
     // Delete selected connection with Delete or Backspace
-    if ((e.key === "Delete" || e.key === "Backspace") && scriptStore.selectedConnectionId()) {
+    if (
+      (e.key === "Delete" || e.key === "Backspace") &&
+      scriptStore.selectedConnectionId()
+    ) {
       scriptStore.deleteConnection(scriptStore.selectedConnectionId()!);
     }
     // Delete selected node with Delete or Backspace
-    if ((e.key === "Delete" || e.key === "Backspace") && scriptStore.selectedNodeId()) {
-      const node = currentScript()?.nodes.find(n => n.id === scriptStore.selectedNodeId());
+    if (
+      (e.key === "Delete" || e.key === "Backspace") &&
+      scriptStore.selectedNodeId()
+    ) {
+      const node = currentScript()?.nodes.find(
+        (n) => n.id === scriptStore.selectedNodeId(),
+      );
       if (node && node.type !== "start") {
         scriptStore.deleteNode(scriptStore.selectedNodeId()!);
       }
@@ -242,7 +326,7 @@ export const NodeCanvas: Component = () => {
     nodeId: string,
     port: Port,
     portX: number,
-    portY: number
+    portY: number,
   ) => {
     e.stopPropagation();
     if (port.direction === "output") {
@@ -264,7 +348,12 @@ export const NodeCanvas: Component = () => {
     const dc = draggingConnection();
     if (dc && port.direction === "input") {
       // Create connection (validation happens inside addConnection)
-      const result = scriptStore.addConnection(dc.fromNodeId, dc.fromPortId, nodeId, port.id);
+      const result = scriptStore.addConnection(
+        dc.fromNodeId,
+        dc.fromPortId,
+        nodeId,
+        port.id,
+      );
       if (!result) {
         // Connection failed - show brief visual feedback
         // The validation error is already logged to console
@@ -289,11 +378,29 @@ export const NodeCanvas: Component = () => {
       if (fromType === "any" || toType === "any") return true;
       if (fromType === toType) return true;
       // Numeric types are compatible with each other
-      const numericTypes = ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float", "double"];
-      if (numericTypes.includes(fromType || "") && numericTypes.includes(toType || "")) return true;
+      const numericTypes = [
+        "int8",
+        "uint8",
+        "int16",
+        "uint16",
+        "int32",
+        "uint32",
+        "int64",
+        "uint64",
+        "float",
+        "double",
+      ];
+      if (
+        numericTypes.includes(fromType || "") &&
+        numericTypes.includes(toType || "")
+      )
+        return true;
       // Pointer can convert to/from numeric
-      if ((fromType === "pointer" && numericTypes.includes(toType || "")) ||
-          (toType === "pointer" && numericTypes.includes(fromType || ""))) return true;
+      if (
+        (fromType === "pointer" && numericTypes.includes(toType || "")) ||
+        (toType === "pointer" && numericTypes.includes(fromType || ""))
+      )
+        return true;
       return false;
     }
     return true;
@@ -396,23 +503,26 @@ export const NodeCanvas: Component = () => {
           <svg
             ref={svgRef}
             class="absolute inset-0"
-            style={{ width: "10000px", height: "10000px", overflow: "visible", "pointer-events": "none" }}
+            style={{
+              width: "10000px",
+              height: "10000px",
+              overflow: "visible",
+              "pointer-events": "none",
+            }}
           >
             {/* Render connections */}
             <For each={currentScript()?.connections ?? []}>
               {(conn) => {
                 // Use getter functions to ensure reactivity when nodes move
-                const fromNode = () => currentScript()?.nodes.find(
-                  (n) => n.id === conn.fromNodeId
-                );
-                const toNode = () => currentScript()?.nodes.find(
-                  (n) => n.id === conn.toNodeId
-                );
+                const fromNode = () =>
+                  currentScript()?.nodes.find((n) => n.id === conn.fromNodeId);
+                const toNode = () =>
+                  currentScript()?.nodes.find((n) => n.id === conn.toNodeId);
 
-                const fromPort = () => fromNode()?.outputs.find(
-                  (p) => p.id === conn.fromPortId
-                );
-                const toPort = () => toNode()?.inputs.find((p) => p.id === conn.toPortId);
+                const fromPort = () =>
+                  fromNode()?.outputs.find((p) => p.id === conn.fromPortId);
+                const toPort = () =>
+                  toNode()?.inputs.find((p) => p.id === conn.toPortId);
 
                 const start = () => {
                   const node = fromNode();
@@ -437,9 +547,15 @@ export const NodeCanvas: Component = () => {
                       x2={end().x}
                       y2={end().y}
                       color={strokeColor()}
-                      isSelected={scriptStore.selectedConnectionId() === conn.id}
-                      onClick={() => scriptStore.setSelectedConnectionId(conn.id)}
-                      onContextMenu={(e) => handleConnectionRightClick(e, conn.id)}
+                      isSelected={
+                        scriptStore.selectedConnectionId() === conn.id
+                      }
+                      onClick={() =>
+                        scriptStore.setSelectedConnectionId(conn.id)
+                      }
+                      onContextMenu={(e) =>
+                        handleConnectionRightClick(e, conn.id)
+                      }
                     />
                   </Show>
                 );
@@ -588,13 +704,13 @@ interface NodeComponentProps {
     nodeId: string,
     port: Port,
     portX: number,
-    portY: number
+    portY: number,
   ) => void;
   onPortMouseUp: (e: MouseEvent, nodeId: string, port: Port) => void;
   getPortPosition: (
     node: ScriptNode,
     port: Port,
-    isInput: boolean
+    isInput: boolean,
   ) => { x: number; y: number };
   scale: number;
   isDraggingConnection: boolean;
@@ -686,22 +802,35 @@ const NodeComponent: Component<NodeComponentProps> = (props) => {
         <For each={props.node.inputs}>
           {(port) => {
             const portColor = getPortColor(port);
-            const isCompatible = () => props.isDraggingConnection && props.isPortCompatible(port);
-            const isIncompatible = () => props.isDraggingConnection && !props.isPortCompatible(port);
+            const isCompatible = () =>
+              props.isDraggingConnection && props.isPortCompatible(port);
+            const isIncompatible = () =>
+              props.isDraggingConnection && !props.isPortCompatible(port);
             return (
               <div class="flex items-center h-6 px-2 group">
                 <div
                   class={`w-3 h-3 rounded-full border-2 -ml-4 cursor-pointer transition-all ${portColor.border} ${portColor.bg} ${
-                    isCompatible() ? "scale-150 ring-2 ring-green-400 ring-offset-1 ring-offset-transparent" :
-                    isIncompatible() ? "opacity-30" : "hover:scale-125"
+                    isCompatible()
+                      ? "scale-150 ring-2 ring-green-400 ring-offset-1 ring-offset-transparent"
+                      : isIncompatible()
+                        ? "opacity-30"
+                        : "hover:scale-125"
                   }`}
                   onMouseUp={(e) => props.onPortMouseUp(e, props.node.id, port)}
-                  title={port.valueType ? `${port.name} (${port.valueType})` : port.name}
+                  title={
+                    port.valueType
+                      ? `${port.name} (${port.valueType})`
+                      : port.name
+                  }
                 />
-                <span class={`text-[10px] ml-2 ${isIncompatible() ? "opacity-30" : "text-foreground-muted"}`}>
+                <span
+                  class={`text-[10px] ml-2 ${isIncompatible() ? "opacity-30" : "text-foreground-muted"}`}
+                >
                   {port.name}
                   {port.valueType && port.valueType !== "any" && (
-                    <span class="text-[8px] opacity-60 ml-1">({port.valueType})</span>
+                    <span class="text-[8px] opacity-60 ml-1">
+                      ({port.valueType})
+                    </span>
                   )}
                 </span>
               </div>
@@ -718,23 +847,39 @@ const NodeComponent: Component<NodeComponentProps> = (props) => {
               <div class="flex items-center justify-end h-6 px-2 group">
                 <span class="text-[10px] text-foreground-muted mr-2">
                   {port.valueType && port.valueType !== "any" && (
-                    <span class="text-[8px] opacity-60 mr-1">({port.valueType})</span>
+                    <span class="text-[8px] opacity-60 mr-1">
+                      ({port.valueType})
+                    </span>
                   )}
                   {port.name}
                 </span>
                 <div
                   class={`w-3 h-3 rounded-full border-2 -mr-4 cursor-pointer transition-transform hover:scale-125 ${portColor.border} ${portColor.bg}`}
                   onMouseDown={(e) => {
-                    props.onPortMouseDown(e, props.node.id, port, pos().x, pos().y);
+                    props.onPortMouseDown(
+                      e,
+                      props.node.id,
+                      port,
+                      pos().x,
+                      pos().y,
+                    );
                   }}
-                  title={port.valueType ? `${port.name} (${port.valueType})` : port.name}
+                  title={
+                    port.valueType
+                      ? `${port.name} (${port.valueType})`
+                      : port.name
+                  }
                 />
               </div>
             );
           }}
         </For>
 
-        <Show when={props.node.inputs.length === 0 && props.node.outputs.length === 0}>
+        <Show
+          when={
+            props.node.inputs.length === 0 && props.node.outputs.length === 0
+          }
+        >
           <div class="h-6" />
         </Show>
       </div>

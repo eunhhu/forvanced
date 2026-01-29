@@ -57,7 +57,12 @@ export const DesignCanvas: Component = () => {
     console.log("Drop - type:", type);
 
     if (!type || !contentAreaRef) {
-      console.log("Drop failed - type:", type, "contentAreaRef:", !!contentAreaRef);
+      console.log(
+        "Drop failed - type:",
+        type,
+        "contentAreaRef:",
+        !!contentAreaRef,
+      );
       return;
     }
 
@@ -152,9 +157,7 @@ export const DesignCanvas: Component = () => {
                 onDrop={handleDrop}
               >
                 <For each={designerStore.components()}>
-                  {(component) => (
-                    <CanvasComponent component={component} />
-                  )}
+                  {(component) => <CanvasComponent component={component} />}
                 </For>
 
                 <Show when={designerStore.components().length === 0}>
@@ -218,7 +221,7 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
       designerStore.moveComponent(
         props.component.id,
         startCompX + dx,
-        startCompY + dy
+        startCompY + dy,
       );
     };
 
@@ -247,7 +250,9 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
   return (
     <div
       class={`absolute cursor-move select-none transition-shadow ${
-        isSelected() ? "ring-2 ring-accent ring-offset-2 ring-offset-surface" : ""
+        isSelected()
+          ? "ring-2 ring-accent ring-offset-2 ring-offset-surface"
+          : ""
       }`}
       style={{
         left: `${props.component.x}px`,
@@ -309,7 +314,7 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
               designerStore.resizeComponent(
                 props.component.id,
                 startW + dx,
-                startH + dy
+                startH + dy,
               );
             };
 
@@ -355,8 +360,12 @@ const ComponentPreview: Component<ComponentPreviewProps> = (props) => {
       const isOn = (c.props.defaultValue as boolean) ?? false;
       return (
         <div class="w-full h-full flex items-center gap-3 pointer-events-none">
-          <div class={`relative w-10 h-5 rounded-full transition-colors ${isOn ? "bg-accent" : "bg-background-secondary"}`}>
-            <div class={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${isOn ? "translate-x-5" : "translate-x-0.5"}`} />
+          <div
+            class={`relative w-10 h-5 rounded-full transition-colors ${isOn ? "bg-accent" : "bg-background-secondary"}`}
+          >
+            <div
+              class={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${isOn ? "translate-x-5" : "translate-x-0.5"}`}
+            />
           </div>
           <span class="text-sm">{c.label}</span>
         </div>
@@ -367,7 +376,10 @@ const ComponentPreview: Component<ComponentPreviewProps> = (props) => {
       const min = (c.props.min as number) ?? 0;
       const max = (c.props.max as number) ?? 100;
       const defaultVal = (c.props.defaultValue as number) ?? 50;
-      const percent = Math.min(100, Math.max(0, ((defaultVal - min) / (max - min)) * 100));
+      const percent = Math.min(
+        100,
+        Math.max(0, ((defaultVal - min) / (max - min)) * 100),
+      );
       return (
         <div class="w-full h-full flex flex-col justify-center gap-1 pointer-events-none">
           <div class="flex justify-between text-xs">
@@ -393,7 +405,11 @@ const ComponentPreview: Component<ComponentPreviewProps> = (props) => {
       const placeholder = (c.props.placeholder as string) ?? "Enter value...";
       return (
         <div class="w-full h-full px-3 bg-background border border-border rounded text-sm flex items-center pointer-events-none">
-          <span class={defaultInputVal ? "text-foreground" : "text-foreground-muted"}>
+          <span
+            class={
+              defaultInputVal ? "text-foreground" : "text-foreground-muted"
+            }
+          >
             {defaultInputVal || placeholder}
           </span>
         </div>
@@ -404,7 +420,13 @@ const ComponentPreview: Component<ComponentPreviewProps> = (props) => {
       return (
         <div class="w-full h-full flex items-center justify-between px-3 bg-background border border-border rounded text-sm pointer-events-none">
           <span>{c.label}</span>
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg
+            class="w-4 h-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
             <path d="M6 9l6 6 6-6" />
           </svg>
         </div>
@@ -412,9 +434,7 @@ const ComponentPreview: Component<ComponentPreviewProps> = (props) => {
 
     case "label":
       return (
-        <div class="w-full h-full flex items-center text-sm">
-          {c.label}
-        </div>
+        <div class="w-full h-full flex items-center text-sm">{c.label}</div>
       );
 
     case "group":
@@ -432,7 +452,9 @@ const ComponentPreview: Component<ComponentPreviewProps> = (props) => {
       );
 
     default:
-      return <div class="w-full h-full bg-surface border border-border rounded" />;
+      return (
+        <div class="w-full h-full bg-surface border border-border rounded" />
+      );
   }
 };
 

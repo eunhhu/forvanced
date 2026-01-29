@@ -1,4 +1,11 @@
-import { Component, createSignal, Show, For, createEffect, untrack } from "solid-js";
+import {
+  Component,
+  createSignal,
+  Show,
+  For,
+  createEffect,
+  untrack,
+} from "solid-js";
 import { IconSettings, IconFolder } from "@/components/common/Icons";
 
 // Check if running in Tauri environment
@@ -53,7 +60,10 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
     props.onClose();
   }
 
-  function updateSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]) {
+  function updateSetting<K extends keyof AppSettings>(
+    key: K,
+    value: AppSettings[K],
+  ) {
     setSettings((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -134,7 +144,9 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
             <div class="flex-1 p-4 overflow-y-auto">
               <Show when={activeSection() === "general"}>
                 <div class="space-y-6">
-                  <h3 class="text-sm font-medium text-foreground-muted">General Settings</h3>
+                  <h3 class="text-sm font-medium text-foreground-muted">
+                    General Settings
+                  </h3>
 
                   {/* Default Adapter */}
                   <SettingItem
@@ -144,7 +156,9 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
                     <select
                       class="px-3 py-2 bg-background border border-border rounded text-sm focus:outline-none focus:border-accent"
                       value={settings().defaultAdapter}
-                      onChange={(e) => updateSetting("defaultAdapter", e.currentTarget.value)}
+                      onChange={(e) =>
+                        updateSetting("defaultAdapter", e.currentTarget.value)
+                      }
                     >
                       <option value="local_pc">Local PC</option>
                       <option value="usb_device">USB Device</option>
@@ -184,7 +198,9 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
                       min={1}
                       max={50}
                       value={settings().recentProjectsLimit}
-                      onChange={(val) => updateSetting("recentProjectsLimit", val)}
+                      onChange={(val) =>
+                        updateSetting("recentProjectsLimit", val)
+                      }
                     />
                   </SettingItem>
                 </div>
@@ -192,15 +208,23 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
 
               <Show when={activeSection() === "appearance"}>
                 <div class="space-y-6">
-                  <h3 class="text-sm font-medium text-foreground-muted">Appearance</h3>
+                  <h3 class="text-sm font-medium text-foreground-muted">
+                    Appearance
+                  </h3>
 
                   {/* Theme */}
-                  <SettingItem label="Theme" description="Choose the color theme for the app">
+                  <SettingItem
+                    label="Theme"
+                    description="Choose the color theme for the app"
+                  >
                     <select
                       class="px-3 py-2 bg-background border border-border rounded text-sm focus:outline-none focus:border-accent"
                       value={settings().theme}
                       onChange={(e) =>
-                        updateSetting("theme", e.currentTarget.value as AppSettings["theme"])
+                        updateSetting(
+                          "theme",
+                          e.currentTarget.value as AppSettings["theme"],
+                        )
                       }
                     >
                       <option value="dark">Dark</option>
@@ -213,7 +237,9 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
 
               <Show when={activeSection() === "build"}>
                 <div class="space-y-6">
-                  <h3 class="text-sm font-medium text-foreground-muted">Build Settings</h3>
+                  <h3 class="text-sm font-medium text-foreground-muted">
+                    Build Settings
+                  </h3>
 
                   {/* Default Output Directory */}
                   <SettingItem
@@ -223,7 +249,9 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
                     <div class="flex gap-2">
                       <SettingsTextInput
                         value={settings().defaultOutputDir}
-                        onChange={(val) => updateSetting("defaultOutputDir", val)}
+                        onChange={(val) =>
+                          updateSetting("defaultOutputDir", val)
+                        }
                       />
                       <button
                         class="px-3 py-2 bg-surface border border-border rounded hover:bg-surface-hover transition-colors"
@@ -238,7 +266,9 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
 
               <Show when={activeSection() === "advanced"}>
                 <div class="space-y-6">
-                  <h3 class="text-sm font-medium text-foreground-muted">Advanced Settings</h3>
+                  <h3 class="text-sm font-medium text-foreground-muted">
+                    Advanced Settings
+                  </h3>
 
                   <div class="p-4 bg-background rounded-lg">
                     <p class="text-sm text-foreground-muted">
@@ -295,7 +325,9 @@ const SettingItem: Component<SettingItemProps> = (props) => {
     <div class="flex items-start justify-between gap-4">
       <div class="flex-1">
         <div class="text-sm font-medium">{props.label}</div>
-        <div class="text-xs text-foreground-muted mt-0.5">{props.description}</div>
+        <div class="text-xs text-foreground-muted mt-0.5">
+          {props.description}
+        </div>
       </div>
       <div class="flex-shrink-0">{props.children}</div>
     </div>
