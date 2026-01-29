@@ -70,14 +70,9 @@ export type ScriptNodeType =
   | "write_arg"       // Modify argument in hook context
   | "read_retval"     // Read return value in hook context
   | "replace_retval"  // Replace return value in hook context
-  // Hook (legacy)
-  | "hook_function"   // Hook a function
-  | "hook_callback"   // Define hook callback behavior
   // Output
   | "log"             // Log to console
   | "notify"          // Show notification
-  // UI Binding
-  | "bind_to_label"
   // Functions (reusable code blocks)
   | "function_define"   // Define a reusable function
   | "function_call"     // Call a defined function
@@ -699,26 +694,6 @@ export const nodeTemplates: NodeTemplate[] = [
     ],
   },
 
-  // Hook (legacy - kept for compatibility)
-  {
-    type: "hook_function",
-    label: "Hook Function (Legacy)",
-    category: "Hook",
-    description: "Hook a function at address (use Interceptor Attach instead)",
-    defaultConfig: { onEnter: true, onLeave: true },
-    inputs: [
-      { name: "exec", type: "flow", direction: "input" },
-      { name: "address", type: "value", valueType: "pointer", direction: "input" },
-    ],
-    outputs: [
-      { name: "exec", type: "flow", direction: "output" },
-      { name: "onEnter", type: "flow", direction: "output" },
-      { name: "onLeave", type: "flow", direction: "output" },
-      { name: "args", type: "value", valueType: "pointer", direction: "output" },
-      { name: "retval", type: "value", valueType: "any", direction: "output" },
-    ],
-  },
-
   // Output
   {
     type: "log",
@@ -742,20 +717,6 @@ export const nodeTemplates: NodeTemplate[] = [
       { name: "exec", type: "flow", direction: "input" },
       { name: "title", type: "value", valueType: "string", direction: "input" },
       { name: "message", type: "value", valueType: "string", direction: "input" },
-    ],
-    outputs: [{ name: "exec", type: "flow", direction: "output" }],
-  },
-
-  // UI Binding
-  {
-    type: "bind_to_label",
-    label: "Bind to Label",
-    category: "UI",
-    description: "Bind a value to a UI label component for display",
-    defaultConfig: { componentId: "", format: "{value}" },
-    inputs: [
-      { name: "exec", type: "flow", direction: "input" },
-      { name: "value", type: "value", valueType: "any", direction: "input" },
     ],
     outputs: [{ name: "exec", type: "flow", direction: "output" }],
   },

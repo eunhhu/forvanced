@@ -449,7 +449,7 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
             <NativeFunctionConfig node={props.node} />
           </Show>
 
-          <Show when={props.node.type === "hook_function" || props.node.type === "interceptor_attach"}>
+          <Show when={props.node.type === "interceptor_attach"}>
             <PropertyRow label="On Enter">
               <input
                 type="checkbox"
@@ -673,45 +673,6 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
                 <option value="uint64">UInt64</option>
               </select>
             </PropertyRow>
-          </Show>
-
-          {/* Bind to label - component selector */}
-          <Show when={props.node.type === "bind_to_label"}>
-            <PropertyRow label="Format">
-              <input
-                type="text"
-                class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
-                placeholder="{value}"
-                value={(props.node.config.format as string) ?? "{value}"}
-                onInput={(e) =>
-                  scriptStore.updateNode(props.node.id, {
-                    config: {
-                      ...props.node.config,
-                      format: e.currentTarget.value,
-                    },
-                  })
-                }
-              />
-            </PropertyRow>
-            <PropertyRow label="Component ID">
-              <input
-                type="text"
-                class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
-                placeholder="Label component ID"
-                value={(props.node.config.componentId as string) ?? ""}
-                onInput={(e) =>
-                  scriptStore.updateNode(props.node.id, {
-                    config: {
-                      ...props.node.config,
-                      componentId: e.currentTarget.value,
-                    },
-                  })
-                }
-              />
-            </PropertyRow>
-            <div class="text-[9px] text-foreground-muted">
-              Use {"{"}value{"}"} placeholder in format
-            </div>
           </Show>
 
           {/* Function Define */}

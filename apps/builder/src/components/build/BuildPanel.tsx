@@ -22,7 +22,7 @@ function getMockBuildResponse<T>(cmd: string, args?: Record<string, unknown>): T
     build_trainer: {
       project_dir: "/mock/output/trainer",
       executables: ["/mock/output/trainer/trainer.exe"],
-      target: args?.config?.target || "current",
+      target: (args?.config as Record<string, unknown>)?.target || "current",
     },
     generate_trainer_project: "/mock/output/generated-project",
     preview_generated_code: {

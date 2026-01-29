@@ -176,44 +176,30 @@ export const ProjectPanel: Component = () => {
               {/* Window Settings */}
               <ProjectSection title="Window Settings">
                 <div class="space-y-3">
-                  <div class="flex items-center justify-between gap-4">
-                    <label class="text-sm text-foreground-muted">Width</label>
-                    <input
-                      type="number"
-                      class="w-24 px-2 py-1 text-sm bg-background border border-border rounded focus:outline-none focus:border-accent"
-                      value={project().ui.width}
-                      min={200}
-                      max={1920}
-                      onInput={(e) => {
-                        const val = Number(e.currentTarget.value);
-                        if (!isNaN(val) && val >= 200 && val <= 1920) {
-                          projectStore.updateUI({
-                            ...project().ui,
-                            width: val,
-                          });
-                        }
-                      }}
-                    />
-                  </div>
-                  <div class="flex items-center justify-between gap-4">
-                    <label class="text-sm text-foreground-muted">Height</label>
-                    <input
-                      type="number"
-                      class="w-24 px-2 py-1 text-sm bg-background border border-border rounded focus:outline-none focus:border-accent"
-                      value={project().ui.height}
-                      min={150}
-                      max={1080}
-                      onInput={(e) => {
-                        const val = Number(e.currentTarget.value);
-                        if (!isNaN(val) && val >= 150 && val <= 1080) {
-                          projectStore.updateUI({
-                            ...project().ui,
-                            height: val,
-                          });
-                        }
-                      }}
-                    />
-                  </div>
+                  <WindowSizeInput
+                    label="Width"
+                    value={project().ui.width}
+                    min={100}
+                    max={1920}
+                    onChange={(val) => {
+                      projectStore.updateUI({
+                        ...project().ui,
+                        width: val,
+                      });
+                    }}
+                  />
+                  <WindowSizeInput
+                    label="Height"
+                    value={project().ui.height}
+                    min={100}
+                    max={1080}
+                    onChange={(val) => {
+                      projectStore.updateUI({
+                        ...project().ui,
+                        height: val,
+                      });
+                    }}
+                  />
                   <div class="flex items-center justify-between">
                     <label class="text-sm text-foreground-muted">Theme</label>
                     <select
@@ -512,6 +498,58 @@ const ProjectField: Component<ProjectFieldProps> = (props) => {
           onInput={(e) => props.onChange(e.currentTarget.value)}
         />
       </Show>
+    </div>
+  );
+};
+
+// Window size input - completely uncontrolled, no effects
+interface WindowSizeInputProps {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+}
+
+const WindowSizeInput: Component<WindowSizeInputProps> = (props) => {
+  let inputRef: HTMLInputElement | undefined;
+
+  const handleBlur = () => {
+    if (!inputRef) return;
+    const val = Number(inputRef.value);
+    if (!isNaN(val) && val > 0) {
+      const clamped = Math.max(props.min, Math.min(props.max, val));
+      props.onChange(clamped);
+      // Update input to show clamped value if different
+      if (inputRef.value !== String(clamped)) {
+        inputRef.value = String(clamped);
+      }
+    } else {
+      // Reset to current store value if invalid
+      inputRef.value = String(props.value);
+    }
+  };
+
+  return (
+    <div class="flex items-center justify-between gap-4">
+      <label class="text-sm text-foreground-muted">{props.label}</label>
+      <input
+        ref={(el) => {
+          inputRef = el;
+          // Set initial value when ref is assigned
+          el.value = String(props.value);
+        }}
+        type="number"
+        class="w-24 px-2 py-1 text-sm bg-background border border-border rounded focus:outline-none focus:border-accent"
+        min={props.min}
+        max={props.max}
+        onBlur={handleBlur}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.currentTarget.blur();
+          }
+        }}
+      />
     </div>
   );
 };

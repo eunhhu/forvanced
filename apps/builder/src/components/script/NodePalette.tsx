@@ -12,6 +12,7 @@ import {
   IconCalculator,
   IconFunction,
   IconTerminal,
+  PlusIcon,
 } from "@/components/common/Icons";
 
 // Category icons
@@ -25,9 +26,7 @@ const categoryIcons: Record<string, Component<{ class?: string }>> = {
   String: IconTerminal,
   Native: IconTerminal,
   Interceptor: IconZap,
-  Hook: IconZap,
   Output: IconGitBranch,
-  UI: IconWorkflow,
   Function: IconFunction,
 };
 
@@ -42,9 +41,7 @@ const categoryColors: Record<string, string> = {
   String: "text-teal-400",
   Native: "text-red-400",
   Interceptor: "text-rose-400",
-  Hook: "text-pink-400",
   Output: "text-cyan-400",
-  UI: "text-indigo-400",
   Function: "text-amber-400",
 };
 
@@ -183,8 +180,20 @@ export const NodePalette: Component = () => {
       {/* Script list */}
       <div class="border-t border-border">
         <div class="p-2">
-          <div class="text-[10px] font-medium text-foreground-muted uppercase tracking-wider mb-2 px-1">
-            Scripts
+          <div class="flex items-center justify-between mb-2 px-1">
+            <div class="text-[10px] font-medium text-foreground-muted uppercase tracking-wider">
+              Scripts
+            </div>
+            <button
+              class="p-0.5 hover:bg-surface-hover rounded"
+              onClick={() => {
+                const name = `Script ${scriptStore.scripts().length + 1}`;
+                scriptStore.createScript(name);
+              }}
+              title="Add Script"
+            >
+              <PlusIcon class="w-3 h-3" />
+            </button>
           </div>
           <For each={scriptStore.scripts()}>
             {(script) => (

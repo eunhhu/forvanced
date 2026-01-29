@@ -1,5 +1,5 @@
 import { createSignal, createRoot, createEffect } from "solid-js";
-import { projectStore } from "./project";
+import { projectStore, type FridaAction as ProjectFridaAction } from "./project";
 
 // UI Component Types
 export type ComponentType =
@@ -254,7 +254,7 @@ function createDesignerStore() {
         bindings: c.bindings.map((b) => ({
           id: b.id,
           event: b.event,
-          action: buildFridaAction(b.actionId, b.params),
+          action: buildProjectFridaAction(b.actionId, b.params),
         })),
       }));
 
@@ -268,7 +268,8 @@ function createDesignerStore() {
 
   // Sync components to project when they change
   createEffect(() => {
-    const _ = components();
+    // Track components signal to trigger effect on changes
+    components();
     const project = projectStore.currentProject();
     if (project && !isLoadingFromProject) {
       syncToProject();
@@ -356,11 +357,11 @@ function extractParamsFromAction(
   return params;
 }
 
-// Build FridaAction object from action ID and params
-function buildFridaAction(
+// Build FridaAction object from action ID and params (for project schema)
+function buildProjectFridaAction(
   actionId: string,
   params: Record<string, string | number | boolean>
-): Record<string, unknown> {
+): ProjectFridaAction {
   const typeMap: Record<string, string> = {
     "memory.read": "memory_read",
     "memory.write": "memory_write",
@@ -384,7 +385,7 @@ function buildFridaAction(
   return {
     type: typeMap[actionId] || "memory_read",
     ...params,
-  };
+  } as ProjectFridaAction;
 }
 
 // Helper functions
