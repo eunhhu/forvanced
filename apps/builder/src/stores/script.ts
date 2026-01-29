@@ -4,30 +4,38 @@ import { createSignal, createRoot } from "solid-js";
 // Visual Scripting System Types
 // ============================================
 
-// Script Trigger Events - When scripts are executed
-export type ScriptTrigger =
-  | "on_attach"         // When attached to process
-  | "on_detach"         // When detached from process
-  | "on_button_click"   // When UI button is clicked (linked by component ID)
-  | "on_toggle_change"  // When UI toggle state changes
-  | "on_slider_change"  // When UI slider value changes
-  | "on_hotkey"         // When hotkey is pressed
-  | "on_interval"       // Periodic execution (timer)
-  | "manual";           // Manual execution only
+// UI Event Types - Events emitted by UI components
+export type UIEventType =
+  | "click"           // Button click
+  | "toggle"          // Toggle on/off (boolean value)
+  | "change"          // Input/dropdown value change (any value)
+  | "slide"           // Slider value change (number value)
+  | "slide_end";      // Slider released (number value)
 
-// Script Trigger Configuration
-export interface ScriptTriggerConfig {
-  type: ScriptTrigger;
-  componentId?: string;   // For UI events
-  hotkey?: string;        // For hotkey events (e.g., "Ctrl+F1")
-  intervalMs?: number;    // For interval events
+// System Event Types - Events from the runtime
+export type SystemEventType =
+  | "attach"          // When attached to process
+  | "detach"          // When detached from process
+  | "hotkey"          // When hotkey is pressed
+  | "interval";       // Periodic timer tick
+
+// Combined Event Type
+export type EventType = UIEventType | SystemEventType;
+
+// Script metadata (no more trigger config - events are defined by nodes)
+export interface ScriptMetadata {
+  description?: string;
 }
 
 // Node Types - What kind of operation
 export type ScriptNodeType =
+  // Event Listeners (Entry Points - replaces start/end)
+  | "event_ui"            // Listen to UI component events (click, toggle, change, slide)
+  | "event_attach"        // When attached to process
+  | "event_detach"        // When detached from process
+  | "event_hotkey"        // When hotkey is pressed
+  | "event_interval"      // Periodic execution (timer)
   // Flow Control
-  | "start"           // Entry point
-  | "end"             // Exit point
   | "if"              // Conditional branch
   | "loop"            // Loop (while/for)
   | "delay"           // Wait for ms
@@ -140,7 +148,8 @@ export interface Script {
   id: string;
   name: string;
   description?: string;
-  trigger: ScriptTriggerConfig;  // When this script is executed
+  // No more trigger config - events are defined by Event Listener nodes
+  // Multiple event listeners can exist in one script (parallel processing)
   variables: ScriptVariable[];
   nodes: ScriptNode[];
   connections: Connection[];
@@ -161,25 +170,76 @@ interface NodeTemplate {
 }
 
 export const nodeTemplates: NodeTemplate[] = [
-  // Flow Control
+  // Event Listeners (Entry Points)
   {
-    type: "start",
-    label: "Start",
-    category: "Flow",
-    description: "Script entry point",
+    type: "event_ui",
+    label: "UI Event",
+    category: "Events",
+    description: "Triggered when a UI component fires an event",
+    defaultConfig: {
+      componentId: "",      // Selected from dropdown
+      eventType: "click",   // click, toggle, change, slide
+    },
+    inputs: [],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "value", type: "value", valueType: "any", direction: "output" },      // Event value (boolean for toggle, number for slider, string for input)
+      { name: "componentId", type: "value", valueType: "string", direction: "output" }, // The component ID for reference
+    ],
+  },
+  {
+    type: "event_attach",
+    label: "On Attach",
+    category: "Events",
+    description: "Triggered when attached to a process",
     defaultConfig: {},
     inputs: [],
-    outputs: [{ name: "exec", type: "flow", direction: "output" }],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "processName", type: "value", valueType: "string", direction: "output" },
+      { name: "pid", type: "value", valueType: "int32", direction: "output" },
+    ],
   },
   {
-    type: "end",
-    label: "End",
-    category: "Flow",
-    description: "Script exit point",
+    type: "event_detach",
+    label: "On Detach",
+    category: "Events",
+    description: "Triggered when detached from a process",
     defaultConfig: {},
-    inputs: [{ name: "exec", type: "flow", direction: "input" }],
-    outputs: [],
+    inputs: [],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+    ],
   },
+  {
+    type: "event_hotkey",
+    label: "On Hotkey",
+    category: "Events",
+    description: "Triggered when a hotkey is pressed",
+    defaultConfig: {
+      hotkey: "",           // e.g., "Ctrl+F1"
+    },
+    inputs: [],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+    ],
+  },
+  {
+    type: "event_interval",
+    label: "On Interval",
+    category: "Events",
+    description: "Triggered periodically at a set interval",
+    defaultConfig: {
+      intervalMs: 1000,     // Default 1 second
+      autoStart: true,      // Start automatically on attach
+    },
+    inputs: [],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "tick", type: "value", valueType: "int32", direction: "output" }, // Tick count
+    ],
+  },
+  // Flow Control
   {
     type: "if",
     label: "If",
@@ -786,15 +846,14 @@ function createScriptStore() {
   }
 
   // Create new script
-  function createScript(name: string, trigger: ScriptTrigger = "manual"): Script {
+  function createScript(name: string): Script {
     const script: Script = {
       id: crypto.randomUUID(),
       name,
-      trigger: { type: trigger },
       variables: [],
       nodes: [
-        // Add start node by default
-        createNode("start", 100, 200),
+        // Add a UI Event node by default as the entry point
+        createNode("event_ui", 100, 200),
       ],
       connections: [],
     };

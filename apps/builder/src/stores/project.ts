@@ -163,6 +163,7 @@ export interface UILayout {
   theme: string;
 }
 
+// Simplified UIComponent - actions are now handled by visual scripts with Event Listener nodes
 export interface UIComponent {
   id: string;
   type: ComponentType;
@@ -172,7 +173,7 @@ export interface UIComponent {
   width: number;
   height: number;
   props: Record<string, unknown>;
-  bindings: ActionBinding[];
+  // Note: bindings removed - use visual scripts with event_ui nodes instead
 }
 
 export type ComponentType =
@@ -185,6 +186,7 @@ export type ComponentType =
   | "group"
   | "spacer";
 
+// Legacy types kept for backward compatibility with old project files
 export interface ActionBinding {
   id: string;
   event: ComponentEvent;

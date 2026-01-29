@@ -3,9 +3,10 @@ import {
   scriptStore,
   type ScriptNode,
   type ValueType,
-  type ScriptTrigger,
+  type UIEventType,
   nodeTemplates,
 } from "@/stores/script";
+import { designerStore } from "@/stores/designer";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -131,11 +132,6 @@ export const NodeInspector: Component = () => {
           </Show>
         </Show>
 
-        {/* Script Settings Section */}
-        <Show when={currentScript()}>
-          <ScriptSettingsSection />
-        </Show>
-
         {/* Variables Section */}
         <Show when={currentScript()}>
           <VariablesSection />
@@ -144,111 +140,6 @@ export const NodeInspector: Component = () => {
     </div>
   );
 };
-
-// Script Settings Section
-const ScriptSettingsSection: Component = () => {
-  const [isOpen, setIsOpen] = createSignal(true);
-  const currentScript = createMemo(() => scriptStore.getCurrentScript());
-
-  const triggerTypes: { value: ScriptTrigger; label: string; description: string }[] = [
-    { value: "manual", label: "Manual", description: "Run manually" },
-    { value: "on_attach", label: "On Attach", description: "When attached to process" },
-    { value: "on_detach", label: "On Detach", description: "When detached" },
-    { value: "on_button_click", label: "Button Click", description: "When button is clicked" },
-    { value: "on_toggle_change", label: "Toggle Change", description: "When toggle changes" },
-    { value: "on_slider_change", label: "Slider Change", description: "When slider changes" },
-    { value: "on_hotkey", label: "Hotkey", description: "When hotkey pressed" },
-    { value: "on_interval", label: "Interval", description: "Periodic execution" },
-  ];
-
-  const handleTriggerChange = (type: ScriptTrigger) => {
-    const script = currentScript();
-    if (!script) return;
-    scriptStore.updateScript(script.id, {
-      trigger: { ...script.trigger, type },
-    });
-  };
-
-  const handleTriggerConfigChange = (key: string, value: string | number) => {
-    const script = currentScript();
-    if (!script) return;
-    scriptStore.updateScript(script.id, {
-      trigger: { ...script.trigger, [key]: value },
-    });
-  };
-
-  return (
-    <div class="border-b border-border">
-      <button
-        class="w-full px-3 py-2 flex items-center gap-2 hover:bg-surface-hover transition-colors"
-        onClick={() => setIsOpen(!isOpen())}
-      >
-        <Show
-          when={isOpen()}
-          fallback={<ChevronRightIcon class="w-3 h-3" />}
-        >
-          <ChevronDownIcon class="w-3 h-3" />
-        </Show>
-        <span class="text-xs font-medium">Script Trigger</span>
-      </button>
-
-      <Show when={isOpen() && currentScript()}>
-        <div class="px-3 pb-3 space-y-3">
-          <PropertyRow label="Trigger">
-            <select
-              class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
-              value={currentScript()?.trigger.type ?? "manual"}
-              onChange={(e) => handleTriggerChange(e.currentTarget.value as ScriptTrigger)}
-            >
-              <For each={triggerTypes}>
-                {(t) => <option value={t.value}>{t.label}</option>}
-              </For>
-            </select>
-          </PropertyRow>
-          <div class="text-[9px] text-foreground-muted">
-            {triggerTypes.find((t) => t.value === currentScript()?.trigger.type)?.description}
-          </div>
-
-          {/* Component ID for UI events */}
-          <Show when={["on_button_click", "on_toggle_change", "on_slider_change"].includes(currentScript()?.trigger.type ?? "")}>
-            <PropertyRow label="Component ID">
-              <InspectorTextInput
-                class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
-                placeholder="UI component ID"
-                value={currentScript()?.trigger.componentId ?? ""}
-                onChange={(val) => handleTriggerConfigChange("componentId", val)}
-              />
-            </PropertyRow>
-          </Show>
-
-          {/* Hotkey for hotkey events */}
-          <Show when={currentScript()?.trigger.type === "on_hotkey"}>
-            <PropertyRow label="Hotkey">
-              <InspectorTextInput
-                class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
-                placeholder="e.g., Ctrl+F1"
-                value={currentScript()?.trigger.hotkey ?? ""}
-                onChange={(val) => handleTriggerConfigChange("hotkey", val)}
-              />
-            </PropertyRow>
-          </Show>
-
-          {/* Interval for interval events */}
-          <Show when={currentScript()?.trigger.type === "on_interval"}>
-            <PropertyRow label="Interval (ms)">
-              <InspectorNumberInput
-                class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
-                min={10}
-                value={currentScript()?.trigger.intervalMs ?? 1000}
-                onChange={(val) => handleTriggerConfigChange("intervalMs", val)}
-              />
-            </PropertyRow>
-          </Show>
-        </div>
-      </Show>
-    </div>
-  );
-}
 
 // Node Properties Panel
 interface NodePropertiesProps {
@@ -299,7 +190,54 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
             </div>
           </PropertyRow>
 
-          {/* Node-specific config */}
+          {/* Event Node Configs */}
+          <Show when={props.node.type === "event_ui"}>
+            <EventUIConfig node={props.node} />
+          </Show>
+
+          <Show when={props.node.type === "event_hotkey"}>
+            <PropertyRow label="Hotkey">
+              <InspectorTextInput
+                placeholder="e.g., Ctrl+F1"
+                value={(props.node.config.hotkey as string) ?? ""}
+                onChange={(val) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: { ...props.node.config, hotkey: val },
+                  })
+                }
+              />
+            </PropertyRow>
+            <div class="text-[9px] text-foreground-muted">
+              Format: Ctrl+Shift+F1, Alt+A, etc.
+            </div>
+          </Show>
+
+          <Show when={props.node.type === "event_interval"}>
+            <PropertyRow label="Interval (ms)">
+              <InspectorNumberInput
+                min={10}
+                value={(props.node.config.intervalMs as number) ?? 1000}
+                onChange={(val) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: { ...props.node.config, intervalMs: val },
+                  })
+                }
+              />
+            </PropertyRow>
+            <PropertyRow label="Auto Start">
+              <input
+                type="checkbox"
+                checked={(props.node.config.autoStart as boolean) ?? true}
+                onChange={(e) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: { ...props.node.config, autoStart: e.currentTarget.checked },
+                  })
+                }
+              />
+            </PropertyRow>
+          </Show>
+
+          {/* Flow Control config */}
           <Show when={props.node.type === "delay"}>
             <PropertyRow label="Delay (ms)">
               <InspectorNumberInput
@@ -980,6 +918,122 @@ const NativeFunctionConfig: Component<NativeFunctionConfigProps> = (props) => {
               </div>
             )}
           </For>
+        </div>
+      </Show>
+    </>
+  );
+};
+
+// Event UI Config - Select UI component and event type
+interface EventUIConfigProps {
+  node: ScriptNode;
+}
+
+const EventUIConfig: Component<EventUIConfigProps> = (props) => {
+  // Get all UI components from designer store
+  const uiComponents = createMemo(() => designerStore.components());
+
+  // Event types based on component type
+  const getEventTypesForComponent = (componentType: string): { value: UIEventType; label: string }[] => {
+    switch (componentType) {
+      case "button":
+        return [{ value: "click", label: "Click" }];
+      case "toggle":
+        return [{ value: "toggle", label: "Toggle (on/off)" }];
+      case "slider":
+        return [
+          { value: "slide", label: "Slide (during drag)" },
+          { value: "slide_end", label: "Slide End (released)" },
+        ];
+      case "input":
+      case "dropdown":
+        return [{ value: "change", label: "Value Changed" }];
+      default:
+        return [{ value: "click", label: "Click" }];
+    }
+  };
+
+  const selectedComponent = createMemo(() => {
+    const compId = props.node.config.componentId as string;
+    return uiComponents().find((c) => c.id === compId);
+  });
+
+  const availableEvents = createMemo(() => {
+    const comp = selectedComponent();
+    if (!comp) return [{ value: "click" as UIEventType, label: "Click" }];
+    return getEventTypesForComponent(comp.type);
+  });
+
+  return (
+    <>
+      <PropertyRow label="Component">
+        <select
+          class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+          value={(props.node.config.componentId as string) ?? ""}
+          onChange={(e) => {
+            const compId = e.currentTarget.value;
+            const comp = uiComponents().find((c) => c.id === compId);
+            // Reset event type when component changes
+            const events = comp ? getEventTypesForComponent(comp.type) : [];
+            scriptStore.updateNode(props.node.id, {
+              config: {
+                ...props.node.config,
+                componentId: compId,
+                eventType: events[0]?.value ?? "click",
+              },
+            });
+          }}
+        >
+          <option value="">Select component...</option>
+          <For each={uiComponents()}>
+            {(comp) => (
+              <option value={comp.id}>
+                {comp.label} ({comp.type})
+              </option>
+            )}
+          </For>
+        </select>
+      </PropertyRow>
+
+      <Show when={selectedComponent()}>
+        <PropertyRow label="Event">
+          <select
+            class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+            value={(props.node.config.eventType as string) ?? "click"}
+            onChange={(e) =>
+              scriptStore.updateNode(props.node.id, {
+                config: {
+                  ...props.node.config,
+                  eventType: e.currentTarget.value,
+                },
+              })
+            }
+          >
+            <For each={availableEvents()}>
+              {(ev) => <option value={ev.value}>{ev.label}</option>}
+            </For>
+          </select>
+        </PropertyRow>
+
+        <div class="text-[9px] text-foreground-muted p-2 bg-background/50 rounded">
+          <Show when={(props.node.config.eventType as string) === "toggle"}>
+            Output: <code>value</code> = boolean (true/false)
+          </Show>
+          <Show when={(props.node.config.eventType as string) === "slide" || (props.node.config.eventType as string) === "slide_end"}>
+            Output: <code>value</code> = number (slider value)
+          </Show>
+          <Show when={(props.node.config.eventType as string) === "change"}>
+            Output: <code>value</code> = string/number (input value)
+          </Show>
+          <Show when={(props.node.config.eventType as string) === "click"}>
+            Output: <code>value</code> = true (always)
+          </Show>
+        </div>
+      </Show>
+
+      <Show when={uiComponents().length === 0}>
+        <div class="text-[10px] text-warning p-2 bg-warning/10 rounded">
+          No UI components found. Add components in the Designer tab first.
         </div>
       </Show>
     </>

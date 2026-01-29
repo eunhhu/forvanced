@@ -17,6 +17,7 @@ import {
 
 // Category icons
 const categoryIcons: Record<string, Component<{ class?: string }>> = {
+  Events: IconZap,        // NEW: Event listeners (entry points)
   Flow: IconWorkflow,
   Memory: MemoryIcon,
   Pointer: MemoryIcon,
@@ -32,6 +33,7 @@ const categoryIcons: Record<string, Component<{ class?: string }>> = {
 
 // Category colors for visual distinction
 const categoryColors: Record<string, string> = {
+  Events: "text-emerald-400", // NEW: Prominent color for events
   Flow: "text-blue-400",
   Memory: "text-purple-400",
   Pointer: "text-violet-400",
@@ -48,7 +50,7 @@ const categoryColors: Record<string, string> = {
 export const NodePalette: Component = () => {
   const [searchQuery, setSearchQuery] = createSignal("");
   const [expandedCategories, setExpandedCategories] = createSignal<Set<string>>(
-    new Set(["Flow", "Memory"])
+    new Set(["Events", "Flow", "Memory"])  // Events expanded by default
   );
 
   const categories = createMemo(() => scriptStore.getNodeCategories());

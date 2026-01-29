@@ -1,5 +1,5 @@
 import { createSignal, createRoot, createEffect } from "solid-js";
-import { projectStore, type FridaAction as ProjectFridaAction } from "./project";
+import { projectStore } from "./project";
 
 // UI Component Types
 export type ComponentType =
@@ -51,7 +51,8 @@ export interface ActionBinding {
   params: Record<string, string | number | boolean>;
 }
 
-// UI Component
+// UI Component (simplified - no more action bindings, just declaration)
+// Actions are now handled by visual scripts with Event Listener nodes
 export interface UIComponent {
   id: string;
   type: ComponentType;
@@ -61,7 +62,7 @@ export interface UIComponent {
   width: number;
   height: number;
   props: Record<string, unknown>;
-  bindings: ActionBinding[];
+  // Note: bindings removed - use visual scripts with event_ui nodes instead
 }
 
 // Designer State
@@ -100,7 +101,6 @@ function createDesignerStore() {
       width: defaultProps.width,
       height: defaultProps.height,
       props: defaultProps.props,
-      bindings: [],
     };
 
     setComponents((prev) => [...prev, component]);
@@ -136,53 +136,7 @@ function createDesignerStore() {
     });
   }
 
-  // Add action binding
-  function addBinding(
-    componentId: string,
-    event: ComponentEvent,
-    actionId: string,
-    params: Record<string, string | number | boolean> = {}
-  ) {
-    const component = components().find((c) => c.id === componentId);
-    if (!component) return;
-
-    const binding: ActionBinding = {
-      id: crypto.randomUUID(),
-      event,
-      actionId,
-      params,
-    };
-
-    updateComponent(componentId, {
-      bindings: [...component.bindings, binding],
-    });
-  }
-
-  // Update binding
-  function updateBinding(
-    componentId: string,
-    bindingId: string,
-    updates: Partial<ActionBinding>
-  ) {
-    const component = components().find((c) => c.id === componentId);
-    if (!component) return;
-
-    updateComponent(componentId, {
-      bindings: component.bindings.map((b) =>
-        b.id === bindingId ? { ...b, ...updates } : b
-      ),
-    });
-  }
-
-  // Remove binding
-  function removeBinding(componentId: string, bindingId: string) {
-    const component = components().find((c) => c.id === componentId);
-    if (!component) return;
-
-    updateComponent(componentId, {
-      bindings: component.bindings.filter((b) => b.id !== bindingId),
-    });
-  }
+  // Note: Binding functions removed - actions are now handled by visual scripts
 
   // Clear all
   function clearAll() {
@@ -196,7 +150,7 @@ function createDesignerStore() {
     try {
       const project = projectStore.currentProject();
       if (project?.ui?.components) {
-        // Convert project components to designer format
+        // Convert project components to designer format (simplified - no bindings)
         const converted = project.ui.components.map((c) => ({
           id: c.id,
           type: c.type as ComponentType,
@@ -206,12 +160,6 @@ function createDesignerStore() {
           width: c.width,
           height: c.height,
           props: c.props || {},
-          bindings: c.bindings.map((b) => ({
-            id: b.id,
-            event: b.event as ComponentEvent,
-            actionId: mapFridaActionToId(b.action),
-            params: extractParamsFromAction(b.action),
-          })),
         }));
         setComponents(converted);
       } else {
@@ -242,6 +190,7 @@ function createDesignerStore() {
 
     // Debounce the sync
     syncTimer = setTimeout(() => {
+      // Simplified - no bindings, just UI component definitions
       const uiComponents = components().map((c) => ({
         id: c.id,
         type: c.type,
@@ -251,11 +200,6 @@ function createDesignerStore() {
         width: c.width,
         height: c.height,
         props: c.props,
-        bindings: c.bindings.map((b) => ({
-          id: b.id,
-          event: b.event,
-          action: buildProjectFridaAction(b.actionId, b.params),
-        })),
       }));
 
       projectStore.updateUI({
@@ -292,100 +236,10 @@ function createDesignerStore() {
     deleteComponent,
     moveComponent,
     resizeComponent,
-    addBinding,
-    updateBinding,
-    removeBinding,
     clearAll,
     loadFromProject,
     syncToProject,
   };
-}
-
-// Helper to map FridaAction object to action ID
-function mapFridaActionToId(action: Record<string, unknown>): string {
-  const type = action.type as string;
-  switch (type) {
-    case "memory_read":
-      return "memory.read";
-    case "memory_write":
-      return "memory.write";
-    case "memory_freeze":
-      return "memory.freeze";
-    case "memory_unfreeze":
-      return "memory.unfreeze";
-    case "pattern_scan":
-      return "scanner.pattern";
-    case "value_scan":
-      return "scanner.value";
-    case "hook_function":
-      return "hook.function";
-    case "replace_return":
-      return "hook.replace";
-    case "nop_function":
-      return "hook.nop";
-    case "java_hook_method":
-      return "java.hook_method";
-    case "java_modify_return":
-      return "java.modify_return";
-    case "java_call_method":
-      return "java.call_method";
-    case "objc_hook_method":
-      return "objc.hook_method";
-    case "objc_modify_return":
-      return "objc.modify_return";
-    case "swift_hook_function":
-      return "swift.hook_function";
-    case "list_modules":
-      return "process.list_modules";
-    case "find_export":
-      return "process.find_export";
-    default:
-      return "memory.read";
-  }
-}
-
-// Extract params from FridaAction object
-function extractParamsFromAction(
-  action: Record<string, unknown>
-): Record<string, string | number | boolean> {
-  const params: Record<string, string | number | boolean> = {};
-  for (const [key, value] of Object.entries(action)) {
-    if (key !== "type" && (typeof value === "string" || typeof value === "number" || typeof value === "boolean")) {
-      params[key] = value;
-    }
-  }
-  return params;
-}
-
-// Build FridaAction object from action ID and params (for project schema)
-function buildProjectFridaAction(
-  actionId: string,
-  params: Record<string, string | number | boolean>
-): ProjectFridaAction {
-  const typeMap: Record<string, string> = {
-    "memory.read": "memory_read",
-    "memory.write": "memory_write",
-    "memory.freeze": "memory_freeze",
-    "memory.unfreeze": "memory_unfreeze",
-    "scanner.pattern": "pattern_scan",
-    "scanner.value": "value_scan",
-    "hook.function": "hook_function",
-    "hook.replace": "replace_return",
-    "hook.nop": "nop_function",
-    "java.hook_method": "java_hook_method",
-    "java.modify_return": "java_modify_return",
-    "java.call_method": "java_call_method",
-    "objc.hook_method": "objc_hook_method",
-    "objc.modify_return": "objc_modify_return",
-    "swift.hook_function": "swift_hook_function",
-    "process.list_modules": "list_modules",
-    "process.find_export": "find_export",
-  };
-
-  return {
-    type: typeMap[actionId] || "memory_read",
-    ...params,
-  } as ProjectFridaAction;
 }
 
 // Helper functions
