@@ -34,4 +34,6 @@ coverage/
 *.pem
 *.p12
 
+# Playwright Report
 .playwright-mcp/
+apps/builder/playwright-report/
