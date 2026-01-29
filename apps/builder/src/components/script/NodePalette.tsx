@@ -18,24 +18,34 @@ import {
 const categoryIcons: Record<string, Component<{ class?: string }>> = {
   Flow: IconWorkflow,
   Memory: MemoryIcon,
+  Pointer: MemoryIcon,
   Module: IconFunction,
   Variable: IconVariable,
   Math: IconCalculator,
+  String: IconTerminal,
   Native: IconTerminal,
+  Interceptor: IconZap,
   Hook: IconZap,
   Output: IconGitBranch,
+  UI: IconWorkflow,
+  Function: IconFunction,
 };
 
 // Category colors for visual distinction
 const categoryColors: Record<string, string> = {
   Flow: "text-blue-400",
   Memory: "text-purple-400",
+  Pointer: "text-violet-400",
   Module: "text-green-400",
   Variable: "text-yellow-400",
   Math: "text-orange-400",
+  String: "text-teal-400",
   Native: "text-red-400",
+  Interceptor: "text-rose-400",
   Hook: "text-pink-400",
   Output: "text-cyan-400",
+  UI: "text-indigo-400",
+  Function: "text-amber-400",
 };
 
 export const NodePalette: Component = () => {

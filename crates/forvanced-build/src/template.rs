@@ -113,8 +113,8 @@ const TAURI_CONF_TEMPLATE: &str = r#"{
   "version": "{{project_version}}",
   "identifier": "com.forvanced.trainer.{{project_name}}",
   "build": {
-    "beforeBuildCommand": "npm run build",
-    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "bun run build",
+    "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../dist"
   },

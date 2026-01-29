@@ -4,6 +4,25 @@ import { createSignal, createRoot } from "solid-js";
 // Visual Scripting System Types
 // ============================================
 
+// Script Trigger Events - When scripts are executed
+export type ScriptTrigger =
+  | "on_attach"         // When attached to process
+  | "on_detach"         // When detached from process
+  | "on_button_click"   // When UI button is clicked (linked by component ID)
+  | "on_toggle_change"  // When UI toggle state changes
+  | "on_slider_change"  // When UI slider value changes
+  | "on_hotkey"         // When hotkey is pressed
+  | "on_interval"       // Periodic execution (timer)
+  | "manual";           // Manual execution only
+
+// Script Trigger Configuration
+export interface ScriptTriggerConfig {
+  type: ScriptTrigger;
+  componentId?: string;   // For UI events
+  hotkey?: string;        // For hotkey events (e.g., "Ctrl+F1")
+  intervalMs?: number;    // For interval events
+}
+
 // Node Types - What kind of operation
 export type ScriptNodeType =
   // Flow Control
@@ -58,7 +77,11 @@ export type ScriptNodeType =
   | "log"             // Log to console
   | "notify"          // Show notification
   // UI Binding
-  | "bind_to_label"          // Show notification
+  | "bind_to_label"
+  // Functions (reusable code blocks)
+  | "function_define"   // Define a reusable function
+  | "function_call"     // Call a defined function
+  | "function_return"   // Return from function          // Show notification
 
 // Value Types
 export type ValueType =
@@ -122,6 +145,7 @@ export interface Script {
   id: string;
   name: string;
   description?: string;
+  trigger: ScriptTriggerConfig;  // When this script is executed
   variables: ScriptVariable[];
   nodes: ScriptNode[];
   connections: Connection[];
@@ -735,6 +759,52 @@ export const nodeTemplates: NodeTemplate[] = [
     ],
     outputs: [{ name: "exec", type: "flow", direction: "output" }],
   },
+
+  // Functions
+  {
+    type: "function_define",
+    label: "Define Function",
+    category: "Function",
+    description: "Define a reusable function block",
+    defaultConfig: {
+      functionName: "myFunction",
+      paramCount: 0,
+      paramNames: [] as string[],
+      returnType: "void",
+    },
+    inputs: [],
+    outputs: [
+      { name: "body", type: "flow", direction: "output" },
+      // Dynamic param outputs will be added based on paramCount
+    ],
+  },
+  {
+    type: "function_call",
+    label: "Call Function",
+    category: "Function",
+    description: "Call a defined function",
+    defaultConfig: { functionName: "" },
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      // Dynamic param inputs will be added based on function definition
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "return", type: "value", valueType: "any", direction: "output" },
+    ],
+  },
+  {
+    type: "function_return",
+    label: "Return",
+    category: "Function",
+    description: "Return from function with optional value",
+    defaultConfig: {},
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "value", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [],
+  },
 ];
 
 // ============================================
@@ -755,10 +825,11 @@ function createScriptStore() {
   }
 
   // Create new script
-  function createScript(name: string): Script {
+  function createScript(name: string, trigger: ScriptTrigger = "manual"): Script {
     const script: Script = {
       id: crypto.randomUUID(),
       name,
+      trigger: { type: trigger },
       variables: [],
       nodes: [
         // Add start node by default
@@ -909,27 +980,66 @@ function createScriptStore() {
     }
   }
 
-  // Add connection
-  function addConnection(
+  // Connection validation result
+  interface ConnectionValidation {
+    valid: boolean;
+    error?: string;
+  }
+
+  // Check if two value types are compatible
+  function areTypesCompatible(fromType: ValueType | undefined, toType: ValueType | undefined): boolean {
+    // If either is "any", always compatible
+    if (fromType === "any" || toType === "any") return true;
+    // If types are the same, compatible
+    if (fromType === toType) return true;
+    // Numeric types can be implicitly converted
+    const numericTypes: ValueType[] = ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float", "double"];
+    if (fromType && toType && numericTypes.includes(fromType) && numericTypes.includes(toType)) return true;
+    // Pointer can be converted to/from numeric types (for address arithmetic)
+    if ((fromType === "pointer" && toType && numericTypes.includes(toType)) ||
+        (toType === "pointer" && fromType && numericTypes.includes(fromType))) return true;
+    return false;
+  }
+
+  // Validate a connection before creating it
+  function validateConnection(
     fromNodeId: string,
     fromPortId: string,
     toNodeId: string,
     toPortId: string
-  ): Connection | null {
+  ): ConnectionValidation {
     const script = getCurrentScript();
-    if (!script) return null;
+    if (!script) return { valid: false, error: "No active script" };
 
-    // Validate connection
+    // Can't connect to self
+    if (fromNodeId === toNodeId) {
+      return { valid: false, error: "Cannot connect node to itself" };
+    }
+
     const fromNode = script.nodes.find((n) => n.id === fromNodeId);
     const toNode = script.nodes.find((n) => n.id === toNodeId);
-    if (!fromNode || !toNode) return null;
+    if (!fromNode) return { valid: false, error: "Source node not found" };
+    if (!toNode) return { valid: false, error: "Target node not found" };
 
     const fromPort = fromNode.outputs.find((p) => p.id === fromPortId);
     const toPort = toNode.inputs.find((p) => p.id === toPortId);
-    if (!fromPort || !toPort) return null;
+    if (!fromPort) return { valid: false, error: "Source port not found" };
+    if (!toPort) return { valid: false, error: "Target port not found" };
 
-    // Check port types match
-    if (fromPort.type !== toPort.type) return null;
+    // Check port types match (flow vs value)
+    if (fromPort.type !== toPort.type) {
+      return { valid: false, error: `Cannot connect ${fromPort.type} to ${toPort.type}` };
+    }
+
+    // For value ports, check value type compatibility
+    if (fromPort.type === "value") {
+      if (!areTypesCompatible(fromPort.valueType, toPort.valueType)) {
+        return {
+          valid: false,
+          error: `Type mismatch: ${fromPort.valueType} → ${toPort.valueType}`,
+        };
+      }
+    }
 
     // Check if connection already exists
     const exists = script.connections.some(
@@ -939,7 +1049,27 @@ function createScriptStore() {
         c.toNodeId === toNodeId &&
         c.toPortId === toPortId
     );
-    if (exists) return null;
+    if (exists) return { valid: false, error: "Connection already exists" };
+
+    return { valid: true };
+  }
+
+  // Add connection
+  function addConnection(
+    fromNodeId: string,
+    fromPortId: string,
+    toNodeId: string,
+    toPortId: string
+  ): Connection | null {
+    const validation = validateConnection(fromNodeId, fromPortId, toNodeId, toPortId);
+    if (!validation.valid) {
+      console.warn("Connection rejected:", validation.error);
+      return null;
+    }
+
+    const script = getCurrentScript()!;
+    const toNode = script.nodes.find((n) => n.id === toNodeId)!;
+    const toPort = toNode.inputs.find((p) => p.id === toPortId)!;
 
     // For flow ports, remove existing connection to input (only one allowed)
     let newConnections = [...script.connections];

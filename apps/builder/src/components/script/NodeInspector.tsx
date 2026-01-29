@@ -3,6 +3,7 @@ import {
   scriptStore,
   type ScriptNode,
   type ValueType,
+  type ScriptTrigger,
   nodeTemplates,
 } from "@/stores/script";
 import {
@@ -53,6 +54,11 @@ export const NodeInspector: Component = () => {
           </Show>
         </Show>
 
+        {/* Script Settings Section */}
+        <Show when={currentScript()}>
+          <ScriptSettingsSection />
+        </Show>
+
         {/* Variables Section */}
         <Show when={currentScript()}>
           <VariablesSection />
@@ -61,6 +67,114 @@ export const NodeInspector: Component = () => {
     </div>
   );
 };
+
+// Script Settings Section
+const ScriptSettingsSection: Component = () => {
+  const [isOpen, setIsOpen] = createSignal(true);
+  const currentScript = createMemo(() => scriptStore.getCurrentScript());
+
+  const triggerTypes: { value: ScriptTrigger; label: string; description: string }[] = [
+    { value: "manual", label: "Manual", description: "Run manually" },
+    { value: "on_attach", label: "On Attach", description: "When attached to process" },
+    { value: "on_detach", label: "On Detach", description: "When detached" },
+    { value: "on_button_click", label: "Button Click", description: "When button is clicked" },
+    { value: "on_toggle_change", label: "Toggle Change", description: "When toggle changes" },
+    { value: "on_slider_change", label: "Slider Change", description: "When slider changes" },
+    { value: "on_hotkey", label: "Hotkey", description: "When hotkey pressed" },
+    { value: "on_interval", label: "Interval", description: "Periodic execution" },
+  ];
+
+  const handleTriggerChange = (type: ScriptTrigger) => {
+    const script = currentScript();
+    if (!script) return;
+    scriptStore.updateScript(script.id, {
+      trigger: { ...script.trigger, type },
+    });
+  };
+
+  const handleTriggerConfigChange = (key: string, value: string | number) => {
+    const script = currentScript();
+    if (!script) return;
+    scriptStore.updateScript(script.id, {
+      trigger: { ...script.trigger, [key]: value },
+    });
+  };
+
+  return (
+    <div class="border-b border-border">
+      <button
+        class="w-full px-3 py-2 flex items-center gap-2 hover:bg-surface-hover transition-colors"
+        onClick={() => setIsOpen(!isOpen())}
+      >
+        <Show
+          when={isOpen()}
+          fallback={<ChevronRightIcon class="w-3 h-3" />}
+        >
+          <ChevronDownIcon class="w-3 h-3" />
+        </Show>
+        <span class="text-xs font-medium">Script Trigger</span>
+      </button>
+
+      <Show when={isOpen() && currentScript()}>
+        <div class="px-3 pb-3 space-y-3">
+          <PropertyRow label="Trigger">
+            <select
+              class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+              value={currentScript()?.trigger.type ?? "manual"}
+              onChange={(e) => handleTriggerChange(e.currentTarget.value as ScriptTrigger)}
+            >
+              <For each={triggerTypes}>
+                {(t) => <option value={t.value}>{t.label}</option>}
+              </For>
+            </select>
+          </PropertyRow>
+          <div class="text-[9px] text-foreground-muted">
+            {triggerTypes.find((t) => t.value === currentScript()?.trigger.type)?.description}
+          </div>
+
+          {/* Component ID for UI events */}
+          <Show when={["on_button_click", "on_toggle_change", "on_slider_change"].includes(currentScript()?.trigger.type ?? "")}>
+            <PropertyRow label="Component ID">
+              <input
+                type="text"
+                class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+                placeholder="UI component ID"
+                value={currentScript()?.trigger.componentId ?? ""}
+                onInput={(e) => handleTriggerConfigChange("componentId", e.currentTarget.value)}
+              />
+            </PropertyRow>
+          </Show>
+
+          {/* Hotkey for hotkey events */}
+          <Show when={currentScript()?.trigger.type === "on_hotkey"}>
+            <PropertyRow label="Hotkey">
+              <input
+                type="text"
+                class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+                placeholder="e.g., Ctrl+F1"
+                value={currentScript()?.trigger.hotkey ?? ""}
+                onInput={(e) => handleTriggerConfigChange("hotkey", e.currentTarget.value)}
+              />
+            </PropertyRow>
+          </Show>
+
+          {/* Interval for interval events */}
+          <Show when={currentScript()?.trigger.type === "on_interval"}>
+            <PropertyRow label="Interval (ms)">
+              <input
+                type="number"
+                class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+                min={10}
+                value={currentScript()?.trigger.intervalMs ?? 1000}
+                onInput={(e) => handleTriggerConfigChange("intervalMs", Number(e.currentTarget.value))}
+              />
+            </PropertyRow>
+          </Show>
+        </div>
+      </Show>
+    </div>
+  );
+}
 
 // Node Properties Panel
 interface NodePropertiesProps {
@@ -597,6 +711,70 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
             </PropertyRow>
             <div class="text-[9px] text-foreground-muted">
               Use {"{"}value{"}"} placeholder in format
+            </div>
+          </Show>
+
+          {/* Function Define */}
+          <Show when={props.node.type === "function_define"}>
+            <PropertyRow label="Function Name">
+              <input
+                type="text"
+                class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+                placeholder="myFunction"
+                value={(props.node.config.functionName as string) ?? ""}
+                onInput={(e) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: {
+                      ...props.node.config,
+                      functionName: e.currentTarget.value,
+                    },
+                  })
+                }
+              />
+            </PropertyRow>
+            <PropertyRow label="Return Type">
+              <select
+                class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+                value={(props.node.config.returnType as string) ?? "void"}
+                onChange={(e) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: {
+                      ...props.node.config,
+                      returnType: e.currentTarget.value,
+                    },
+                  })
+                }
+              >
+                <option value="void">void</option>
+                <option value="any">any</option>
+                <option value="int32">int32</option>
+                <option value="pointer">pointer</option>
+                <option value="string">string</option>
+                <option value="boolean">boolean</option>
+              </select>
+            </PropertyRow>
+          </Show>
+
+          {/* Function Call */}
+          <Show when={props.node.type === "function_call"}>
+            <PropertyRow label="Function Name">
+              <input
+                type="text"
+                class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+                placeholder="Function to call"
+                value={(props.node.config.functionName as string) ?? ""}
+                onInput={(e) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: {
+                      ...props.node.config,
+                      functionName: e.currentTarget.value,
+                    },
+                  })
+                }
+              />
+            </PropertyRow>
+            <div class="text-[9px] text-foreground-muted">
+              Enter the name of a defined function
             </div>
           </Show>
         </div>

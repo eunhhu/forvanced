@@ -21,6 +21,7 @@ const nodeColors: Record<string, { bg: string; border: string; header: string }>
   Hook: { bg: "bg-pink-900/30", border: "border-pink-500/50", header: "bg-pink-500/20" },
   Output: { bg: "bg-cyan-900/30", border: "border-cyan-500/50", header: "bg-cyan-500/20" },
   UI: { bg: "bg-indigo-900/30", border: "border-indigo-500/50", header: "bg-indigo-500/20" },
+  Function: { bg: "bg-amber-900/30", border: "border-amber-500/50", header: "bg-amber-500/20" },
 };
 
 // Get category for node type
@@ -107,6 +108,12 @@ export const NodeCanvas: Component = () => {
 
   // Handle keyboard events for space pan
   const handleKeyDown = (e: KeyboardEvent) => {
+    // Don't intercept if user is typing in an input
+    const target = e.target as HTMLElement;
+    if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
+      return;
+    }
+
     if (e.code === "Space" && !isSpaceDown()) {
       e.preventDefault();
       setIsSpaceDown(true);
@@ -114,6 +121,13 @@ export const NodeCanvas: Component = () => {
     // Delete selected connection with Delete or Backspace
     if ((e.key === "Delete" || e.key === "Backspace") && scriptStore.selectedConnectionId()) {
       scriptStore.deleteConnection(scriptStore.selectedConnectionId()!);
+    }
+    // Delete selected node with Delete or Backspace
+    if ((e.key === "Delete" || e.key === "Backspace") && scriptStore.selectedNodeId()) {
+      const node = currentScript()?.nodes.find(n => n.id === scriptStore.selectedNodeId());
+      if (node && node.type !== "start") {
+        scriptStore.deleteNode(scriptStore.selectedNodeId()!);
+      }
     }
   };
 
@@ -192,16 +206,25 @@ export const NodeCanvas: Component = () => {
   });
 
   // Get port position for a node
+  // Port layout: header (28px) + py-1 (4px) + inputs (24px each) + outputs (24px each)
   const getPortPosition = (node: ScriptNode, port: Port, isInput: boolean) => {
     const nodeWidth = 200;
     const headerHeight = 28;
-    const portHeight = 24;
+    const paddingTop = 4; // py-1
+    const portHeight = 24; // h-6
 
     const ports = isInput ? node.inputs : node.outputs;
     const index = ports.findIndex((p) => p.id === port.id);
 
     const x = isInput ? node.x : node.x + nodeWidth;
-    const y = node.y + headerHeight + index * portHeight + portHeight / 2;
+
+    // Output ports come after input ports in the layout
+    const inputPortsHeight = node.inputs.length * portHeight;
+    const baseY = node.y + headerHeight + paddingTop;
+
+    const y = isInput
+      ? baseY + index * portHeight + portHeight / 2
+      : baseY + inputPortsHeight + index * portHeight + portHeight / 2;
 
     return { x, y };
   };

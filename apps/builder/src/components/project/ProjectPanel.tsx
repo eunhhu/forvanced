@@ -184,12 +184,15 @@ export const ProjectPanel: Component = () => {
                       value={project().ui.width}
                       min={200}
                       max={1920}
-                      onChange={(e) =>
-                        projectStore.updateUI({
-                          ...project().ui,
-                          width: Number(e.currentTarget.value),
-                        })
-                      }
+                      onInput={(e) => {
+                        const val = Number(e.currentTarget.value);
+                        if (!isNaN(val) && val >= 200 && val <= 1920) {
+                          projectStore.updateUI({
+                            ...project().ui,
+                            width: val,
+                          });
+                        }
+                      }}
                     />
                   </div>
                   <div class="flex items-center justify-between gap-4">
@@ -200,12 +203,15 @@ export const ProjectPanel: Component = () => {
                       value={project().ui.height}
                       min={150}
                       max={1080}
-                      onChange={(e) =>
-                        projectStore.updateUI({
-                          ...project().ui,
-                          height: Number(e.currentTarget.value),
-                        })
-                      }
+                      onInput={(e) => {
+                        const val = Number(e.currentTarget.value);
+                        if (!isNaN(val) && val >= 150 && val <= 1080) {
+                          projectStore.updateUI({
+                            ...project().ui,
+                            height: val,
+                          });
+                        }
+                      }}
                     />
                   </div>
                   <div class="flex items-center justify-between">
@@ -213,12 +219,12 @@ export const ProjectPanel: Component = () => {
                     <select
                       class="px-2 py-1 text-sm bg-background border border-border rounded"
                       value={project().ui.theme}
-                      onChange={(e) =>
+                      onInput={(e) => {
                         projectStore.updateUI({
                           ...project().ui,
                           theme: e.currentTarget.value,
-                        })
-                      }
+                        });
+                      }}
                     >
                       <option value="dark">Dark</option>
                       <option value="light">Light</option>

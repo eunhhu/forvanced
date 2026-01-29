@@ -199,15 +199,15 @@ impl Builder {
         // Install npm dependencies
         if !options.skip_npm_install {
             info!("Installing npm dependencies...");
-            let npm_status = Command::new("npm")
+            let npm_status = Command::new("bun")
                 .arg("install")
                 .current_dir(&project_dir)
                 .status()
-                .map_err(|e| BuildError::CommandFailed(format!("npm install failed: {}", e)))?;
+                .map_err(|e| BuildError::CommandFailed(format!("bun install failed: {}", e)))?;
 
             if !npm_status.success() {
                 return Err(BuildError::CommandFailed(
-                    "npm install failed".to_string(),
+                    "bun install failed".to_string(),
                 ));
             }
         }
