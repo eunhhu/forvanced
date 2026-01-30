@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use forvanced_adapters::AdapterRegistry;
 use forvanced_core::Project;
+use forvanced_frida::FridaManager;
 use serde::{Deserialize, Serialize};
 
 const MAX_RECENT_PROJECTS: usize = 10;
@@ -46,7 +46,8 @@ impl RecentProjectsStore {
 
 #[derive(Clone)]
 pub struct AppState {
-    pub adapter_registry: Arc<RwLock<AdapterRegistry>>,
+    pub frida_manager: Arc<RwLock<Option<FridaManager>>>,
+    pub current_device_id: Arc<RwLock<Option<String>>>,
     pub current_project: Arc<RwLock<Option<Project>>>,
     pub project_path: Arc<RwLock<Option<PathBuf>>>,
     pub recent_projects: Arc<RwLock<RecentProjectsStore>>,
@@ -62,11 +63,9 @@ impl AppState {
         // Load recent projects from disk
         let recent_projects = Self::load_recent_projects(&config_dir);
 
-        // Create registry with default adapter
-        let registry = AdapterRegistry::with_defaults();
-
         Self {
-            adapter_registry: Arc::new(RwLock::new(registry)),
+            frida_manager: Arc::new(RwLock::new(None)),
+            current_device_id: Arc::new(RwLock::new(None)),
             current_project: Arc::new(RwLock::new(None)),
             project_path: Arc::new(RwLock::new(None)),
             recent_projects: Arc::new(RwLock::new(recent_projects)),
@@ -74,14 +73,11 @@ impl AppState {
         }
     }
 
-    /// Initialize the app state asynchronously (connect default adapter)
+    /// Initialize the app state asynchronously (create FridaManager)
     pub async fn initialize(&self) -> Result<(), String> {
-        let mut registry = self.adapter_registry.write().await;
-        registry
-            .select_adapter("local_pc")
-            .await
-            .map_err(|e| e.to_string())?;
-        tracing::info!("Default adapter 'local_pc' connected");
+        let manager = FridaManager::new().map_err(|e| e.to_string())?;
+        *self.frida_manager.write().await = Some(manager);
+        tracing::info!("FridaManager initialized");
         Ok(())
     }
 

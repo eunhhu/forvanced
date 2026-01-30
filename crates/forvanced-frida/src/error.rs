@@ -11,6 +11,9 @@ pub enum FridaError {
     #[error("Process not found: {0}")]
     ProcessNotFound(String),
 
+    #[error("Connection failed: {0}")]
+    ConnectionFailed(String),
+
     #[error("Failed to attach to process: {0}")]
     AttachFailed(String),
 

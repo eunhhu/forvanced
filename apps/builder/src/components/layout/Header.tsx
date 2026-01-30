@@ -44,11 +44,11 @@ export const Header: Component = () => {
           <div class="w-px h-4 bg-border" />
         </Show>
 
-        {/* Adapter Info */}
+        {/* Device Info */}
         <div class="text-sm text-foreground-secondary">
-          Adapter:{" "}
+          Device:{" "}
           <span class="text-foreground font-medium">
-            {targetStore.currentAdapterId()}
+            {targetStore.currentDeviceId() || "None"}
           </span>
         </div>
       </div>

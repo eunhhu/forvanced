@@ -846,19 +846,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "forvanced-adapters"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "forvanced-frida",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "forvanced-build"
 version = "0.1.0"
 dependencies = [
@@ -882,7 +869,6 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "dirs 5.0.1",
- "forvanced-adapters",
  "forvanced-build",
  "forvanced-core",
  "forvanced-frida",

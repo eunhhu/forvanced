@@ -7,8 +7,10 @@ import { ProjectPanel } from "@/components/project/ProjectPanel";
 import { BuildPanel } from "@/components/build/BuildPanel";
 import { ScriptEditor } from "@/components/script/ScriptEditor";
 import { SettingsModal } from "@/components/settings/SettingsModal";
+import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { targetStore } from "@/stores/target";
 import { sidebarStore } from "@/stores/sidebar";
+import { errorStore } from "@/stores/error";
 
 const App: Component = () => {
   const [activeTab, setActiveTab] = createSignal("project");
@@ -18,12 +20,27 @@ const App: Component = () => {
 
   onMount(async () => {
     try {
-      // Initialize the default adapter
-      await targetStore.changeAdapter("local_pc");
-      setInitialized(true);
+      // Wait for devices to load, then select the first one
+      const checkDevices = async () => {
+        const devices = targetStore.devices();
+        if (devices && devices.length > 0) {
+          // Select the first device (usually "local")
+          await targetStore.changeDevice(devices[0].id);
+          setInitialized(true);
+        } else if (targetStore.devices.loading) {
+          // Still loading, wait a bit and try again
+          setTimeout(checkDevices, 100);
+        } else {
+          // No devices available, still show UI
+          setInitialized(true);
+        }
+      };
+      await checkDevices();
     } catch (err) {
       console.error("Failed to initialize:", err);
-      setError(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      errorStore.showError("Initialization Failed", message);
       setInitialized(true); // Still show UI even on error
     }
 
@@ -97,6 +114,9 @@ const App: Component = () => {
         isOpen={showSettings()}
         onClose={() => setShowSettings(false)}
       />
+
+      {/* Global Error Alerts */}
+      <ErrorAlert />
     </div>
   );
 };

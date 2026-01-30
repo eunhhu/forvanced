@@ -1,12 +1,11 @@
 mod build;
 mod project;
 
-use serde::{Deserialize, Serialize};
 use tauri::State;
 use tracing::{debug, info};
 
 use crate::AppState;
-use forvanced_frida::ProcessInfo;
+use forvanced_frida::{DeviceInfo, ProcessInfo};
 
 // Re-export project commands
 pub use project::*;
@@ -14,42 +13,98 @@ pub use project::*;
 // Re-export build commands
 pub use build::*;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AdapterInfo {
-    pub id: String,
-    pub name: String,
-    pub connected: bool,
+/// List all available Frida devices
+#[tauri::command]
+pub async fn list_devices(state: State<'_, AppState>) -> Result<Vec<DeviceInfo>, String> {
+    debug!("list_devices called");
+
+    let guard = state.frida_manager.read().await;
+    let manager = guard.as_ref().ok_or("Frida not initialized")?;
+
+    manager.enumerate_devices().map_err(|e| e.to_string())
 }
 
+/// Select a device to work with
+#[tauri::command]
+pub async fn select_device(state: State<'_, AppState>, device_id: String) -> Result<(), String> {
+    info!("select_device called with: {}", device_id);
+
+    // Verify device exists
+    let guard = state.frida_manager.read().await;
+    let manager = guard.as_ref().ok_or("Frida not initialized")?;
+
+    let devices = manager.enumerate_devices().map_err(|e| e.to_string())?;
+    if !devices.iter().any(|d| d.id == device_id) {
+        return Err(format!("Device '{}' not found", device_id));
+    }
+
+    *state.current_device_id.write().await = Some(device_id);
+    Ok(())
+}
+
+/// Get current selected device ID
+#[tauri::command]
+pub async fn get_current_device(state: State<'_, AppState>) -> Result<Option<String>, String> {
+    debug!("get_current_device called");
+    Ok(state.current_device_id.read().await.clone())
+}
+
+/// Add a remote device
+#[tauri::command]
+pub async fn add_remote_device(
+    state: State<'_, AppState>,
+    address: String,
+) -> Result<DeviceInfo, String> {
+    info!("add_remote_device called with address: {}", address);
+
+    let guard = state.frida_manager.read().await;
+    let manager = guard.as_ref().ok_or("Frida not initialized")?;
+
+    manager.add_remote_device(&address).map_err(|e| e.to_string())
+}
+
+/// Enumerate processes on current device
 #[tauri::command]
 pub async fn enumerate_processes(state: State<'_, AppState>) -> Result<Vec<ProcessInfo>, String> {
     debug!("enumerate_processes called");
 
-    let registry = state.adapter_registry.read().await;
-    let adapter = registry
-        .current_adapter()
-        .ok_or_else(|| "No adapter selected".to_string())?;
-
-    let adapter_guard = adapter.read().await;
-    adapter_guard
-        .enumerate_processes()
+    let device_id = state
+        .current_device_id
+        .read()
         .await
+        .clone()
+        .ok_or("No device selected")?;
+
+    let guard = state.frida_manager.read().await;
+    let manager = guard.as_ref().ok_or("Frida not initialized")?;
+
+    manager
+        .enumerate_processes_on_device(&device_id)
         .map_err(|e| e.to_string())
 }
 
+/// Attach to a process on current device
 #[tauri::command]
 pub async fn attach_to_process(state: State<'_, AppState>, pid: u32) -> Result<String, String> {
     info!("attach_to_process called with pid: {}", pid);
 
-    let registry = state.adapter_registry.read().await;
-    let adapter = registry
-        .current_adapter()
-        .ok_or_else(|| "No adapter selected".to_string())?;
+    let device_id = state
+        .current_device_id
+        .read()
+        .await
+        .clone()
+        .ok_or("No device selected")?;
 
-    let adapter_guard = adapter.read().await;
-    adapter_guard.attach(pid).await.map_err(|e| e.to_string())
+    let guard = state.frida_manager.read().await;
+    let manager = guard.as_ref().ok_or("Frida not initialized")?;
+
+    manager
+        .attach_on_device(&device_id, pid)
+        .await
+        .map_err(|e| e.to_string())
 }
 
+/// Detach from a session
 #[tauri::command]
 pub async fn detach_from_process(
     state: State<'_, AppState>,
@@ -57,59 +112,13 @@ pub async fn detach_from_process(
 ) -> Result<(), String> {
     info!("detach_from_process called with session: {}", session_id);
 
-    let registry = state.adapter_registry.read().await;
-    let adapter = registry
-        .current_adapter()
-        .ok_or_else(|| "No adapter selected".to_string())?;
+    let guard = state.frida_manager.read().await;
+    let manager = guard.as_ref().ok_or("Frida not initialized")?;
 
-    let adapter_guard = adapter.read().await;
-    adapter_guard
-        .detach(&session_id)
-        .await
-        .map_err(|e| e.to_string())
+    manager.detach(&session_id).await.map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub async fn list_adapters(state: State<'_, AppState>) -> Result<Vec<AdapterInfo>, String> {
-    debug!("list_adapters called");
-
-    let registry = state.adapter_registry.read().await;
-    let adapter_ids = registry.list_adapters();
-
-    let mut adapters = Vec::new();
-    for id in adapter_ids {
-        if let Some(adapter) = registry.get(&id) {
-            let adapter_guard = adapter.read().await;
-            adapters.push(AdapterInfo {
-                id: adapter_guard.adapter_id().to_string(),
-                name: adapter_guard.display_name().to_string(),
-                connected: adapter_guard.is_connected(),
-            });
-        }
-    }
-
-    Ok(adapters)
-}
-
-#[tauri::command]
-pub async fn select_adapter(state: State<'_, AppState>, adapter_id: String) -> Result<(), String> {
-    info!("select_adapter called with: {}", adapter_id);
-
-    let mut registry = state.adapter_registry.write().await;
-    registry
-        .select_adapter(&adapter_id)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn get_current_adapter(state: State<'_, AppState>) -> Result<Option<String>, String> {
-    debug!("get_current_adapter called");
-
-    let registry = state.adapter_registry.read().await;
-    Ok(registry.current_adapter_id().map(|s| s.to_string()))
-}
-
+/// Inject a script into a session
 #[tauri::command]
 pub async fn inject_script(
     state: State<'_, AppState>,
@@ -122,18 +131,16 @@ pub async fn inject_script(
         script.len()
     );
 
-    let registry = state.adapter_registry.read().await;
-    let adapter = registry
-        .current_adapter()
-        .ok_or_else(|| "No adapter selected".to_string())?;
+    let guard = state.frida_manager.read().await;
+    let manager = guard.as_ref().ok_or("Frida not initialized")?;
 
-    let adapter_guard = adapter.read().await;
-    adapter_guard
+    manager
         .inject_script(&session_id, &script)
         .await
         .map_err(|e| e.to_string())
 }
 
+/// Unload a script from a session
 #[tauri::command]
 pub async fn unload_script(
     state: State<'_, AppState>,
@@ -145,13 +152,10 @@ pub async fn unload_script(
         session_id, script_id
     );
 
-    let registry = state.adapter_registry.read().await;
-    let adapter = registry
-        .current_adapter()
-        .ok_or_else(|| "No adapter selected".to_string())?;
+    let guard = state.frida_manager.read().await;
+    let manager = guard.as_ref().ok_or("Frida not initialized")?;
 
-    let adapter_guard = adapter.read().await;
-    adapter_guard
+    manager
         .unload_script(&session_id, &script_id)
         .await
         .map_err(|e| e.to_string())

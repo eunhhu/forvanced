@@ -40,13 +40,15 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            // Adapter commands
+            // Device commands
+            commands::list_devices,
+            commands::select_device,
+            commands::get_current_device,
+            commands::add_remote_device,
+            // Process commands
             commands::enumerate_processes,
             commands::attach_to_process,
             commands::detach_from_process,
-            commands::list_adapters,
-            commands::select_adapter,
-            commands::get_current_adapter,
             commands::inject_script,
             commands::unload_script,
             // Project commands

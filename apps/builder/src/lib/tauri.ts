@@ -4,15 +4,18 @@ export interface ProcessInfo {
   path?: string;
 }
 
-export interface AdapterInfo {
+export interface DeviceInfo {
   id: string;
   name: string;
-  connected: boolean;
+  device_type: "local" | "usb" | "remote";
 }
 
-// Check if running in Tauri environment (evaluated at call time, not module load time)
+// Check if running in Tauri environment (Tauri 2.0 uses __TAURI_INTERNALS__)
 function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI__" in window;
+  return (
+    typeof window !== "undefined" &&
+    ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)
+  );
 }
 
 // Dynamic import for Tauri API
@@ -32,19 +35,32 @@ async function invoke<T>(
 // Mock responses for browser/test environment
 function getMockResponse<T>(cmd: string, args?: Record<string, unknown>): T {
   const mocks: Record<string, unknown> = {
+    // Device commands
+    list_devices: [
+      { id: "local", name: "Local System", device_type: "local" },
+    ],
+    select_device: undefined,
+    get_current_device: "local",
+    add_remote_device: {
+      id: `remote-${args?.address || "unknown"}`,
+      name: `Remote @ ${args?.address || "unknown"}`,
+      device_type: "remote",
+    },
+    // Process commands
     enumerate_processes: [
-      { pid: 1234, name: "example.exe", path: "/usr/bin/example" },
-      { pid: 5678, name: "game.exe", path: "C:\\Games\\game.exe" },
-      { pid: 9012, name: "process.app", path: "/Applications/process.app" },
+      { pid: 1, name: "launchd" },
+      { pid: 100, name: "WindowServer" },
+      { pid: 200, name: "Finder", path: "/System/Library/CoreServices/Finder.app" },
+      { pid: 300, name: "Safari", path: "/Applications/Safari.app" },
+      { pid: 400, name: "Terminal", path: "/Applications/Utilities/Terminal.app" },
+      { pid: 500, name: "Xcode", path: "/Applications/Xcode.app" },
+      { pid: 600, name: "Code", path: "/Applications/Visual Studio Code.app" },
+      { pid: 700, name: "Discord", path: "/Applications/Discord.app" },
+      { pid: 800, name: "Chrome", path: "/Applications/Google Chrome.app" },
+      { pid: 900, name: "ExampleGame", path: "/Users/user/Games/ExampleGame.app" },
     ],
     attach_to_process: `mock-session-${args?.pid || "unknown"}`,
     detach_from_process: undefined,
-    list_adapters: [
-      { id: "local_pc", name: "Local PC", connected: true },
-      { id: "usb_device", name: "USB Device", connected: false },
-    ],
-    select_adapter: undefined,
-    get_current_adapter: "local_pc",
     inject_script: `mock-script-${Date.now()}`,
     unload_script: undefined,
     // Project commands
@@ -108,6 +124,23 @@ function getMockResponse<T>(cmd: string, args?: Record<string, unknown>): T {
   return (mocks[cmd] ?? null) as T;
 }
 
+// Device commands
+export async function listDevices(): Promise<DeviceInfo[]> {
+  return invoke<DeviceInfo[]>("list_devices");
+}
+
+export async function selectDevice(deviceId: string): Promise<void> {
+  return invoke<void>("select_device", { deviceId });
+}
+
+export async function getCurrentDevice(): Promise<string | null> {
+  return invoke<string | null>("get_current_device");
+}
+
+export async function addRemoteDevice(address: string): Promise<DeviceInfo> {
+  return invoke<DeviceInfo>("add_remote_device", { address });
+}
+
 // Process commands
 export async function enumerateProcesses(): Promise<ProcessInfo[]> {
   return invoke<ProcessInfo[]>("enumerate_processes");
@@ -119,19 +152,6 @@ export async function attachToProcess(pid: number): Promise<string> {
 
 export async function detachFromProcess(sessionId: string): Promise<void> {
   return invoke<void>("detach_from_process", { sessionId });
-}
-
-// Adapter commands
-export async function listAdapters(): Promise<AdapterInfo[]> {
-  return invoke<AdapterInfo[]>("list_adapters");
-}
-
-export async function selectAdapter(adapterId: string): Promise<void> {
-  return invoke<void>("select_adapter", { adapterId });
-}
-
-export async function getCurrentAdapter(): Promise<string | null> {
-  return invoke<string | null>("get_current_adapter");
 }
 
 // Script commands

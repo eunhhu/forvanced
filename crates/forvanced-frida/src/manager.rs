@@ -7,14 +7,22 @@ use uuid::Uuid;
 use frida::{DeviceManager, DeviceType, Frida};
 
 use crate::error::{FridaError, Result};
-use crate::process::ProcessInfo;
+use crate::process::{DeviceInfo, FridaDeviceType, ProcessInfo};
 use crate::session::FridaSession;
 
 pub struct FridaManager {
+    #[allow(dead_code)]
     frida: Arc<Frida>,
     device_manager: DeviceManager<'static>,
     sessions: Arc<RwLock<HashMap<String, Arc<FridaSession>>>>,
 }
+
+// SAFETY: FridaManager is thread-safe because:
+// 1. Frida's C API is thread-safe (uses GLib main loop internally)
+// 2. We use RwLock for sessions
+// 3. DeviceManager operations are synchronized by Frida internally
+unsafe impl Send for FridaManager {}
+unsafe impl Sync for FridaManager {}
 
 impl FridaManager {
     pub fn new() -> Result<Self> {
@@ -34,76 +42,99 @@ impl FridaManager {
         })
     }
 
-    pub fn enumerate_local_processes(&self) -> Result<Vec<ProcessInfo>> {
-        debug!("Enumerating local processes");
+    /// Enumerate all available Frida devices
+    pub fn enumerate_devices(&self) -> Result<Vec<DeviceInfo>> {
+        debug!("Enumerating all Frida devices");
 
-        let device = self
-            .device_manager
-            .get_local_device()
-            .map_err(|e| FridaError::DeviceNotFound(e.to_string()))?;
+        let devices = self.device_manager.enumerate_all_devices();
 
-        let processes = device
-            .enumerate_processes()
-            .map_err(|e| FridaError::Frida(e.to_string()))?;
+        let result: Vec<DeviceInfo> = devices
+            .iter()
+            .map(|d| {
+                let device_type = match d.get_type() {
+                    DeviceType::Local => FridaDeviceType::Local,
+                    DeviceType::Remote => FridaDeviceType::Remote,
+                    DeviceType::USB => FridaDeviceType::Usb,
+                    _ => FridaDeviceType::Local, // Unknown device types default to Local
+                };
+                DeviceInfo::new(d.get_id(), d.get_name(), device_type)
+            })
+            .collect();
+
+        info!("Found {} devices", result.len());
+        Ok(result)
+    }
+
+    /// Enumerate processes on a specific device by device ID
+    pub fn enumerate_processes_on_device(&self, device_id: &str) -> Result<Vec<ProcessInfo>> {
+        debug!("Enumerating processes on device: {}", device_id);
+
+        let devices = self.device_manager.enumerate_all_devices();
+
+        let device = devices
+            .iter()
+            .find(|d| d.get_id() == device_id)
+            .ok_or_else(|| FridaError::DeviceNotFound(format!("Device '{}' not found", device_id)))?;
+
+        let processes = device.enumerate_processes();
 
         let result: Vec<ProcessInfo> = processes
             .iter()
             .map(|p| ProcessInfo::new(p.get_pid(), p.get_name()))
             .collect();
 
-        info!("Found {} processes", result.len());
+        info!("Found {} processes on device {}", result.len(), device_id);
         Ok(result)
     }
 
-    pub fn enumerate_usb_processes(&self) -> Result<Vec<ProcessInfo>> {
-        debug!("Enumerating USB device processes");
+    /// Attach to a process on a specific device by device ID
+    /// NOTE: All Frida operations (devices, attach) happen synchronously before any await
+    pub async fn attach_on_device(&self, device_id: &str, pid: u32) -> Result<String> {
+        info!("Attaching to process {} on device {}", pid, device_id);
 
-        let devices = self
-            .device_manager
-            .enumerate_all_devices()
-            .map_err(|e| FridaError::Frida(e.to_string()))?;
+        // Do all Frida work synchronously first (no await crossing)
+        let (session_id, frida_session) = {
+            let devices = self.device_manager.enumerate_all_devices();
 
-        let usb_device = devices
-            .iter()
-            .find(|d| d.get_type() == DeviceType::USB)
-            .ok_or_else(|| FridaError::DeviceNotFound("No USB device found".to_string()))?;
+            let device = devices
+                .iter()
+                .find(|d| d.get_id() == device_id)
+                .ok_or_else(|| FridaError::DeviceNotFound(format!("Device '{}' not found", device_id)))?;
 
-        let processes = usb_device
-            .enumerate_processes()
-            .map_err(|e| FridaError::Frida(e.to_string()))?;
+            let _session = device
+                .attach(pid)
+                .map_err(|e| FridaError::AttachFailed(e.to_string()))?;
 
-        let result: Vec<ProcessInfo> = processes
-            .iter()
-            .map(|p| ProcessInfo::new(p.get_pid(), p.get_name()))
-            .collect();
+            let process_info = ProcessInfo::new(pid, format!("{}:pid:{}", device_id, pid));
+            let session_id = Uuid::new_v4().to_string();
+            let frida_session = Arc::new(FridaSession::new(session_id.clone(), process_info));
 
-        info!("Found {} processes on USB device", result.len());
-        Ok(result)
-    }
+            (session_id, frida_session)
+        }; // devices and _session are dropped here, before any await
 
-    pub async fn attach_local(&self, pid: u32) -> Result<String> {
-        info!("Attaching to local process {}", pid);
-
-        let device = self
-            .device_manager
-            .get_local_device()
-            .map_err(|e| FridaError::DeviceNotFound(e.to_string()))?;
-
-        let _session = device
-            .attach(pid)
-            .map_err(|e| FridaError::AttachFailed(e.to_string()))?;
-
-        let process_info = ProcessInfo::new(pid, format!("pid:{}", pid));
-        let session_id = Uuid::new_v4().to_string();
-        let frida_session = Arc::new(FridaSession::new(session_id.clone(), process_info));
-
+        // Now we can safely await
         self.sessions
             .write()
             .await
             .insert(session_id.clone(), frida_session);
 
-        info!("Attached to process {}, session: {}", pid, session_id);
+        info!("Attached to process {} on device {}, session: {}", pid, device_id, session_id);
         Ok(session_id)
+    }
+
+    /// Add a remote device and return its info
+    pub fn add_remote_device(&self, address: &str) -> Result<DeviceInfo> {
+        debug!("Adding remote device at {}", address);
+
+        // get_remote_device actually adds the remote device in frida-rust
+        let device = self
+            .device_manager
+            .get_remote_device(address)
+            .map_err(|e| FridaError::ConnectionFailed(e.to_string()))?;
+
+        let info = DeviceInfo::new(device.get_id(), device.get_name(), FridaDeviceType::Remote);
+        info!("Added remote device: {} ({})", info.name, info.id);
+        Ok(info)
     }
 
     pub async fn detach(&self, session_id: &str) -> Result<()> {

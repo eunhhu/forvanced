@@ -5,6 +5,12 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[features]
+default = ["mock"]
+mock = ["forvanced-frida/mock"]
+# Use: cargo run --no-default-features --features real
+real = ["forvanced-frida/real"]
+
 [lib]
 name = "forvanced_builder_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
@@ -30,6 +36,5 @@ chrono = { workspace = true }
 
 # Internal crates
 forvanced-core = { path = "../../../crates/forvanced-core" }
-forvanced-frida = { path = "../../../crates/forvanced-frida" }
-forvanced-adapters = { path = "../../../crates/forvanced-adapters" }
+forvanced-frida = { path = "../../../crates/forvanced-frida", default-features = false }
 forvanced-build = { path = "../../../crates/forvanced-build" }

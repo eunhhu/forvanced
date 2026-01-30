@@ -10,7 +10,7 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::error::{FridaError, Result};
-use crate::process::ProcessInfo;
+use crate::process::{DeviceInfo, FridaDeviceType, ProcessInfo};
 use crate::session::FridaSession;
 
 /// Mock FridaManager that simulates Frida functionality for development.
@@ -28,9 +28,28 @@ impl FridaManager {
         })
     }
 
-    /// Returns a simulated list of processes for UI testing.
-    pub fn enumerate_local_processes(&self) -> Result<Vec<ProcessInfo>> {
-        debug!("Mock: enumerating local processes");
+    /// Returns a simulated list of devices for UI testing.
+    pub fn enumerate_devices(&self) -> Result<Vec<DeviceInfo>> {
+        debug!("Mock: enumerating devices");
+
+        let mock_devices = vec![
+            DeviceInfo::new("local", "Local System", FridaDeviceType::Local),
+        ];
+
+        info!("Mock: returning {} devices", mock_devices.len());
+        Ok(mock_devices)
+    }
+
+    /// Returns a simulated list of processes for a device.
+    pub fn enumerate_processes_on_device(&self, device_id: &str) -> Result<Vec<ProcessInfo>> {
+        debug!("Mock: enumerating processes on device {}", device_id);
+
+        if device_id != "local" {
+            return Err(FridaError::DeviceNotFound(format!(
+                "Mock: Device '{}' not found",
+                device_id
+            )));
+        }
 
         // Return some fake processes for testing
         let mock_processes = vec![
@@ -52,19 +71,16 @@ impl FridaManager {
         Ok(mock_processes)
     }
 
-    /// Returns a simulated list of USB device processes.
-    pub fn enumerate_usb_processes(&self) -> Result<Vec<ProcessInfo>> {
-        debug!("Mock: enumerating USB processes");
+    /// Simulates attaching to a process on a device.
+    pub async fn attach_on_device(&self, device_id: &str, pid: u32) -> Result<String> {
+        info!("Mock: attaching to process {} on device {}", pid, device_id);
 
-        // Simulate no USB device connected
-        Err(FridaError::DeviceNotFound(
-            "Mock: No USB device connected".to_string(),
-        ))
-    }
-
-    /// Simulates attaching to a process.
-    pub async fn attach_local(&self, pid: u32) -> Result<String> {
-        info!("Mock: attaching to process {}", pid);
+        if device_id != "local" {
+            return Err(FridaError::DeviceNotFound(format!(
+                "Mock: Device '{}' not found",
+                device_id
+            )));
+        }
 
         let process_info = ProcessInfo::new(pid, format!("mock_process_{}", pid));
         let session_id = Uuid::new_v4().to_string();
@@ -77,6 +93,18 @@ impl FridaManager {
 
         info!("Mock: attached to process {}, session: {}", pid, session_id);
         Ok(session_id)
+    }
+
+    /// Simulates adding a remote device.
+    pub fn add_remote_device(&self, address: &str) -> Result<DeviceInfo> {
+        debug!("Mock: adding remote device at {}", address);
+
+        // Return a fake remote device
+        Ok(DeviceInfo::new(
+            format!("remote-{}", address),
+            format!("Remote @ {}", address),
+            FridaDeviceType::Remote,
+        ))
     }
 
     /// Simulates detaching from a session.

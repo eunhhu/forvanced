@@ -2,7 +2,10 @@ import { createSignal, createRoot, createEffect } from "solid-js";
 
 // OS detection helper
 async function getOS(): Promise<string> {
-  if (typeof window === "undefined" || !("__TAURI__" in window)) {
+  if (
+    typeof window === "undefined" ||
+    !("__TAURI_INTERNALS__" in window || "__TAURI__" in window)
+  ) {
     return "unknown";
   }
   try {

@@ -4,7 +4,9 @@ use tokio::sync::RwLock;
 
 use crate::error::{AdapterError, Result};
 use crate::local_pc::LocalPCAdapter;
+use crate::remote::RemoteAdapter;
 use crate::traits::TargetAdapter;
+use crate::usb::USBAdapter;
 
 pub struct AdapterRegistry {
     adapters: HashMap<String, Arc<RwLock<Box<dyn TargetAdapter>>>>,
@@ -24,6 +26,8 @@ impl AdapterRegistry {
 
         // Register built-in adapters
         registry.register(Box::new(LocalPCAdapter::new()));
+        registry.register(Box::new(USBAdapter::new()));
+        registry.register(Box::new(RemoteAdapter::default()));
 
         registry
     }

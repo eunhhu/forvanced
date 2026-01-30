@@ -10,7 +10,10 @@ import { IconSettings, IconFolder } from "@/components/common/Icons";
 
 // Check if running in Tauri environment
 function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI__" in window;
+  return (
+    typeof window !== "undefined" &&
+    ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)
+  );
 }
 
 export interface AppSettings {

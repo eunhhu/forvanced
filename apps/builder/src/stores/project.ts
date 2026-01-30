@@ -2,7 +2,10 @@ import { createSignal, createRoot } from "solid-js";
 
 // Check if running in Tauri environment (evaluated at call time)
 function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI__" in window;
+  return (
+    typeof window !== "undefined" &&
+    ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)
+  );
 }
 
 // Dynamic invoke wrapper
