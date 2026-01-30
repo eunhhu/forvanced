@@ -184,6 +184,10 @@ function createDesignerStore() {
     initializeComponentValue(component);
 
     setSelectedId(component.id);
+
+    // Schedule sync after all state updates
+    scheduleSyncToProject();
+
     return component;
   }
 
@@ -219,6 +223,8 @@ function createDesignerStore() {
     setComponents((prev) =>
       prev.map((c) => (c.id === id ? { ...c, ...updates } : c)),
     );
+    // Schedule sync after state updates
+    scheduleSyncToProject();
   }
 
   // Delete component (also removes from parent and deletes children recursively)
@@ -256,19 +262,29 @@ function createDesignerStore() {
     if (selectedId() === id) {
       setSelectedId(null);
     }
+
+    // Schedule sync after deletion
+    scheduleSyncToProject();
   }
 
-  // Move component
+  // Move component (does NOT sync during drag - call syncToProject after drag ends)
   function moveComponent(id: string, x: number, y: number) {
-    updateComponent(id, { x: Math.max(0, x), y: Math.max(0, y) });
+    // Direct state update without scheduling sync (for performance during drag)
+    setComponents((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, x: Math.max(0, x), y: Math.max(0, y) } : c)),
+    );
   }
 
-  // Resize component
+  // Resize component (does NOT sync during resize - call syncToProject after resize ends)
   function resizeComponent(id: string, width: number, height: number) {
-    updateComponent(id, {
-      width: Math.max(50, width),
-      height: Math.max(24, height),
-    });
+    // Direct state update without scheduling sync (for performance during resize)
+    setComponents((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? { ...c, width: Math.max(50, width), height: Math.max(24, height) }
+          : c,
+      ),
+    );
   }
 
   // Note: Binding functions removed - actions are now handled by visual scripts
@@ -401,7 +417,7 @@ function createDesignerStore() {
       );
     }
 
-    // Update component's parentId
+    // Update component's parentId (this will also schedule sync)
     updateComponent(componentId, { parentId: newParentId || undefined });
   }
 
@@ -617,59 +633,87 @@ function createDesignerStore() {
     }
   }
 
-  // Debounce timer for sync
-  let syncTimer: ReturnType<typeof setTimeout> | null = null;
+  // Sync state management
+  let syncScheduled = false;
+  let syncTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
-  // Sync to project (debounced internally)
-  function syncToProject() {
+  // Schedule sync to project (debounced with setTimeout for safety)
+  function scheduleSyncToProject() {
     // Don't sync if we're loading from project (prevents loop)
+    if (isLoadingFromProject) return;
+    if (syncScheduled) return;
+
+    syncScheduled = true;
+    // Use setTimeout instead of requestAnimationFrame for more reliable timing
+    syncTimeoutId = setTimeout(() => {
+      syncScheduled = false;
+      syncTimeoutId = null;
+      performSyncToProject();
+    }, 50);
+  }
+
+  // Actually perform the sync (internal)
+  function performSyncToProject() {
     if (isLoadingFromProject) return;
 
     const project = projectStore.currentProject();
     if (!project) return;
 
-    // Cancel previous timer
-    if (syncTimer) clearTimeout(syncTimer);
+    // Include all component data including hierarchy
+    const uiComponents = components().map((c) => ({
+      id: c.id,
+      type: c.type,
+      label: c.label,
+      x: c.x,
+      y: c.y,
+      width: c.width,
+      height: c.height,
+      props: c.props,
+      parentId: c.parentId,
+      children: c.children,
+      zIndex: c.zIndex,
+      visible: c.visible,
+      locked: c.locked,
+      collapsed: c.collapsed,
+      widthMode: c.widthMode,
+      heightMode: c.heightMode,
+    }));
 
-    // Debounce the sync
-    syncTimer = setTimeout(() => {
-      // Include all component data including hierarchy
-      const uiComponents = components().map((c) => ({
-        id: c.id,
-        type: c.type,
-        label: c.label,
-        x: c.x,
-        y: c.y,
-        width: c.width,
-        height: c.height,
-        props: c.props,
-        parentId: c.parentId,
-        children: c.children,
-        zIndex: c.zIndex,
-        visible: c.visible,
-        locked: c.locked,
-        collapsed: c.collapsed,
-        widthMode: c.widthMode,
-        heightMode: c.heightMode,
-      }));
-
-      projectStore.updateUI({
+    // Use silent update to prevent re-renders in other components
+    // This only updates the internal state without creating a new project object
+    projectStore.updateUI(
+      {
         ...project.ui,
         components: uiComponents,
-      });
-      syncTimer = null;
-    }, 100);
+      },
+      true, // silentComponentUpdate
+    );
   }
 
-  // Sync components to project when they change
-  createEffect(() => {
-    // Track components signal to trigger effect on changes
-    components();
-    const project = projectStore.currentProject();
-    if (project && !isLoadingFromProject) {
-      syncToProject();
+  // Explicit sync function for external use (e.g., after drag/resize ends)
+  function syncToProject() {
+    // Cancel any pending scheduled sync
+    if (syncTimeoutId) {
+      clearTimeout(syncTimeoutId);
+      syncTimeoutId = null;
+      syncScheduled = false;
     }
-  });
+    // Perform sync immediately but in next microtask to avoid blocking
+    queueMicrotask(() => {
+      performSyncToProject();
+    });
+  }
+
+  // Sync to project is now called explicitly after operations that need it
+  // to avoid re-render loops. The automatic sync was causing issues because:
+  // 1. addComponent() changes components()
+  // 2. createEffect detects change, calls syncToProject()
+  // 3. syncToProject() calls projectStore.updateUI()
+  // 4. updateUI() calls setCurrentProject() with a new object
+  // 5. Components tracking currentProject() re-render
+  // 6. This can break event handlers and cause click events to stop working
+  //
+  // Instead, we defer sync to next animation frame to batch updates
 
   return {
     // State signals

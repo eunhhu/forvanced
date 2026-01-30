@@ -1,6 +1,6 @@
-import { Component, createEffect, createSignal } from "solid-js";
+import { Component, createEffect, createSignal, createMemo, on, untrack } from "solid-js";
 import { ComponentPalette } from "./ComponentPalette";
-import { DesignCanvas } from "./DesignCanvas";
+import { DesignCanvas, setCanvasWidth, setCanvasHeight } from "./DesignCanvas";
 import { PropertyPanel } from "./PropertyPanel";
 import { LayersPanel } from "./LayersPanel";
 import { designerStore } from "@/stores/designer";
@@ -12,13 +12,38 @@ export const UIDesigner: Component = () => {
   const [rightPanelTab, setRightPanelTab] =
     createSignal<RightPanelTab>("properties");
 
-  // Load components from project when project changes
-  createEffect(() => {
-    const project = projectStore.currentProject();
-    if (project) {
-      designerStore.loadFromProject();
-    }
-  });
+  // Extract only the values we care about to minimize reactivity
+  const projectId = createMemo(() => projectStore.currentProject()?.id);
+  const projectUiWidth = createMemo(() => projectStore.currentProject()?.ui?.width ?? 400);
+  const projectUiHeight = createMemo(() => projectStore.currentProject()?.ui?.height ?? 500);
+
+  // Load from project when project ID changes
+  createEffect(
+    on(projectId, (id, prevId) => {
+      if (id && id !== prevId) {
+        // Use untrack to read values without adding dependencies
+        const project = untrack(() => projectStore.currentProject());
+        if (project) {
+          designerStore.loadFromProject();
+          // Set canvas size from project
+          setCanvasWidth(untrack(projectUiWidth));
+          setCanvasHeight(untrack(projectUiHeight));
+        }
+      }
+    }),
+  );
+
+  // Update canvas size when UI size settings change (from settings panel)
+  createEffect(
+    on(
+      () => [projectUiWidth(), projectUiHeight()] as const,
+      ([w, h]) => {
+        if (w > 0) setCanvasWidth(w);
+        if (h > 0) setCanvasHeight(h);
+      },
+      { defer: true },
+    ),
+  );
 
   return (
     <div class="flex h-full">

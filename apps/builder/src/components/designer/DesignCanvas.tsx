@@ -7,21 +7,22 @@ import {
   type PageTab,
   type SizingMode,
 } from "@/stores/designer";
-import { projectStore } from "@/stores/project";
 import { TrashIcon } from "@/components/common/Icons";
+
+// Canvas size is managed separately to avoid re-renders from project sync
+// This is populated by the UI Designer when loading a project
+const [canvasWidth, setCanvasWidth] = createSignal(400);
+const [canvasHeight, setCanvasHeight] = createSignal(500);
+
+// Export setters for external use (e.g., when loading project or changing settings)
+export { setCanvasWidth, setCanvasHeight };
 
 export const DesignCanvas: Component = () => {
   let contentAreaRef: HTMLDivElement | undefined;
 
-  // Get window size from project - access ui object reactively
-  const windowWidth = createMemo(() => {
-    const width = projectStore.currentProject()?.ui?.width;
-    return width && width > 0 ? width : 400;
-  });
-  const windowHeight = createMemo(() => {
-    const height = projectStore.currentProject()?.ui?.height;
-    return height && height > 0 ? height : 500;
-  });
+  // Use module-level canvas size signals to avoid re-renders from project sync
+  const windowWidth = canvasWidth;
+  const windowHeight = canvasHeight;
 
   const handleDragOver = (e: DragEvent) => {
     e.preventDefault();
@@ -270,6 +271,8 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
       designerStore.setIsDragging(false);
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
+      // Sync to project after drag ends
+      designerStore.syncToProject();
     };
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -484,6 +487,8 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
             const handleUp = () => {
               window.removeEventListener("mousemove", handleMove);
               window.removeEventListener("mouseup", handleUp);
+              // Sync to project after resize ends
+              designerStore.syncToProject();
             };
 
             window.addEventListener("mousemove", handleMove);
@@ -827,108 +832,23 @@ const ComponentPreview: Component<ComponentPreviewProps> = (props) => {
       );
 
     case "stack": {
-      const direction = (c.props.direction as LayoutDirection) ?? "vertical";
-      const gap = (c.props.gap as number) ?? 8;
-      const padding = (c.props.padding as number) ?? 12;
+      // Stack preview is just a background - actual layout is handled by AutoLayoutContainer
       return (
-        <div
-          class="w-full h-full border-2 border-dashed border-accent/30 rounded-lg bg-accent/5 overflow-hidden"
-          style={{ padding: `${padding}px` }}
-        >
-          <div
-            class={`w-full h-full flex ${direction === "vertical" ? "flex-col" : "flex-row"} items-center justify-center`}
-            style={{ gap: `${gap}px` }}
-          >
-            <div class="text-xs text-accent/60 flex items-center gap-1">
-              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                {direction === "vertical" ? (
-                  <>
-                    <rect x="6" y="3" width="12" height="4" rx="1" />
-                    <rect x="6" y="10" width="12" height="4" rx="1" />
-                    <rect x="6" y="17" width="12" height="4" rx="1" />
-                  </>
-                ) : (
-                  <>
-                    <rect x="3" y="6" width="4" height="12" rx="1" />
-                    <rect x="10" y="6" width="4" height="12" rx="1" />
-                    <rect x="17" y="6" width="4" height="12" rx="1" />
-                  </>
-                )}
-              </svg>
-              <span>Stack ({direction})</span>
-            </div>
-          </div>
-        </div>
+        <div class="w-full h-full border-2 border-dashed border-accent/30 rounded-lg bg-accent/5 pointer-events-none" />
       );
     }
 
     case "page": {
-      const tabs = (c.props.tabs as PageTab[]) ?? [];
-      const activeIndex = (c.props.activeTabIndex as number) ?? 0;
+      // Page preview is just a background - actual tabs are rendered by PageContainer
       return (
-        <div class="w-full h-full border border-border rounded-lg bg-surface overflow-hidden flex flex-col">
-          {/* Tab header */}
-          <div class="h-8 border-b border-border flex items-center bg-background-secondary">
-            <For each={tabs}>
-              {(tab, i) => (
-                <div
-                  class={`px-3 h-full flex items-center text-xs ${
-                    i() === activeIndex
-                      ? "bg-surface border-b-2 border-accent text-accent"
-                      : "text-foreground-muted"
-                  }`}
-                >
-                  {tab.label}
-                </div>
-              )}
-            </For>
-          </div>
-          {/* Tab content area */}
-          <div class="flex-1 flex items-center justify-center text-xs text-foreground-muted">
-            Drop components here
-          </div>
-        </div>
+        <div class="w-full h-full border border-border rounded-lg bg-surface overflow-hidden pointer-events-none" />
       );
     }
 
     case "scroll": {
-      const direction = (c.props.direction as LayoutDirection) ?? "vertical";
-      const showScrollbar = (c.props.showScrollbar as boolean) ?? true;
+      // Scroll preview is just a background - actual layout is handled by AutoLayoutContainer
       return (
-        <div class="w-full h-full border border-border rounded-lg bg-surface overflow-hidden relative">
-          <div class="absolute inset-2 flex items-center justify-center text-xs text-foreground-muted">
-            <div class="flex items-center gap-1">
-              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                {direction === "vertical" ? (
-                  <>
-                    <path d="M12 3v18M12 3l-4 4M12 3l4 4M12 21l-4-4M12 21l4-4" />
-                  </>
-                ) : (
-                  <>
-                    <path d="M3 12h18M3 12l4-4M3 12l4 4M21 12l-4-4M21 12l-4 4" />
-                  </>
-                )}
-              </svg>
-              <span>Scroll ({direction})</span>
-            </div>
-          </div>
-          {/* Scrollbar indicator */}
-          <Show when={showScrollbar}>
-            <div
-              class={`absolute bg-foreground-muted/30 rounded-full ${
-                direction === "vertical"
-                  ? "right-1 top-2 bottom-2 w-1.5"
-                  : "bottom-1 left-2 right-2 h-1.5"
-              }`}
-            >
-              <div
-                class={`bg-foreground-muted/60 rounded-full ${
-                  direction === "vertical" ? "w-full h-8" : "w-8 h-full"
-                }`}
-              />
-            </div>
-          </Show>
-        </div>
+        <div class="w-full h-full border border-border rounded-lg bg-surface pointer-events-none" />
       );
     }
 

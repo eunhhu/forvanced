@@ -307,6 +307,10 @@ function createProjectStore() {
     RecentProjectEntry[]
   >([]);
 
+  // Separate signal for UI components to avoid re-rendering entire app on component changes
+  // This is synced with currentProject but can be updated independently
+  const [uiComponentsVersion, setUiComponentsVersion] = createSignal(0);
+
   async function createNew(name: string): Promise<Project> {
     setIsLoading(true);
     setError(null);
@@ -417,8 +421,30 @@ function createProjectStore() {
     }, 500);
   }
 
-  function updateUI(ui: UILayout) {
-    updateProject({ ui });
+  // Update UI without triggering full project update
+  // This is used by designerStore for frequent component updates
+  function updateUI(ui: UILayout, silentComponentUpdate = false) {
+    const project = currentProject();
+    if (!project) return;
+
+    if (silentComponentUpdate) {
+      // Silent update: only update the internal state without creating a new project object
+      // This prevents re-renders in components that track currentProject()
+      // We directly mutate the project's ui.components (not recommended generally, but needed here)
+      project.ui = ui;
+      setIsDirty(true);
+      setUiComponentsVersion((v) => v + 1);
+
+      // Still sync to backend, but debounced
+      if (syncTimer) clearTimeout(syncTimer);
+      syncTimer = setTimeout(() => {
+        invoke("update_project", { project }).catch(console.error);
+        syncTimer = null;
+      }, 500);
+    } else {
+      // Full update: create new project object (used when user changes UI settings)
+      updateProject({ ui });
+    }
   }
 
   function updateConfig(config: Partial<ProjectConfig>) {
