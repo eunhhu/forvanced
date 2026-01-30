@@ -7,7 +7,7 @@ import {
   type PageTab,
   type SizingMode,
 } from "@/stores/designer";
-import { TrashIcon } from "@/components/common/Icons";
+import { TrashIcon, IconLock } from "@/components/common/Icons";
 
 // Canvas size is managed separately to avoid re-renders from project sync
 // This is populated by the UI Designer when loading a project
@@ -711,8 +711,8 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
 
       {/* Locked indicator */}
       <Show when={isLocked() && isSelected()}>
-        <div class="absolute top-1 left-1 text-xs bg-warning/80 text-warning-foreground px-1 rounded">
-          🔒
+        <div class="absolute top-1 left-1 bg-warning/80 text-warning-foreground p-0.5 rounded flex items-center justify-center">
+          <IconLock class="w-3 h-3" />
         </div>
       </Show>
 

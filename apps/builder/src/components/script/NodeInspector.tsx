@@ -20,6 +20,7 @@ import {
   ChevronRightIcon,
   PlusIcon,
   TrashIcon,
+  IconAlertTriangle,
 } from "@/components/common/Icons";
 
 // Uncontrolled text input that doesn't lose focus on external updates
@@ -1578,8 +1579,9 @@ const UIValueConfig: Component<UIValueConfigProps> = (props) => {
       </Show>
 
       <Show when={!selectedComponent() && props.node.config.componentId}>
-        <div class="text-[9px] text-warning p-2 bg-warning/10 rounded">
-          ⚠ Component not found (may have been deleted)
+        <div class="text-[9px] text-warning p-2 bg-warning/10 rounded flex items-center gap-1">
+          <IconAlertTriangle class="w-3 h-3 flex-shrink-0" />
+          <span>Component not found (may have been deleted)</span>
         </div>
       </Show>
     </>
@@ -1700,8 +1702,9 @@ const UIPropsConfig: Component<UIPropsConfigProps> = (props) => {
       </Show>
 
       <Show when={!selectedComponent() && props.node.config.componentId}>
-        <div class="text-[9px] text-warning p-2 bg-warning/10 rounded">
-          ⚠ Component not found (may have been deleted)
+        <div class="text-[9px] text-warning p-2 bg-warning/10 rounded flex items-center gap-1">
+          <IconAlertTriangle class="w-3 h-3 flex-shrink-0" />
+          <span>Component not found (may have been deleted)</span>
         </div>
       </Show>
     </>
