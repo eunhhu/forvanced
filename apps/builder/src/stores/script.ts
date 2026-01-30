@@ -1814,10 +1814,80 @@ function createScriptStore() {
   function deleteScript(id: string) {
     setScripts((prev) => prev.filter((s) => s.id !== id));
     if (currentScriptId() === id) {
-      setCurrentScriptId(null);
+      const remaining = scripts().filter((s) => s.id !== id);
+      setCurrentScriptId(remaining.length > 0 ? remaining[0].id : null);
     }
     // Notify project store of script change
     notifyScriptChange();
+  }
+
+  // Rename script
+  function renameScript(id: string, newName: string) {
+    setScripts((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, name: newName } : s))
+    );
+    // Notify project store of script change
+    notifyScriptChange();
+  }
+
+  // Duplicate script
+  function duplicateScript(id: string) {
+    const script = scripts().find((s) => s.id === id);
+    if (!script) return null;
+
+    const newId = crypto.randomUUID();
+    const nodeIdMap = new Map<string, string>();
+    const portIdMap = new Map<string, string>();
+
+    // Deep clone nodes with new IDs
+    const newNodes = script.nodes.map((node) => {
+      const newNodeId = crypto.randomUUID();
+      nodeIdMap.set(node.id, newNodeId);
+
+      const newInputs = node.inputs.map((port) => {
+        const newPortId = crypto.randomUUID();
+        portIdMap.set(port.id, newPortId);
+        return { ...port, id: newPortId };
+      });
+
+      const newOutputs = node.outputs.map((port) => {
+        const newPortId = crypto.randomUUID();
+        portIdMap.set(port.id, newPortId);
+        return { ...port, id: newPortId };
+      });
+
+      return {
+        ...node,
+        id: newNodeId,
+        inputs: newInputs,
+        outputs: newOutputs,
+        config: { ...node.config },
+      };
+    });
+
+    // Remap connections
+    const newConnections = script.connections.map((conn) => ({
+      id: crypto.randomUUID(),
+      fromNodeId: nodeIdMap.get(conn.fromNodeId) || conn.fromNodeId,
+      fromPortId: portIdMap.get(conn.fromPortId) || conn.fromPortId,
+      toNodeId: nodeIdMap.get(conn.toNodeId) || conn.toNodeId,
+      toPortId: portIdMap.get(conn.toPortId) || conn.toPortId,
+    }));
+
+    const newScript: Script = {
+      id: newId,
+      name: `${script.name} (Copy)`,
+      nodes: newNodes,
+      connections: newConnections,
+      variables: script.variables.map((v) => ({ ...v, id: crypto.randomUUID() })),
+    };
+
+    setScripts((prev) => [...prev, newScript]);
+    setCurrentScriptId(newId);
+    // Notify project store of script change
+    notifyScriptChange();
+
+    return newScript;
   }
 
   // Update port types when config.valueType changes (for memory nodes)
@@ -2248,6 +2318,8 @@ function createScriptStore() {
     getCurrentScript,
     createScript,
     deleteScript,
+    renameScript,
+    duplicateScript,
     addNode,
     updateNode,
     updateNativeNodeArgCount,

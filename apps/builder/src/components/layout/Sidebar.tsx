@@ -21,10 +21,9 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { id: "project", label: "Project", icon: IconFolder, shortcut: ["Cmd", "1"] },
-  { id: "target", label: "Target", icon: IconCpu, shortcut: ["Cmd", "2"] },
-  { id: "designer", label: "Designer", icon: IconLayout, shortcut: ["Cmd", "3"] },
-  { id: "scripts", label: "Scripts", icon: IconWorkflow, shortcut: ["Cmd", "4"] },
-  { id: "build", label: "Build", icon: IconPackage, shortcut: ["Cmd", "5"] },
+  { id: "designer", label: "Designer", icon: IconLayout, shortcut: ["Cmd", "2"] },
+  { id: "scripts", label: "Scripts", icon: IconWorkflow, shortcut: ["Cmd", "3"] },
+  { id: "build", label: "Build", icon: IconPackage, shortcut: ["Cmd", "4"] },
 ];
 
 interface SidebarProps {

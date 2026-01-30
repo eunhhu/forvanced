@@ -15,8 +15,7 @@ export type HotkeyCategory =
   | "navigation"
   | "project"
   | "designer"
-  | "script"
-  | "target";
+  | "script";
 
 // Detect OS
 const isMac =
@@ -219,5 +218,4 @@ export const categoryLabels: Record<HotkeyCategory, string> = {
   project: "Project",
   designer: "Designer",
   script: "Script",
-  target: "Target",
 };

@@ -394,14 +394,6 @@ export const BuildPanel: Component = () => {
                     </div>
                   </div>
 
-                  <div class="p-3 bg-surface rounded-lg">
-                    <div class="text-foreground-muted text-sm mb-1">
-                      Target Process
-                    </div>
-                    <div class="font-medium">
-                      {project().config.target.process_name || "Not configured"}
-                    </div>
-                  </div>
                 </div>
               </Show>
             </div>

@@ -1,12 +1,8 @@
 import { Component, Show } from "solid-js";
-import { targetStore } from "@/stores/target";
 import { projectStore } from "@/stores/project";
-import { IconPlug, IconCheck, IconFolder } from "@/components/common/Icons";
+import { IconFolder } from "@/components/common/Icons";
 
 export const Header: Component = () => {
-  const isAttached = () => targetStore.isAttached();
-  const attachedPid = () => targetStore.attachedPid();
-
   const projectName = () => projectStore.currentProject()?.name;
   const projectPath = () => projectStore.projectPath();
   const isDirty = () => projectStore.isDirty();
@@ -46,42 +42,17 @@ export const Header: Component = () => {
               {fileName()}
             </div>
           </Show>
-          <div class="w-px h-4 bg-border" aria-hidden="true" />
         </Show>
 
-        {/* Device Info */}
-        <div class="text-sm text-foreground-secondary" aria-label="Current device">
-          Device:{" "}
-          <span class="text-foreground font-medium">
-            {targetStore.currentDeviceId() || "None"}
-          </span>
-        </div>
-      </div>
-
-      <div class="flex items-center gap-2 no-drag" role="status" aria-live="polite">
-        <Show
-          when={isAttached()}
-          fallback={
-            <div class="flex items-center gap-2 text-sm text-foreground-muted" aria-label="Not attached to any process">
-              <IconPlug class="w-4 h-4" aria-hidden="true" />
-              <span>Not attached</span>
-            </div>
-          }
-        >
-          <div class="flex items-center gap-2 text-sm text-success" aria-label={`Attached to process ${attachedPid()}`}>
-            <IconCheck class="w-4 h-4" aria-hidden="true" />
-            <span>Attached to PID {attachedPid()}</span>
+        <Show when={!projectName()}>
+          <div class="text-sm text-foreground-muted">
+            No project loaded
           </div>
-          <button
-            type="button"
-            class="btn btn-ghost text-xs"
-            onClick={() => targetStore.detach()}
-            aria-label="Detach from current process"
-          >
-            Detach
-          </button>
         </Show>
       </div>
+
+      {/* Placeholder for future status indicators */}
+      <div class="flex items-center gap-2 no-drag" />
     </header>
   );
 };

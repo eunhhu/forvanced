@@ -1,7 +1,6 @@
 import { Component, createSignal, Show, onMount, onCleanup } from "solid-js";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
-import { ProcessList } from "@/components/process/ProcessList";
 import { UIDesigner } from "@/components/designer/UIDesigner";
 import { ProjectPanel } from "@/components/project/ProjectPanel";
 import { BuildPanel } from "@/components/build/BuildPanel";
@@ -11,9 +10,7 @@ import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { HotkeysHelp } from "@/components/common/HotkeysHelp";
 import { CommandPalette } from "@/components/common/CommandPalette";
 import { SkipLinks } from "@/components/common/SkipLinks";
-import { targetStore } from "@/stores/target";
 import { sidebarStore } from "@/stores/sidebar";
-import { errorStore } from "@/stores/error";
 import { hotkeysStore, type Hotkey } from "@/stores/hotkeys";
 import { projectStore } from "@/stores/project";
 import { uiStore, type MainTab } from "@/stores/ui";
@@ -27,8 +24,6 @@ const App: Component = () => {
   // Use uiStore for activeTab so it's accessible to hotkeys
   const activeTab = uiStore.activeTab;
   const setActiveTab = uiStore.setActiveTab;
-  const [initialized, setInitialized] = createSignal(false);
-  const [error, setError] = createSignal<string | null>(null);
   const [showSettings, setShowSettings] = createSignal(false);
 
   onMount(async () => {
@@ -78,29 +73,22 @@ const App: Component = () => {
         action: () => setActiveTab("project"),
       },
       {
-        id: "nav-target",
-        keys: ["Cmd", "2"],
-        description: "Go to Target",
-        category: "navigation",
-        action: () => setActiveTab("target"),
-      },
-      {
         id: "nav-designer",
-        keys: ["Cmd", "3"],
+        keys: ["Cmd", "2"],
         description: "Go to Designer",
         category: "navigation",
         action: () => setActiveTab("designer"),
       },
       {
         id: "nav-scripts",
-        keys: ["Cmd", "4"],
+        keys: ["Cmd", "3"],
         description: "Go to Scripts",
         category: "navigation",
         action: () => setActiveTab("scripts"),
       },
       {
         id: "nav-build",
-        keys: ["Cmd", "5"],
+        keys: ["Cmd", "4"],
         description: "Go to Build",
         category: "navigation",
         action: () => setActiveTab("build"),
@@ -139,28 +127,6 @@ const App: Component = () => {
         action: async () => {
           await projectStore.openFile();
         },
-      },
-
-      // Target
-      {
-        id: "detach-process",
-        keys: ["Cmd", "D"],
-        description: "Detach from process",
-        category: "target",
-        action: () => targetStore.detach(),
-        enabled: () => targetStore.isAttached(),
-      },
-      {
-        id: "refresh-processes",
-        keys: ["Cmd", "R"],
-        description: "Refresh process list",
-        category: "target",
-        action: () => {
-          if (uiStore.activeTab() === "target") {
-            targetStore.refetchProcesses();
-          }
-        },
-        enabled: () => uiStore.activeTab() === "target",
       },
 
       // Designer - Delete selected components
@@ -203,14 +169,7 @@ const App: Component = () => {
           }
           // Then delete selected nodes
           if (scriptStore.selectedNodeIds().size > 0) {
-            const selectedNodes = scriptStore.getSelectedNodes();
-            // Don't delete event nodes (entry points) unless multiple selected
-            const canDelete = selectedNodes.every(
-              (n) => !n.type.startsWith("event_") || selectedNodes.length > 1,
-            );
-            if (canDelete) {
-              scriptStore.deleteSelectedNodes();
-            }
+            scriptStore.deleteSelectedNodes();
           }
         },
         enabled: () =>
@@ -235,28 +194,6 @@ const App: Component = () => {
     ];
 
     const unregisterHotkeys = hotkeysStore.registerHotkeys(globalHotkeys);
-
-    // Initialize devices
-    try {
-      const checkDevices = async () => {
-        const devices = targetStore.devices();
-        if (devices && devices.length > 0) {
-          await targetStore.changeDevice(devices[0].id);
-          setInitialized(true);
-        } else if (targetStore.devices.loading) {
-          setTimeout(checkDevices, 100);
-        } else {
-          setInitialized(true);
-        }
-      };
-      await checkDevices();
-    } catch (err) {
-      console.error("Failed to initialize:", err);
-      const message = err instanceof Error ? err.message : String(err);
-      setError(message);
-      errorStore.showError("Initialization Failed", message);
-      setInitialized(true);
-    }
 
     onCleanup(() => {
       unregisterHotkeys();
@@ -285,39 +222,20 @@ const App: Component = () => {
           role="main"
           aria-label={`${activeTab()} panel`}
         >
-          <Show
-            when={initialized()}
-            fallback={
-              <div class="flex items-center justify-center h-full">
-                <div class="text-foreground-muted">Initializing...</div>
-              </div>
-            }
-          >
-            <Show when={error()}>
-              <div class="m-4 p-4 bg-error/10 border border-error/20 rounded-lg text-error text-sm">
-                Failed to initialize: {error()}
-              </div>
-            </Show>
+          <Show when={activeTab() === "project"}>
+            <ProjectPanel />
+          </Show>
 
-            <Show when={activeTab() === "project"}>
-              <ProjectPanel />
-            </Show>
+          <Show when={activeTab() === "designer"}>
+            <UIDesigner />
+          </Show>
 
-            <Show when={activeTab() === "target"}>
-              <ProcessList />
-            </Show>
+          <Show when={activeTab() === "scripts"}>
+            <ScriptEditor />
+          </Show>
 
-            <Show when={activeTab() === "designer"}>
-              <UIDesigner />
-            </Show>
-
-            <Show when={activeTab() === "scripts"}>
-              <ScriptEditor />
-            </Show>
-
-            <Show when={activeTab() === "build"}>
-              <BuildPanel />
-            </Show>
+          <Show when={activeTab() === "build"}>
+            <BuildPanel />
           </Show>
         </main>
       </div>

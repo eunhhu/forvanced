@@ -592,9 +592,13 @@ export const NodeCanvas: Component = () => {
                       isSelected={
                         scriptStore.selectedConnectionId() === conn.id
                       }
-                      onClick={() =>
-                        scriptStore.setSelectedConnectionId(conn.id)
-                      }
+                      onClick={(e) => {
+                        if (e.altKey) {
+                          scriptStore.deleteConnection(conn.id);
+                        } else {
+                          scriptStore.setSelectedConnectionId(conn.id);
+                        }
+                      }}
                       onContextMenu={(e) =>
                         handleConnectionRightClick(e, conn.id)
                       }
@@ -711,7 +715,7 @@ interface ConnectionLineProps {
   color: string;
   isSelected?: boolean;
   isDashed?: boolean;
-  onClick?: () => void;
+  onClick?: (e: MouseEvent) => void;
   onContextMenu?: (e: MouseEvent) => void;
 }
 

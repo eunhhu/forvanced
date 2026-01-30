@@ -10,20 +10,16 @@ import {
 import {
   IconSearch,
   IconFolder,
-  IconCpu,
   IconLayout,
   IconWorkflow,
   IconPackage,
   IconSettings,
-  IconPlug,
-  IconPlay,
   SaveIcon,
   FolderOpenIcon,
   PlusIcon,
   IconKeyboard,
 } from "./Icons";
 import { hotkeysStore, formatHotkey } from "@/stores/hotkeys";
-import { targetStore } from "@/stores/target";
 import { projectStore } from "@/stores/project";
 
 interface Command {
@@ -33,7 +29,7 @@ interface Command {
   icon: Component<{ class?: string }>;
   shortcut?: string[];
   action: () => void | Promise<void>;
-  category: "navigation" | "project" | "target" | "general";
+  category: "navigation" | "project" | "general";
   enabled?: () => boolean;
 }
 
@@ -62,18 +58,10 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       category: "navigation",
     },
     {
-      id: "nav-target",
-      label: "Go to Target",
-      icon: IconCpu,
-      shortcut: ["Cmd", "2"],
-      action: () => props.onNavigate("target"),
-      category: "navigation",
-    },
-    {
       id: "nav-designer",
       label: "Go to Designer",
       icon: IconLayout,
-      shortcut: ["Cmd", "3"],
+      shortcut: ["Cmd", "2"],
       action: () => props.onNavigate("designer"),
       category: "navigation",
     },
@@ -81,7 +69,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       id: "nav-scripts",
       label: "Go to Scripts",
       icon: IconWorkflow,
-      shortcut: ["Cmd", "4"],
+      shortcut: ["Cmd", "3"],
       action: () => props.onNavigate("scripts"),
       category: "navigation",
     },
@@ -89,7 +77,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       id: "nav-build",
       label: "Go to Build",
       icon: IconPackage,
-      shortcut: ["Cmd", "5"],
+      shortcut: ["Cmd", "4"],
       action: () => props.onNavigate("build"),
       category: "navigation",
     },
@@ -135,30 +123,6 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
       },
       category: "project",
       enabled: () => !!projectStore.currentProject(),
-    },
-
-    // Target
-    {
-      id: "attach-process",
-      label: "Attach to Process",
-      description: "Go to target tab to attach",
-      icon: IconPlug,
-      action: () => props.onNavigate("target"),
-      category: "target",
-      enabled: () => !targetStore.isAttached(),
-    },
-    {
-      id: "detach-process",
-      label: "Detach from Process",
-      description: `Currently attached to PID ${targetStore.attachedPid()}`,
-      icon: IconPlay,
-      shortcut: ["Cmd", "D"],
-      action: async () => {
-        await targetStore.detach();
-        props.onClose();
-      },
-      category: "target",
-      enabled: () => targetStore.isAttached(),
     },
 
     // General
@@ -217,7 +181,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
   // Flat list for keyboard navigation
   const flatCommands = createMemo(() => {
     const result: Command[] = [];
-    const order = ["navigation", "project", "target", "general"];
+    const order = ["navigation", "project", "general"];
     for (const cat of order) {
       const cmds = groupedCommands().get(cat);
       if (cmds) result.push(...cmds);
@@ -292,11 +256,10 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
   const categoryLabels: Record<string, string> = {
     navigation: "Navigation",
     project: "Project",
-    target: "Target",
     general: "General",
   };
 
-  const categoryOrder = ["navigation", "project", "target", "general"];
+  const categoryOrder = ["navigation", "project", "general"];
 
   return (
     <Show when={props.isOpen}>

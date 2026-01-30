@@ -17,6 +17,9 @@ import {
   IconList,
   IconBox,
   IconArrowSwap,
+  TrashIcon,
+  CopyIcon,
+  EditIcon,
 } from "@/components/common/Icons";
 
 // Category icons
@@ -57,6 +60,97 @@ const categoryColors: Record<string, string> = {
   Interceptor: "text-rose-400",
   Output: "text-cyan-400",
   Function: "text-amber-400",
+};
+
+// Script item with inline action buttons
+const ScriptItem: Component<{ script: { id: string; name: string } }> = (props) => {
+  const [isRenaming, setIsRenaming] = createSignal(false);
+  const [renameValue, setRenameValue] = createSignal("");
+
+  const isSelected = () => scriptStore.currentScriptId() === props.script.id;
+
+  const handleStartRename = (e: MouseEvent) => {
+    e.stopPropagation();
+    setRenameValue(props.script.name);
+    setIsRenaming(true);
+  };
+
+  const handleRenameSubmit = () => {
+    const newName = renameValue().trim();
+    if (newName && newName !== props.script.name) {
+      scriptStore.renameScript(props.script.id, newName);
+    }
+    setIsRenaming(false);
+  };
+
+  const handleRenameKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleRenameSubmit();
+    } else if (e.key === "Escape") {
+      setIsRenaming(false);
+    }
+  };
+
+  const handleDuplicate = (e: MouseEvent) => {
+    e.stopPropagation();
+    scriptStore.duplicateScript(props.script.id);
+  };
+
+  const handleDelete = (e: MouseEvent) => {
+    e.stopPropagation();
+    if (confirm(`Delete script "${props.script.name}"?`)) {
+      scriptStore.deleteScript(props.script.id);
+    }
+  };
+
+  return (
+    <Show
+      when={!isRenaming()}
+      fallback={
+        <input
+          type="text"
+          class="w-full px-2 py-1 text-xs rounded bg-surface border border-accent outline-none text-foreground"
+          value={renameValue()}
+          onInput={(e) => setRenameValue(e.currentTarget.value)}
+          onBlur={handleRenameSubmit}
+          onKeyDown={handleRenameKeyDown}
+          autofocus
+        />
+      }
+    >
+      <div
+        class={`group flex items-center gap-1 px-1 py-0.5 rounded transition-colors cursor-pointer ${
+          isSelected() ? "bg-accent text-white" : "hover:bg-surface-hover"
+        }`}
+        onClick={() => scriptStore.setCurrentScriptId(props.script.id)}
+      >
+        <span class="flex-1 px-1 py-1 text-xs truncate">{props.script.name}</span>
+        <div class={`flex items-center gap-0.5 ${isSelected() ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+          <button
+            class={`p-0.5 rounded ${isSelected() ? "hover:bg-white/20" : "hover:bg-surface-alt"}`}
+            onClick={handleStartRename}
+            title="Rename (F2)"
+          >
+            <EditIcon class="w-3 h-3" />
+          </button>
+          <button
+            class={`p-0.5 rounded ${isSelected() ? "hover:bg-white/20" : "hover:bg-surface-alt"}`}
+            onClick={handleDuplicate}
+            title="Duplicate (Cmd+D)"
+          >
+            <CopyIcon class="w-3 h-3" />
+          </button>
+          <button
+            class={`p-0.5 rounded ${isSelected() ? "hover:bg-white/20 text-red-300" : "hover:bg-surface-alt text-error"}`}
+            onClick={handleDelete}
+            title="Delete"
+          >
+            <TrashIcon class="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+    </Show>
+  );
 };
 
 export const NodePalette: Component = () => {
@@ -213,16 +307,7 @@ export const NodePalette: Component = () => {
           </div>
           <For each={scriptStore.scripts()}>
             {(script) => (
-              <button
-                class={`w-full px-2 py-1.5 text-left text-xs rounded transition-colors ${
-                  scriptStore.currentScriptId() === script.id
-                    ? "bg-accent text-white"
-                    : "hover:bg-surface-hover"
-                }`}
-                onClick={() => scriptStore.setCurrentScriptId(script.id)}
-              >
-                {script.name}
-              </button>
+              <ScriptItem script={script} />
             )}
           </For>
           <Show when={scriptStore.scripts().length === 0}>
