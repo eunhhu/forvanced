@@ -5,6 +5,7 @@ import {
   type ComponentType,
   type LayoutDirection,
   type PageTab,
+  type SizingMode,
 } from "@/stores/designer";
 import { projectStore } from "@/stores/project";
 import { TrashIcon } from "@/components/common/Icons";
@@ -156,8 +157,8 @@ export const DesignCanvas: Component = () => {
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
               >
-                {/* Render root components sorted by z-index */}
-                <For each={designerStore.getRootComponents()}>
+                {/* Render root components sorted by z-index (ascending for render) */}
+                <For each={designerStore.getRootComponentsForRender()}>
                   {(component) => (
                     <CanvasComponent
                       component={component}
@@ -186,6 +187,12 @@ export const DesignCanvas: Component = () => {
 interface CanvasComponentProps {
   component: UIComponent;
   parentOffset: { x: number; y: number };
+  /** If true, parent handles layout (stack/scroll/page) - don't use absolute positioning */
+  inAutoLayout?: boolean;
+  /** Active tab ID for page component children filtering */
+  activeTabId?: string;
+  /** Parent's flex direction for proper sizing */
+  parentDirection?: LayoutDirection;
 }
 
 const CanvasComponent: Component<CanvasComponentProps> = (props) => {
@@ -197,12 +204,19 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
   const isSelected = () => designerStore.selectedId() === props.component.id;
   const isVisible = () => props.component.visible !== false;
   const isLocked = () => props.component.locked === true;
-  const children = createMemo(() => designerStore.getChildren(props.component.id));
+  const children = createMemo(() => designerStore.getChildrenForRender(props.component.id));
   const hasChildren = createMemo(() => children().length > 0);
 
   // Check if this component is a container type
   const isContainer = () =>
     ["group", "stack", "page", "scroll", "card"].includes(props.component.type);
+
+  // Check if this is an auto-layout container (children are auto-positioned)
+  const isAutoLayoutContainer = () =>
+    ["stack", "scroll"].includes(props.component.type);
+
+  // Check if this is a page/tab container
+  const isPageContainer = () => props.component.type === "page";
 
   const handleMouseDown = (e: MouseEvent) => {
     // Ignore if clicking on delete button or resize handle
@@ -286,24 +300,79 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
     return null;
   }
 
-  return (
-    <div
-      ref={componentRef}
-      data-component-id={props.component.id}
-      class={`absolute select-none transition-shadow ${
-        isLocked() ? "cursor-not-allowed" : "cursor-move"
-      } ${
-        isSelected()
-          ? "ring-2 ring-accent ring-offset-2 ring-offset-surface"
-          : "hover:ring-1 hover:ring-accent/50"
-      } ${isLocked() ? "opacity-80" : ""}`}
-      style={{
+  // Sizing modes
+  const widthMode = () => (props.component.widthMode as SizingMode) ?? "fixed";
+  const heightMode = () => (props.component.heightMode as SizingMode) ?? "fixed";
+  const parentDir = () => props.parentDirection ?? "vertical";
+
+  // For auto-layout children, we use flex-based sizing instead of absolute
+  const baseClass = () => {
+    const classes = ["select-none", "transition-shadow", "relative"];
+    if (isLocked()) classes.push("cursor-not-allowed");
+    else classes.push("cursor-move");
+    if (isSelected()) classes.push("ring-2 ring-accent ring-offset-2 ring-offset-surface");
+    else classes.push("hover:ring-1 hover:ring-accent/50");
+    if (isLocked()) classes.push("opacity-80");
+
+    // Only use absolute positioning if not in auto-layout
+    if (!props.inAutoLayout) {
+      classes.push("absolute");
+    } else {
+      classes.push("flex-shrink-0");
+      // In vertical stack: fill width means stretch horizontally
+      // In horizontal stack: fill height means stretch vertically
+      if (parentDir() === "vertical") {
+        if (widthMode() === "fill") classes.push("self-stretch");
+        if (heightMode() === "fill") classes.push("flex-grow");
+      } else {
+        if (heightMode() === "fill") classes.push("self-stretch");
+        if (widthMode() === "fill") classes.push("flex-grow");
+      }
+    }
+    return classes.join(" ");
+  };
+
+  // Calculate style based on sizing mode
+  const getComponentStyle = () => {
+    if (!props.inAutoLayout) {
+      return {
         left: `${props.component.x}px`,
         top: `${props.component.y}px`,
         width: `${props.component.width}px`,
         height: `${props.component.height}px`,
         "z-index": isSelected() ? 1000 : props.component.zIndex,
-      }}
+      };
+    }
+
+    const style: Record<string, string | undefined> = {};
+
+    // Width handling
+    if (widthMode() === "fixed") {
+      style.width = `${props.component.width}px`;
+    } else if (widthMode() === "hug") {
+      style["min-width"] = `${props.component.width}px`;
+      style.width = "auto";
+    }
+    // fill: handled by self-stretch or flex-grow class
+
+    // Height handling
+    if (heightMode() === "fixed") {
+      style.height = `${props.component.height}px`;
+    } else if (heightMode() === "hug") {
+      style["min-height"] = `${props.component.height}px`;
+      style.height = "auto";
+    }
+    // fill: handled by self-stretch or flex-grow class
+
+    return style;
+  };
+
+  return (
+    <div
+      ref={componentRef}
+      data-component-id={props.component.id}
+      class={baseClass()}
+      style={getComponentStyle()}
       onMouseDown={handleMouseDown}
       onClick={handleClick}
     >
@@ -342,27 +411,44 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
 
       {/* Render children inside container */}
       <Show when={isContainer() && hasChildren()}>
-        <div
-          class="absolute pointer-events-auto"
-          style={{
-            left: `${getContainerPadding(props.component)}px`,
-            top: `${getContainerPadding(props.component) + getContainerHeaderHeight(props.component)}px`,
-            right: `${getContainerPadding(props.component)}px`,
-            bottom: `${getContainerPadding(props.component)}px`,
-          }}
-        >
-          <For each={children()}>
-            {(child) => (
-              <CanvasComponent
-                component={child}
-                parentOffset={{
-                  x: props.parentOffset.x + props.component.x + getContainerPadding(props.component),
-                  y: props.parentOffset.y + props.component.y + getContainerPadding(props.component) + getContainerHeaderHeight(props.component),
-                }}
-              />
-            )}
-          </For>
-        </div>
+        {/* Auto-layout container (Stack, Scroll) */}
+        <Show when={isAutoLayoutContainer()}>
+          <AutoLayoutContainer component={props.component} parentOffset={props.parentOffset}>
+            {children()}
+          </AutoLayoutContainer>
+        </Show>
+
+        {/* Page/Tab container */}
+        <Show when={isPageContainer()}>
+          <PageContainer component={props.component} parentOffset={props.parentOffset}>
+            {children()}
+          </PageContainer>
+        </Show>
+
+        {/* Regular container (Group, Card) - absolute positioning */}
+        <Show when={!isAutoLayoutContainer() && !isPageContainer()}>
+          <div
+            class="absolute pointer-events-auto"
+            style={{
+              left: `${getContainerPadding(props.component)}px`,
+              top: `${getContainerPadding(props.component) + getContainerHeaderHeight(props.component)}px`,
+              right: `${getContainerPadding(props.component)}px`,
+              bottom: `${getContainerPadding(props.component)}px`,
+            }}
+          >
+            <For each={children()}>
+              {(child) => (
+                <CanvasComponent
+                  component={child}
+                  parentOffset={{
+                    x: props.parentOffset.x + props.component.x + getContainerPadding(props.component),
+                    y: props.parentOffset.y + props.component.y + getContainerPadding(props.component) + getContainerHeaderHeight(props.component),
+                  }}
+                />
+              )}
+            </For>
+          </div>
+        </Show>
       </Show>
 
       {/* Locked indicator */}
@@ -415,6 +501,187 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
         </div>
       </Show>
     </div>
+  );
+};
+
+// ============================================
+// Auto-Layout Container (Stack, Scroll)
+// ============================================
+interface AutoLayoutContainerProps {
+  component: UIComponent;
+  parentOffset: { x: number; y: number };
+  children: UIComponent[];
+}
+
+const AutoLayoutContainer: Component<AutoLayoutContainerProps> = (props) => {
+  const direction = () => (props.component.props.direction as LayoutDirection) ?? "vertical";
+  const gap = () => (props.component.props.gap as number) ?? 8;
+  const padding = () => (props.component.props.padding as number) ?? 12;
+  const headerHeight = () => getContainerHeaderHeight(props.component);
+  const align = () => (props.component.props.align as string) ?? "stretch";
+  const justify = () => (props.component.props.justify as string) ?? "start";
+
+  // For scroll containers, enable overflow
+  const isScroll = () => props.component.type === "scroll";
+  const showScrollbar = () => (props.component.props.showScrollbar as boolean) ?? true;
+
+  // Build Tailwind classes for alignment
+  const getAlignClass = () => {
+    switch (align()) {
+      case "start": return "items-start";
+      case "center": return "items-center";
+      case "end": return "items-end";
+      case "stretch": return "items-stretch";
+      default: return "items-stretch";
+    }
+  };
+
+  const getJustifyClass = () => {
+    switch (justify()) {
+      case "start": return "justify-start";
+      case "center": return "justify-center";
+      case "end": return "justify-end";
+      case "space-between": return "justify-between";
+      default: return "justify-start";
+    }
+  };
+
+  const containerClass = () => {
+    const classes = [
+      "absolute", "inset-0", "pointer-events-auto", "flex",
+      direction() === "vertical" ? "flex-col" : "flex-row",
+      getAlignClass(),
+      getJustifyClass(),
+    ];
+    if (isScroll()) {
+      classes.push(showScrollbar() ? "overflow-auto" : "overflow-auto scrollbar-hide");
+    } else {
+      classes.push("overflow-hidden");
+    }
+    return classes.join(" ");
+  };
+
+  return (
+    <div
+      class={containerClass()}
+      style={{
+        "padding-top": `${padding() + headerHeight()}px`,
+        "padding-right": `${padding()}px`,
+        "padding-bottom": `${padding()}px`,
+        "padding-left": `${padding()}px`,
+        gap: `${gap()}px`,
+      }}
+    >
+      <For each={props.children}>
+        {(child) => (
+          <CanvasComponent
+            component={child}
+            parentOffset={{
+              x: props.parentOffset.x + props.component.x + padding(),
+              y: props.parentOffset.y + props.component.y + padding() + headerHeight(),
+            }}
+            inAutoLayout={true}
+            parentDirection={direction()}
+          />
+        )}
+      </For>
+    </div>
+  );
+};
+
+// ============================================
+// Page/Tab Container
+// ============================================
+interface PageContainerProps {
+  component: UIComponent;
+  parentOffset: { x: number; y: number };
+  children: UIComponent[];
+}
+
+const PageContainer: Component<PageContainerProps> = (props) => {
+  const tabs = () => (props.component.props.tabs as PageTab[]) ?? [];
+  const activeTabIndex = () => (props.component.props.activeTabIndex as number) ?? 0;
+  const activeTab = () => tabs()[activeTabIndex()];
+  const padding = () => (props.component.props.padding as number) ?? 8;
+  const gap = () => (props.component.props.gap as number) ?? 8;
+  const headerHeight = () => 32; // Tab bar height
+
+  // Filter children by tab assignment
+  // Children have a "tabId" prop that links them to a specific tab
+  const childrenForActiveTab = () => {
+    const activeTabId = activeTab()?.id;
+    if (!activeTabId) return props.children;
+    return props.children.filter((child) => {
+      const childTabId = child.props.tabId as string | undefined;
+      // If child has no tabId, show on first tab by default
+      return childTabId === activeTabId || (!childTabId && activeTabIndex() === 0);
+    });
+  };
+
+  const handleTabClick = (index: number, e: MouseEvent) => {
+    e.stopPropagation();
+    designerStore.updateComponent(props.component.id, {
+      props: { ...props.component.props, activeTabIndex: index },
+    });
+  };
+
+  return (
+    <>
+      {/* Tab bar (interactive) */}
+      <div
+        class="absolute left-0 right-0 top-0 h-8 flex items-center bg-background-secondary border-b border-border pointer-events-auto"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <For each={tabs()}>
+          {(tab, i) => (
+            <button
+              class={`px-3 h-full text-xs transition-colors ${
+                i() === activeTabIndex()
+                  ? "bg-surface border-b-2 border-accent text-accent"
+                  : "text-foreground-muted hover:text-foreground"
+              }`}
+              onClick={(e) => handleTabClick(i(), e)}
+            >
+              {tab.label}
+            </button>
+          )}
+        </For>
+      </div>
+
+      {/* Tab content area - auto-layout like stack */}
+      <div
+        class="absolute pointer-events-auto flex flex-col items-stretch overflow-auto"
+        style={{
+          left: `${padding()}px`,
+          top: `${headerHeight()}px`,
+          right: `${padding()}px`,
+          bottom: `${padding()}px`,
+          "padding-top": `${padding()}px`,
+          "padding-bottom": `${padding()}px`,
+          gap: `${gap()}px`,
+        }}
+      >
+        <For each={childrenForActiveTab()}>
+          {(child) => (
+            <CanvasComponent
+              component={child}
+              parentOffset={{
+                x: props.parentOffset.x + props.component.x + padding(),
+                y: props.parentOffset.y + props.component.y + padding() + headerHeight(),
+              }}
+              inAutoLayout={true}
+              activeTabId={activeTab()?.id}
+              parentDirection="vertical"
+            />
+          )}
+        </For>
+        <Show when={childrenForActiveTab().length === 0}>
+          <div class="flex-1 flex items-center justify-center text-xs text-foreground-muted">
+            Drop components here
+          </div>
+        </Show>
+      </div>
+    </>
   );
 };
 

@@ -12,8 +12,17 @@ import {
   type LayoutDirection,
   type Alignment,
   type PageTab,
+  type SizingMode,
 } from "@/stores/designer";
 import { ChevronDownIcon, ChevronRightIcon } from "@/components/common/Icons";
+
+// Helper function to get parent's tabs if parent is a Page component
+function getParentPageTabs(component: ReturnType<typeof designerStore.getSelectedComponent>): PageTab[] | null {
+  if (!component?.parentId) return null;
+  const parent = designerStore.components().find((c) => c.id === component.parentId);
+  if (!parent || parent.type !== "page") return null;
+  return (parent.props.tabs as PageTab[]) ?? null;
+}
 
 export const PropertyPanel: Component = () => {
   const component = createMemo(() => designerStore.getSelectedComponent());
@@ -86,6 +95,36 @@ export const PropertyPanel: Component = () => {
                       }
                     />
                   </div>
+                </PropertyRow>
+                <PropertyRow label="Width Mode">
+                  <select
+                    class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+                    value={(c().widthMode as SizingMode) ?? "fixed"}
+                    onChange={(e) =>
+                      designerStore.updateComponent(c().id, {
+                        widthMode: e.currentTarget.value as SizingMode,
+                      })
+                    }
+                  >
+                    <option value="fixed">Fixed</option>
+                    <option value="fill">Fill (expand)</option>
+                    <option value="hug">Hug (fit content)</option>
+                  </select>
+                </PropertyRow>
+                <PropertyRow label="Height Mode">
+                  <select
+                    class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+                    value={(c().heightMode as SizingMode) ?? "fixed"}
+                    onChange={(e) =>
+                      designerStore.updateComponent(c().id, {
+                        heightMode: e.currentTarget.value as SizingMode,
+                      })
+                    }
+                  >
+                    <option value="fixed">Fixed</option>
+                    <option value="fill">Fill (expand)</option>
+                    <option value="hug">Hug (fit content)</option>
+                  </select>
                 </PropertyRow>
               </PropertySection>
 
@@ -367,6 +406,18 @@ export const PropertyPanel: Component = () => {
                       <option value="horizontal">Horizontal</option>
                     </select>
                   </PropertyRow>
+                  <PropertyRow label="Gap">
+                    <NumberInput
+                      class="w-20 px-2 py-1 text-xs bg-background border border-border rounded"
+                      min={0}
+                      value={(c().props.gap as number) ?? 8}
+                      onChange={(val) =>
+                        designerStore.updateComponent(c().id, {
+                          props: { ...c().props, gap: val },
+                        })
+                      }
+                    />
+                  </PropertyRow>
                   <PropertyRow label="Scrollbar">
                     <button
                       class={`w-10 h-5 rounded-full transition-colors relative ${
@@ -501,6 +552,31 @@ export const PropertyPanel: Component = () => {
                     />
                   </PropertyRow>
                 </PropertySection>
+              </Show>
+
+              {/* Tab Assignment (for children of Page components) */}
+              <Show when={getParentPageTabs(c())}>
+                {(tabs) => (
+                  <PropertySection title="Tab Assignment">
+                    <PropertyRow label="Show on Tab">
+                      <select
+                        class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+                        value={(c().props.tabId as string) ?? tabs()[0]?.id ?? ""}
+                        onChange={(e) =>
+                          designerStore.updateComponent(c().id, {
+                            props: { ...c().props, tabId: e.currentTarget.value },
+                          })
+                        }
+                      >
+                        <For each={tabs()}>
+                          {(tab) => (
+                            <option value={tab.id}>{tab.label}</option>
+                          )}
+                        </For>
+                      </select>
+                    </PropertyRow>
+                  </PropertySection>
+                )}
               </Show>
 
               {/* Script Connection Hint */}

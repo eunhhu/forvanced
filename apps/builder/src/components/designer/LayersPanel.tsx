@@ -1,27 +1,61 @@
-import { Component, For, Show, createMemo } from "solid-js";
-import { designerStore, UIComponent, ComponentType } from "../../stores/designer";
+import { Component, For, Show, createMemo, createSignal, JSX } from "solid-js";
+import {
+  designerStore,
+  UIComponent,
+  ComponentType,
+} from "../../stores/designer";
+import {
+  IconButton,
+  IconToggle,
+  IconSlider,
+  IconLabel,
+  IconInput,
+  IconDropdown,
+  IconGroup,
+  IconSpacer,
+  IconStack,
+  IconPage,
+  IconScroll,
+  IconDivider,
+  IconCard,
+  IconEye,
+  IconEyeOff,
+  IconLock,
+  IconUnlock,
+  IconArrowUp,
+  IconArrowDown,
+  IconArrowUpToLine,
+  IconArrowDownToLine,
+  IconCornerDownRight,
+  IconCornerLeftUp,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  IconBox,
+} from "../common/Icons";
 
-// Icons for component types
-const ComponentIcons: Record<ComponentType, string> = {
-  button: "🔘",
-  toggle: "🔀",
-  slider: "🎚️",
-  label: "🏷️",
-  input: "📝",
-  dropdown: "📋",
-  group: "📁",
-  spacer: "⬜",
-  stack: "📚",
-  page: "📄",
-  scroll: "📜",
-  divider: "➖",
-  card: "🃏",
+// Component type icon mapping
+const ComponentIconMap: Record<ComponentType, Component<{ class?: string }>> = {
+  button: IconButton,
+  toggle: IconToggle,
+  slider: IconSlider,
+  label: IconLabel,
+  input: IconInput,
+  dropdown: IconDropdown,
+  group: IconGroup,
+  spacer: IconSpacer,
+  stack: IconStack,
+  page: IconPage,
+  scroll: IconScroll,
+  divider: IconDivider,
+  card: IconCard,
 };
 
 // Layer item component (recursive for hierarchy)
 const LayerItem: Component<{
   component: UIComponent;
   depth: number;
+  onSetParent?: (childId: string) => void;
+  settingParentFor?: string | null;
 }> = (props) => {
   const isSelected = createMemo(
     () => designerStore.selectedId() === props.component.id,
@@ -38,9 +72,32 @@ const LayerItem: Component<{
   const isVisible = createMemo(() => props.component.visible !== false);
   const isLocked = createMemo(() => props.component.locked === true);
 
+  // Check if this is a container type
+  const isContainer = createMemo(() =>
+    ["group", "stack", "page", "scroll", "card"].includes(props.component.type),
+  );
+
+  // Check if we're setting parent for this component
+  const isSettingParent = createMemo(
+    () => props.settingParentFor === props.component.id,
+  );
+
+  // Can be parent target (not self, not descendant of setting parent)
+  const canBeParentTarget = createMemo(() => {
+    if (!props.settingParentFor) return false;
+    if (props.settingParentFor === props.component.id) return false;
+    if (designerStore.isDescendantOf(props.component.id, props.settingParentFor))
+      return false;
+    return isContainer();
+  });
+
   const handleSelect = (e: MouseEvent) => {
     e.stopPropagation();
-    designerStore.setSelectedId(props.component.id);
+    if (props.settingParentFor && canBeParentTarget()) {
+      props.onSetParent?.(props.component.id);
+    } else {
+      designerStore.setSelectedId(props.component.id);
+    }
   };
 
   const handleToggleExpand = (e: MouseEvent) => {
@@ -58,30 +115,42 @@ const LayerItem: Component<{
     designerStore.toggleLock(props.component.id);
   };
 
+  const IconComponent = ComponentIconMap[props.component.type] || IconBox;
+
   return (
     <div class="select-none">
       {/* Layer row */}
       <div
         class={`flex items-center gap-1 px-2 py-1 cursor-pointer hover:bg-surface-hover rounded text-sm ${
-          isSelected() ? "bg-accent/20 text-accent" : "text-text-secondary"
+          isSelected()
+            ? "bg-accent/20 text-accent"
+            : isSettingParent()
+              ? "bg-warning/20 text-warning"
+              : canBeParentTarget()
+                ? "bg-success/10 text-success hover:bg-success/20"
+                : "text-text-secondary"
         }`}
         style={{ "padding-left": `${props.depth * 16 + 8}px` }}
         onClick={handleSelect}
       >
         {/* Expand/collapse button */}
         <button
-          class={`w-4 h-4 flex items-center justify-center text-xs ${
-            hasChildren() ? "opacity-100" : "opacity-0"
+          class={`w-4 h-4 flex items-center justify-center ${
+            hasChildren() ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
           onClick={handleToggleExpand}
           disabled={!hasChildren()}
         >
-          {isExpanded() ? "▼" : "▶"}
+          {isExpanded() ? (
+            <ChevronDownIcon class="w-3 h-3" />
+          ) : (
+            <ChevronRightIcon class="w-3 h-3" />
+          )}
         </button>
 
         {/* Component icon */}
-        <span class="w-4 text-center">
-          {ComponentIcons[props.component.type] || "📦"}
+        <span class="w-4 h-4 flex items-center justify-center">
+          <IconComponent class="w-3.5 h-3.5" />
         </span>
 
         {/* Component label */}
@@ -91,26 +160,41 @@ const LayerItem: Component<{
           {props.component.label || props.component.type}
         </span>
 
+        {/* Parent indicator */}
+        <Show when={props.component.parentId}>
+          <span class="w-4 h-4 flex items-center justify-center text-text-tertiary" title="Has parent">
+            <IconCornerDownRight class="w-3 h-3" />
+          </span>
+        </Show>
+
         {/* Visibility toggle */}
         <button
-          class={`w-5 h-5 flex items-center justify-center text-xs rounded hover:bg-surface-active ${
+          class={`w-5 h-5 flex items-center justify-center rounded hover:bg-surface-active ${
             isVisible() ? "text-text-secondary" : "text-text-tertiary"
           }`}
           onClick={handleToggleVisibility}
           title={isVisible() ? "Hide" : "Show"}
         >
-          {isVisible() ? "👁" : "👁‍🗨"}
+          {isVisible() ? (
+            <IconEye class="w-3.5 h-3.5" />
+          ) : (
+            <IconEyeOff class="w-3.5 h-3.5" />
+          )}
         </button>
 
         {/* Lock toggle */}
         <button
-          class={`w-5 h-5 flex items-center justify-center text-xs rounded hover:bg-surface-active ${
+          class={`w-5 h-5 flex items-center justify-center rounded hover:bg-surface-active ${
             isLocked() ? "text-warning" : "text-text-tertiary"
           }`}
           onClick={handleToggleLock}
           title={isLocked() ? "Unlock" : "Lock"}
         >
-          {isLocked() ? "🔒" : "🔓"}
+          {isLocked() ? (
+            <IconLock class="w-3.5 h-3.5" />
+          ) : (
+            <IconUnlock class="w-3.5 h-3.5" />
+          )}
         </button>
       </div>
 
@@ -118,7 +202,14 @@ const LayerItem: Component<{
       <Show when={hasChildren() && isExpanded()}>
         <div class="border-l border-border ml-4">
           <For each={children()}>
-            {(child) => <LayerItem component={child} depth={props.depth + 1} />}
+            {(child) => (
+              <LayerItem
+                component={child}
+                depth={props.depth + 1}
+                onSetParent={props.onSetParent}
+                settingParentFor={props.settingParentFor}
+              />
+            )}
           </For>
         </div>
       </Show>
@@ -128,9 +219,26 @@ const LayerItem: Component<{
 
 // Main Layers Panel
 export const LayersPanel: Component = () => {
+  const [settingParentFor, setSettingParentFor] = createSignal<string | null>(
+    null,
+  );
+
   const rootComponents = createMemo(() => designerStore.getRootComponents());
   const selectedId = createMemo(() => designerStore.selectedId());
   const hasSelection = createMemo(() => selectedId() !== null);
+  const selectedComponent = createMemo(() =>
+    designerStore.getSelectedComponent(),
+  );
+
+  // Check if selected component has a parent
+  const hasParent = createMemo(() => !!selectedComponent()?.parentId);
+
+  // Check if selected component can have children
+  const canHaveChildren = createMemo(() => {
+    const comp = selectedComponent();
+    if (!comp) return false;
+    return ["group", "stack", "page", "scroll", "card"].includes(comp.type);
+  });
 
   const handleBringToFront = () => {
     const id = selectedId();
@@ -152,6 +260,32 @@ export const LayersPanel: Component = () => {
     if (id) designerStore.sendBackward(id);
   };
 
+  const handleStartSetParent = () => {
+    const id = selectedId();
+    if (id) {
+      setSettingParentFor(id);
+    }
+  };
+
+  const handleCancelSetParent = () => {
+    setSettingParentFor(null);
+  };
+
+  const handleSetParent = (newParentId: string) => {
+    const childId = settingParentFor();
+    if (childId) {
+      designerStore.reparentComponent(childId, newParentId);
+      setSettingParentFor(null);
+    }
+  };
+
+  const handleRemoveParent = () => {
+    const id = selectedId();
+    if (id) {
+      designerStore.reparentComponent(id, null);
+    }
+  };
+
   return (
     <div class="flex flex-col h-full bg-surface overflow-hidden">
       {/* Header */}
@@ -163,39 +297,71 @@ export const LayersPanel: Component = () => {
       </div>
 
       {/* Z-index controls toolbar */}
-      <div class="flex items-center gap-1 px-2 py-1 border-b border-border bg-surface-raised">
+      <div class="flex items-center gap-1 px-2 py-1.5 border-b border-border bg-surface-raised">
         <button
-          class="px-2 py-1 text-xs rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed"
+          class="p-1.5 rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={handleBringToFront}
           disabled={!hasSelection()}
           title="Bring to Front"
         >
-          ⬆⬆
+          <IconArrowUpToLine class="w-3.5 h-3.5" />
         </button>
         <button
-          class="px-2 py-1 text-xs rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed"
+          class="p-1.5 rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={handleBringForward}
           disabled={!hasSelection()}
           title="Bring Forward"
         >
-          ⬆
+          <IconArrowUp class="w-3.5 h-3.5" />
         </button>
         <button
-          class="px-2 py-1 text-xs rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed"
+          class="p-1.5 rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={handleSendBackward}
           disabled={!hasSelection()}
           title="Send Backward"
         >
-          ⬇
+          <IconArrowDown class="w-3.5 h-3.5" />
         </button>
         <button
-          class="px-2 py-1 text-xs rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed"
+          class="p-1.5 rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={handleSendToBack}
           disabled={!hasSelection()}
           title="Send to Back"
         >
-          ⬇⬇
+          <IconArrowDownToLine class="w-3.5 h-3.5" />
         </button>
+
+        <div class="w-px h-4 bg-border mx-1" />
+
+        {/* Parent/Child controls */}
+        <Show when={!settingParentFor()}>
+          <button
+            class="p-1.5 rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed"
+            onClick={handleStartSetParent}
+            disabled={!hasSelection()}
+            title="Set Parent"
+          >
+            <IconCornerDownRight class="w-3.5 h-3.5" />
+          </button>
+          <button
+            class="p-1.5 rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed"
+            onClick={handleRemoveParent}
+            disabled={!hasSelection() || !hasParent()}
+            title="Remove from Parent"
+          >
+            <IconCornerLeftUp class="w-3.5 h-3.5" />
+          </button>
+        </Show>
+
+        <Show when={settingParentFor()}>
+          <span class="text-xs text-warning px-2">Select parent...</span>
+          <button
+            class="px-2 py-1 text-xs rounded bg-surface-hover hover:bg-surface-active"
+            onClick={handleCancelSetParent}
+          >
+            Cancel
+          </button>
+        </Show>
       </div>
 
       {/* Layer tree */}
@@ -211,7 +377,14 @@ export const LayersPanel: Component = () => {
           }
         >
           <For each={rootComponents()}>
-            {(component) => <LayerItem component={component} depth={0} />}
+            {(component) => (
+              <LayerItem
+                component={component}
+                depth={0}
+                onSetParent={handleSetParent}
+                settingParentFor={settingParentFor()}
+              />
+            )}
           </For>
         </Show>
       </div>
@@ -222,9 +395,20 @@ export const LayersPanel: Component = () => {
           <div class="flex justify-between">
             <span>z-index:</span>
             <span class="text-text-secondary">
-              {designerStore.getSelectedComponent()?.zIndex ?? "-"}
+              {selectedComponent()?.zIndex ?? "-"}
             </span>
           </div>
+          <Show when={selectedComponent()?.parentId}>
+            <div class="flex justify-between mt-1">
+              <span>parent:</span>
+              <span class="text-text-secondary truncate max-w-[100px]">
+                {designerStore
+                  .components()
+                  .find((c) => c.id === selectedComponent()?.parentId)?.label ||
+                  "unknown"}
+              </span>
+            </div>
+          </Show>
         </div>
       </Show>
     </div>

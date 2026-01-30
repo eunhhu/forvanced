@@ -25,6 +25,12 @@ export type LayoutDirection = "horizontal" | "vertical";
 // Alignment options
 export type Alignment = "start" | "center" | "end" | "stretch" | "space-between";
 
+// Sizing mode for responsive components
+export type SizingMode = "fixed" | "fill" | "hug";
+// fixed: use exact width/height values
+// fill: expand to fill available space in parent (flex-grow: 1)
+// hug: shrink to fit content (width/height become min values)
+
 // Page tab definition
 export interface PageTab {
   id: string;
@@ -96,6 +102,9 @@ export interface UIComponent {
   visible?: boolean; // Visibility toggle (default true)
   locked?: boolean; // Lock toggle for editing (default false)
   collapsed?: boolean; // Collapsed state in layers panel
+  // Sizing modes for responsive layout
+  widthMode?: SizingMode; // default: "fixed"
+  heightMode?: SizingMode; // default: "fixed"
   // Note: bindings removed - use visual scripts with event_ui nodes instead
 }
 
@@ -274,20 +283,37 @@ function createDesignerStore() {
 
   // ===== Layer/Hierarchy Management =====
 
-  // Get root components (no parent)
+  // Get root components (no parent) - sorted by z-index descending for layer panel (top = front)
   function getRootComponents(): UIComponent[] {
     return components()
       .filter((c) => !c.parentId)
-      .sort((a, b) => a.zIndex - b.zIndex);
+      .sort((a, b) => b.zIndex - a.zIndex);
   }
 
-  // Get direct children of a component
+  // Get direct children of a component - sorted by z-index descending for layer panel
   function getChildren(parentId: string): UIComponent[] {
     const parent = components().find((c) => c.id === parentId);
     if (!parent || !parent.children) return [];
     return parent.children
       .map((id) => components().find((c) => c.id === id))
       .filter((c): c is UIComponent => c !== undefined)
+      .sort((a, b) => b.zIndex - a.zIndex);
+  }
+
+  // Get children sorted for rendering (ascending z-index, lower = behind)
+  function getChildrenForRender(parentId: string): UIComponent[] {
+    const parent = components().find((c) => c.id === parentId);
+    if (!parent || !parent.children) return [];
+    return parent.children
+      .map((id) => components().find((c) => c.id === id))
+      .filter((c): c is UIComponent => c !== undefined)
+      .sort((a, b) => a.zIndex - b.zIndex);
+  }
+
+  // Get root components sorted for rendering (ascending z-index)
+  function getRootComponentsForRender(): UIComponent[] {
+    return components()
+      .filter((c) => !c.parentId)
       .sort((a, b) => a.zIndex - b.zIndex);
   }
 
@@ -565,6 +591,8 @@ function createDesignerStore() {
             visible: (c as UIComponent).visible ?? true,
             locked: (c as UIComponent).locked ?? false,
             collapsed: (c as UIComponent).collapsed ?? false,
+            widthMode: (c as UIComponent).widthMode,
+            heightMode: (c as UIComponent).heightMode,
           };
         });
         nextZIndex = maxZ + 1;
@@ -621,6 +649,8 @@ function createDesignerStore() {
         visible: c.visible,
         locked: c.locked,
         collapsed: c.collapsed,
+        widthMode: c.widthMode,
+        heightMode: c.heightMode,
       }));
 
       projectStore.updateUI({
@@ -670,7 +700,9 @@ function createDesignerStore() {
 
     // Hierarchy management
     getRootComponents,
+    getRootComponentsForRender,
     getChildren,
+    getChildrenForRender,
     getAncestors,
     getDescendants,
     isDescendantOf,
@@ -778,6 +810,8 @@ function getDefaultProps(type: ComponentType): {
             { id: crypto.randomUUID(), label: "Tab 2" },
           ] as PageTab[],
           activeTabIndex: 0,
+          padding: 8,
+          gap: 8,
         },
       };
     case "scroll":
@@ -788,6 +822,7 @@ function getDefaultProps(type: ComponentType): {
           direction: "vertical" as LayoutDirection,
           showScrollbar: true,
           padding: 8,
+          gap: 8,
         },
       };
     case "divider":

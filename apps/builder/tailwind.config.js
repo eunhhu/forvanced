@@ -2,6 +2,14 @@
 export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   darkMode: "class",
+  safelist: [
+    // Flex alignment classes used dynamically in DesignCanvas
+    "items-start", "items-center", "items-end", "items-stretch",
+    "justify-start", "justify-center", "justify-end", "justify-between",
+    "flex-row", "flex-col",
+    "flex-grow", "flex-shrink-0",
+    "self-stretch", "self-start", "self-center", "self-end",
+  ],
   theme: {
     extend: {
       colors: {
