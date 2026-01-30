@@ -340,57 +340,8 @@ export const NodeCanvas: Component = () => {
     }
   };
 
-  // Handle keyboard events
-  const handleKeyDown = (e: KeyboardEvent) => {
-    // Don't intercept if user is typing in an input
-    const target = e.target as HTMLElement;
-    if (
-      target.tagName === "INPUT" ||
-      target.tagName === "TEXTAREA" ||
-      target.isContentEditable
-    ) {
-      return;
-    }
-
-    // Delete selected connection with Delete or Backspace
-    if (
-      (e.key === "Delete" || e.key === "Backspace") &&
-      scriptStore.selectedConnectionId()
-    ) {
-      e.preventDefault();
-      scriptStore.deleteConnection(scriptStore.selectedConnectionId()!);
-    }
-
-    // Delete selected nodes with Delete or Backspace
-    if (
-      (e.key === "Delete" || e.key === "Backspace") &&
-      scriptStore.selectedNodeIds().size > 0
-    ) {
-      e.preventDefault();
-      // Don't delete event nodes (entry points)
-      const selectedNodes = scriptStore.getSelectedNodes();
-      const canDelete = selectedNodes.every(
-        (n) => !n.type.startsWith("event_") || selectedNodes.length > 1,
-      );
-      if (canDelete) {
-        scriptStore.deleteSelectedNodes();
-      }
-    }
-
-    // Select all with Ctrl/Cmd+A
-    if ((e.ctrlKey || e.metaKey) && e.key === "a") {
-      e.preventDefault();
-      const script = currentScript();
-      if (script) {
-        const allIds = script.nodes.map((n) => n.id);
-        scriptStore.selectMultipleNodes(allIds);
-      }
-    }
-  };
-
-  const handleKeyUp = (_e: KeyboardEvent) => {
-    // Nothing special needed now
-  };
+  // Keyboard shortcuts are now handled centrally by hotkeys store in App.tsx
+  // This ensures consistent behavior across tabs and proper macOS Backspace/Delete handling
 
   // Handle drop from palette
   const handleDragOver = (e: DragEvent) => {
@@ -501,15 +452,11 @@ export const NodeCanvas: Component = () => {
   onMount(() => {
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
   });
 
   onCleanup(() => {
     window.removeEventListener("mousemove", handleMouseMove);
     window.removeEventListener("mouseup", handleMouseUp);
-    window.removeEventListener("keydown", handleKeyDown);
-    window.removeEventListener("keyup", handleKeyUp);
   });
 
   // Get port position for a node

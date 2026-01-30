@@ -16,12 +16,17 @@ import { sidebarStore } from "@/stores/sidebar";
 import { errorStore } from "@/stores/error";
 import { hotkeysStore, type Hotkey } from "@/stores/hotkeys";
 import { projectStore } from "@/stores/project";
+import { uiStore, type MainTab } from "@/stores/ui";
+import { designerStore } from "@/stores/designer";
+import { scriptStore } from "@/stores/script";
 
 // Command palette state
 const [isCommandPaletteOpen, setCommandPaletteOpen] = createSignal(false);
 
 const App: Component = () => {
-  const [activeTab, setActiveTab] = createSignal("project");
+  // Use uiStore for activeTab so it's accessible to hotkeys
+  const activeTab = uiStore.activeTab;
+  const setActiveTab = uiStore.setActiveTab;
   const [initialized, setInitialized] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [showSettings, setShowSettings] = createSignal(false);
@@ -157,6 +162,76 @@ const App: Component = () => {
         },
         enabled: () => activeTab() === "target",
       },
+
+      // Designer - Delete selected components
+      {
+        id: "designer-delete",
+        keys: ["Delete"],
+        description: "Delete selected components",
+        category: "designer",
+        action: () => {
+          if (designerStore.selectedIds().size > 0) {
+            designerStore.deleteSelectedComponents();
+          }
+        },
+        enabled: () => activeTab() === "designer" && designerStore.selectedIds().size > 0,
+      },
+      // Designer - Select all components
+      {
+        id: "designer-select-all",
+        keys: ["Cmd", "A"],
+        description: "Select all components",
+        category: "designer",
+        action: () => {
+          const allIds = designerStore.components().filter((c) => !c.parentId).map((c) => c.id);
+          designerStore.selectMultiple(allIds);
+        },
+        enabled: () => activeTab() === "designer",
+      },
+
+      // Script - Delete selected nodes/connections
+      {
+        id: "script-delete",
+        keys: ["Delete"],
+        description: "Delete selected nodes/connections",
+        category: "script",
+        action: () => {
+          // Delete selected connection first
+          if (scriptStore.selectedConnectionId()) {
+            scriptStore.deleteConnection(scriptStore.selectedConnectionId()!);
+            return;
+          }
+          // Then delete selected nodes
+          if (scriptStore.selectedNodeIds().size > 0) {
+            const selectedNodes = scriptStore.getSelectedNodes();
+            // Don't delete event nodes (entry points) unless multiple selected
+            const canDelete = selectedNodes.every(
+              (n) => !n.type.startsWith("event_") || selectedNodes.length > 1,
+            );
+            if (canDelete) {
+              scriptStore.deleteSelectedNodes();
+            }
+          }
+        },
+        enabled: () =>
+          activeTab() === "scripts" &&
+          (scriptStore.selectedNodeIds().size > 0 || !!scriptStore.selectedConnectionId()),
+      },
+      // Script - Select all nodes
+      {
+        id: "script-select-all",
+        keys: ["Cmd", "A"],
+        description: "Select all nodes",
+        category: "script",
+        action: () => {
+          const script = scriptStore.getCurrentScript();
+          if (script) {
+            const allIds = script.nodes.map((n) => n.id);
+            scriptStore.selectMultipleNodes(allIds);
+          }
+        },
+        enabled: () => activeTab() === "scripts",
+      },
     ];
 
     const unregisterHotkeys = hotkeysStore.registerHotkeys(globalHotkeys);
@@ -264,7 +339,7 @@ const App: Component = () => {
         isOpen={isCommandPaletteOpen()}
         onClose={() => setCommandPaletteOpen(false)}
         onNavigate={(tab) => {
-          setActiveTab(tab);
+          setActiveTab(tab as MainTab);
           setCommandPaletteOpen(false);
         }}
         onOpenSettings={() => {

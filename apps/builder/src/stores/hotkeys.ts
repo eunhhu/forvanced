@@ -2,7 +2,7 @@ import { createSignal } from "solid-js";
 
 export interface Hotkey {
   id: string;
-  keys: string[]; // e.g., ["Ctrl", "S"] or ["Cmd", "S"]
+  keys: string[]; // e.g., ["Ctrl", "S"] or ["Cmd", "S"] or ["Delete"] or ["Backspace"]
   description: string;
   category: HotkeyCategory;
   action: () => void;
@@ -86,11 +86,19 @@ function matchesHotkey(event: KeyboardEvent, keys: string[]): boolean {
   const altMatch = altRequired === modifiers.alt;
   const shiftMatch = shiftRequired === modifiers.shift;
 
-  // Key match
-  const keyMatch =
-    keyLower === requiredKey ||
-    event.code.toLowerCase() === `key${requiredKey}` ||
-    event.code.toLowerCase() === requiredKey;
+  // Key match - special handling for Delete/Backspace
+  let keyMatch = false;
+  if (requiredKey === "delete" || requiredKey === "backspace") {
+    // On macOS: Delete key sends "Backspace", Fn+Delete sends "Delete"
+    // On Windows: Delete sends "Delete", Backspace sends "Backspace"
+    // We want both to work for deletion, so match either
+    keyMatch = keyLower === "delete" || keyLower === "backspace";
+  } else {
+    keyMatch =
+      keyLower === requiredKey ||
+      event.code.toLowerCase() === `key${requiredKey}` ||
+      event.code.toLowerCase() === requiredKey;
+  }
 
   return cmdMatch && altMatch && shiftMatch && keyMatch;
 }

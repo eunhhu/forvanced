@@ -212,41 +212,17 @@ export const DesignCanvas: Component = () => {
     setSelectionBox(null);
   };
 
-  // Keyboard shortcuts
-  const handleKeyDown = (e: KeyboardEvent) => {
-    const target = e.target as HTMLElement;
-    if (
-      target.tagName === "INPUT" ||
-      target.tagName === "TEXTAREA" ||
-      target.isContentEditable
-    ) {
-      return;
-    }
-
-    // Delete selected components
-    if ((e.key === "Delete" || e.key === "Backspace") && designerStore.selectedIds().size > 0) {
-      e.preventDefault();
-      designerStore.deleteSelectedComponents();
-    }
-
-    // Select all with Ctrl/Cmd+A
-    if ((e.ctrlKey || e.metaKey) && e.key === "a") {
-      e.preventDefault();
-      const allIds = designerStore.components().filter((c) => !c.parentId).map((c) => c.id);
-      designerStore.selectMultiple(allIds);
-    }
-  };
+  // Keyboard shortcuts are now handled centrally by hotkeys store in App.tsx
+  // This ensures consistent behavior across tabs and proper macOS Backspace/Delete handling
 
   onMount(() => {
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
-    window.addEventListener("keydown", handleKeyDown);
   });
 
   onCleanup(() => {
     window.removeEventListener("mousemove", handleMouseMove);
     window.removeEventListener("mouseup", handleMouseUp);
-    window.removeEventListener("keydown", handleKeyDown);
   });
 
   // Reset view function

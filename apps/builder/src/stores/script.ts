@@ -1647,6 +1647,16 @@ export const nodeTemplates: NodeTemplate[] = [
 // Script Store
 // ============================================
 
+// Callback for notifying external stores of script changes (to avoid circular import)
+type OnScriptChangeCallback = () => void;
+let onScriptChangeCallback: OnScriptChangeCallback | null = null;
+
+function notifyScriptChange() {
+  if (onScriptChangeCallback) {
+    onScriptChangeCallback();
+  }
+}
+
 function createScriptStore() {
   const [scripts, setScripts] = createSignal<Script[]>([]);
   const [currentScriptId, setCurrentScriptId] = createSignal<string | null>(
@@ -1658,6 +1668,11 @@ function createScriptStore() {
   const [selectedConnectionId, setSelectedConnectionId] = createSignal<
     string | null
   >(null);
+
+  // Register callback for script changes (called by projectStore)
+  function onScriptChange(callback: OnScriptChangeCallback) {
+    onScriptChangeCallback = callback;
+  }
 
   // Get current script
   function getCurrentScript(): Script | null {
@@ -1790,6 +1805,8 @@ function createScriptStore() {
     };
     setScripts((prev) => [...prev, script]);
     setCurrentScriptId(script.id);
+    // Notify project store of script change
+    notifyScriptChange();
     return script;
   }
 
@@ -1799,6 +1816,8 @@ function createScriptStore() {
     if (currentScriptId() === id) {
       setCurrentScriptId(null);
     }
+    // Notify project store of script change
+    notifyScriptChange();
   }
 
   // Update port types when config.valueType changes (for memory nodes)
@@ -2164,6 +2183,8 @@ function createScriptStore() {
     setScripts((prev) =>
       prev.map((s) => (s.id === scriptId ? { ...s, ...updates } : s)),
     );
+    // Notify project store of script change
+    notifyScriptChange();
   }
 
   // Get node categories for palette
@@ -2239,6 +2260,7 @@ function createScriptStore() {
     getNodeCategories,
     nodeTemplates,
     // Project integration functions
+    onScriptChange,
     setScriptsFromProject,
     getAllScripts,
     clearScripts,

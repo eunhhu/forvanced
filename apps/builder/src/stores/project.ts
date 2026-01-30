@@ -542,6 +542,13 @@ function createProjectStore() {
     return load(path);
   }
 
+  // Mark project as dirty (for external stores like scriptStore)
+  function markDirty() {
+    if (currentProject()) {
+      setIsDirty(true);
+    }
+  }
+
   return {
     currentProject,
     projectPath,
@@ -558,6 +565,7 @@ function createProjectStore() {
     updateProject,
     updateUI,
     updateConfig,
+    markDirty,
     fetchRecentProjects,
     removeRecentProject,
     openRecentProject,
@@ -574,3 +582,9 @@ async function openDialog(): Promise<string | null> {
 }
 
 export const projectStore = createRoot(createProjectStore);
+
+// Register callback to mark project dirty when scripts change
+// This avoids circular import by using callback pattern
+scriptStore.onScriptChange(() => {
+  projectStore.markDirty();
+});
