@@ -130,7 +130,12 @@ function handleKeyDown(event: KeyboardEvent) {
 
 // Register a hotkey
 function registerHotkey(hotkey: Hotkey): () => void {
-  setRegisteredHotkeys((prev) => [...prev, hotkey]);
+  // Prevent duplicate registration
+  setRegisteredHotkeys((prev) => {
+    // Remove existing hotkey with same id before adding
+    const filtered = prev.filter((h) => h.id !== hotkey.id);
+    return [...filtered, hotkey];
+  });
 
   // Return unregister function
   return () => {

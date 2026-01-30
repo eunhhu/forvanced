@@ -156,11 +156,11 @@ const App: Component = () => {
         description: "Refresh process list",
         category: "target",
         action: () => {
-          if (activeTab() === "target") {
+          if (uiStore.activeTab() === "target") {
             targetStore.refetchProcesses();
           }
         },
-        enabled: () => activeTab() === "target",
+        enabled: () => uiStore.activeTab() === "target",
       },
 
       // Designer - Delete selected components
@@ -174,7 +174,7 @@ const App: Component = () => {
             designerStore.deleteSelectedComponents();
           }
         },
-        enabled: () => activeTab() === "designer" && designerStore.selectedIds().size > 0,
+        enabled: () => uiStore.activeTab() === "designer" && designerStore.selectedIds().size > 0,
       },
       // Designer - Select all components
       {
@@ -186,7 +186,7 @@ const App: Component = () => {
           const allIds = designerStore.components().filter((c) => !c.parentId).map((c) => c.id);
           designerStore.selectMultiple(allIds);
         },
-        enabled: () => activeTab() === "designer",
+        enabled: () => uiStore.activeTab() === "designer",
       },
 
       // Script - Delete selected nodes/connections
@@ -214,7 +214,7 @@ const App: Component = () => {
           }
         },
         enabled: () =>
-          activeTab() === "scripts" &&
+          uiStore.activeTab() === "scripts" &&
           (scriptStore.selectedNodeIds().size > 0 || !!scriptStore.selectedConnectionId()),
       },
       // Script - Select all nodes
@@ -230,7 +230,7 @@ const App: Component = () => {
             scriptStore.selectMultipleNodes(allIds);
           }
         },
-        enabled: () => activeTab() === "scripts",
+        enabled: () => uiStore.activeTab() === "scripts",
       },
     ];
 
