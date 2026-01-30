@@ -233,6 +233,54 @@ export const PropertyPanel: Component = () => {
 
               <Show when={c().type === "dropdown"}>
                 <PropertySection title="Dropdown Settings">
+                  <div class="space-y-2">
+                    <div class="text-xs text-foreground-muted mb-1">Options</div>
+                    <For each={(c().props.options as string[]) ?? ["Option 1", "Option 2"]}>
+                      {(option, i) => (
+                        <div class="flex items-center gap-2">
+                          <input
+                            type="text"
+                            class="flex-1 px-2 py-1 text-xs bg-background border border-border rounded"
+                            value={option}
+                            onInput={(e) => {
+                              const options = [...((c().props.options as string[]) ?? ["Option 1", "Option 2"])];
+                              options[i()] = e.currentTarget.value;
+                              designerStore.updateComponent(c().id, {
+                                props: { ...c().props, options },
+                              });
+                            }}
+                          />
+                          <button
+                            class="w-6 h-6 flex items-center justify-center text-error hover:bg-error/10 rounded"
+                            onClick={() => {
+                              const options = [...((c().props.options as string[]) ?? [])].filter(
+                                (_, idx) => idx !== i()
+                              );
+                              designerStore.updateComponent(c().id, {
+                                props: { ...c().props, options },
+                              });
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+                    </For>
+                    <button
+                      class="w-full px-2 py-1 text-xs bg-accent/10 text-accent rounded hover:bg-accent/20"
+                      onClick={() => {
+                        const options = [
+                          ...((c().props.options as string[]) ?? ["Option 1", "Option 2"]),
+                          `Option ${((c().props.options as string[]) ?? []).length + 1}`,
+                        ];
+                        designerStore.updateComponent(c().id, {
+                          props: { ...c().props, options },
+                        });
+                      }}
+                    >
+                      + Add Option
+                    </button>
+                  </div>
                   <PropertyRow label="Default Index">
                     <NumberInput
                       class="w-20 px-2 py-1 text-xs bg-background border border-border rounded"

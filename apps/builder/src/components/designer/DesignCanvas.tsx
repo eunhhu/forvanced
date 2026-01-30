@@ -1055,12 +1055,15 @@ const ComponentPreview: Component<ComponentPreviewProps> = (props) => {
       );
     }
 
-    case "dropdown":
+    case "dropdown": {
+      const options = (c.props.options as string[]) ?? ["Option 1", "Option 2"];
+      const defaultIndex = (c.props.defaultIndex as number) ?? 0;
+      const selectedOption = options[defaultIndex] ?? options[0] ?? "Select...";
       return (
         <div class="w-full h-full flex items-center justify-between px-3 bg-background border border-border rounded text-sm pointer-events-none">
-          <span>{c.label}</span>
+          <span class="truncate">{selectedOption}</span>
           <svg
-            class="w-4 h-4"
+            class="w-4 h-4 flex-shrink-0 ml-2"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -1070,6 +1073,7 @@ const ComponentPreview: Component<ComponentPreviewProps> = (props) => {
           </svg>
         </div>
       );
+    }
 
     case "label":
       return (

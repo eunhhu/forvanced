@@ -65,12 +65,25 @@ export default TrainerUI;
 fn generate_state_code(components: &[UIComponent]) -> String {
     components
         .iter()
-        .filter(|c| matches!(c.component_type, ComponentType::Toggle | ComponentType::Slider | ComponentType::Input))
+        .filter(|c| matches!(c.component_type, ComponentType::Toggle | ComponentType::Slider | ComponentType::Input | ComponentType::Dropdown))
         .map(|c| {
             let default_value = match c.component_type {
                 ComponentType::Toggle => "false".to_string(),
                 ComponentType::Slider => c.props.get("defaultValue").map(|v| v.to_string()).unwrap_or("50".to_string()),
                 ComponentType::Input => "\"\"".to_string(),
+                ComponentType::Dropdown => {
+                    // Get default option based on defaultIndex
+                    let default_index = c.props.get("defaultIndex")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0) as usize;
+                    let options = c.props.get("options")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>());
+                    match options {
+                        Some(opts) if !opts.is_empty() => format!("\"{}\"", opts.get(default_index).unwrap_or(&opts[0])),
+                        _ => "\"\"".to_string(),
+                    }
+                }
                 _ => "null".to_string(),
             };
             format!(
@@ -185,16 +198,27 @@ fn generate_component_code(component: &UIComponent) -> String {
                         .collect::<Vec<_>>()
                         .join("\n")
                 })
-                .unwrap_or_default();
+                .unwrap_or_else(|| {
+                    // Default options if none specified
+                    r#"        <option value="Option 1">Option 1</option>
+        <option value="Option 2">Option 2</option>"#.to_string()
+                });
 
             format!(
-                r#"      <select class="trainer-dropdown" style="{style}" onChange={{(e) => handle_{id}_change(e.currentTarget.value)}}>
-        <option value="">{label}</option>
+                r#"      <select
+        class="trainer-dropdown"
+        style="{style}"
+        value={{{id}State()}}
+        onChange={{(e) => {{
+          set{id_cap}State(e.currentTarget.value);
+          handle_{id}_change(e.currentTarget.value);
+        }}}}
+      >
 {options}
       </select>"#,
                 style = style,
                 id = id,
-                label = component.label,
+                id_cap = capitalize(&id),
                 options = options,
             )
         }
