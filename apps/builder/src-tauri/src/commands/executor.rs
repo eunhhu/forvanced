@@ -5,12 +5,16 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use tauri::State;
 use tokio::sync::RwLock;
 use tracing::info;
 
 use forvanced_executor::value::Value;
-use forvanced_executor::ScriptExecutor;
+use forvanced_executor::{RpcCaller, ScriptExecutor};
+use forvanced_frida::FridaManager;
+
+use crate::AppState;
 
 /// Shared executor state
 pub struct ExecutorState {
@@ -34,6 +38,44 @@ impl ExecutorState {
 impl Default for ExecutorState {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// RPC caller that uses FridaManager to call Frida RPC methods
+pub struct FridaRpcCaller {
+    frida_manager: Arc<RwLock<Option<FridaManager>>>,
+    session_id: String,
+    script_id: String,
+}
+
+impl FridaRpcCaller {
+    pub fn new(
+        frida_manager: Arc<RwLock<Option<FridaManager>>>,
+        session_id: String,
+        script_id: String,
+    ) -> Self {
+        Self {
+            frida_manager,
+            session_id,
+            script_id,
+        }
+    }
+}
+
+#[async_trait]
+impl RpcCaller for FridaRpcCaller {
+    async fn call(
+        &self,
+        method: &str,
+        args: Vec<serde_json::Value>,
+    ) -> Result<serde_json::Value, String> {
+        let guard = self.frida_manager.read().await;
+        let manager = guard.as_ref().ok_or("Frida not initialized")?;
+
+        manager
+            .call_rpc(&self.session_id, &self.script_id, method, args)
+            .await
+            .map_err(|e| e.to_string())
     }
 }
 
@@ -255,13 +297,28 @@ pub async fn execute_script(
 /// Set session for target node execution
 #[tauri::command]
 pub async fn set_executor_session(
+    app_state: State<'_, AppState>,
     executor_state: State<'_, ExecutorState>,
     session_id: String,
+    script_id: String,
 ) -> Result<(), String> {
-    info!("set_executor_session called: session={}", session_id);
+    info!(
+        "set_executor_session called: session={}, script={}",
+        session_id, script_id
+    );
 
+    // Create RPC caller that uses FridaManager
+    let rpc_caller = Arc::new(FridaRpcCaller::new(
+        Arc::clone(&app_state.frida_manager),
+        session_id.clone(),
+        script_id,
+    ));
+
+    // Set session and RPC caller on executor
     let executor = executor_state.executor.read().await;
     executor.set_session(session_id).await;
+    executor.set_rpc_caller(rpc_caller).await;
+
     Ok(())
 }
 

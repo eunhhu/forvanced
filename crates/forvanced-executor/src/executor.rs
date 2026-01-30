@@ -59,6 +59,13 @@ impl ScriptExecutor {
     pub async fn clear_session(&self) {
         let mut bridge = self.rpc_bridge.write().await;
         bridge.clear_session();
+        bridge.clear_rpc_caller().await;
+    }
+
+    /// Set the RPC caller for target node execution
+    pub async fn set_rpc_caller(&self, caller: Arc<dyn crate::rpc::RpcCaller>) {
+        let bridge = self.rpc_bridge.read().await;
+        bridge.set_rpc_caller(caller).await;
     }
 
     /// Execute a script from an event trigger

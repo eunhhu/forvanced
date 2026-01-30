@@ -250,3 +250,109 @@ pub async fn unload_script(
         .await
         .map_err(|e| e.to_string())
 }
+
+/// Call an RPC method on a Frida script
+#[tauri::command]
+pub async fn call_rpc(
+    state: State<'_, AppState>,
+    session_id: String,
+    script_id: String,
+    method: String,
+    args: Vec<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    debug!(
+        "call_rpc called: session={}, script={}, method={}",
+        session_id, script_id, method
+    );
+
+    let guard = state.frida_manager.read().await;
+    let manager = guard.as_ref().ok_or("Frida not initialized")?;
+
+    manager
+        .call_rpc(&session_id, &script_id, &method, args)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Register for Frida script messages on a session.
+/// Messages will be emitted as "frida-message" events.
+#[tauri::command]
+pub async fn subscribe_to_messages(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<(), String> {
+    info!("subscribe_to_messages called for session: {}", session_id);
+
+    let guard = state.frida_manager.read().await;
+    let manager = guard.as_ref().ok_or("Frida not initialized")?;
+
+    let app_handle = app.clone();
+    let session_id_clone = session_id.clone();
+
+    manager
+        .on_session_message(
+            &session_id,
+            std::sync::Arc::new(move |script_id, message| {
+                use tauri::Emitter;
+
+                // Emit event to frontend
+                let payload = serde_json::json!({
+                    "sessionId": session_id_clone,
+                    "scriptId": script_id,
+                    "message": message
+                });
+
+                if let Err(e) = app_handle.emit("frida-message", payload) {
+                    tracing::error!("Failed to emit frida-message event: {}", e);
+                }
+            }),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// Simulate a Frida message for testing (mock mode only)
+#[cfg(feature = "mock")]
+#[tauri::command]
+pub async fn simulate_frida_message(
+    state: State<'_, AppState>,
+    session_id: String,
+    script_id: String,
+    message_type: String,
+    payload: serde_json::Value,
+) -> Result<(), String> {
+    use forvanced_frida::ScriptMessage;
+
+    info!(
+        "simulate_frida_message called: session={}, type={}",
+        session_id, message_type
+    );
+
+    let guard = state.frida_manager.read().await;
+    let manager = guard.as_ref().ok_or("Frida not initialized")?;
+
+    let message = match message_type.as_str() {
+        "log" => ScriptMessage::Log {
+            level: payload.get("level").and_then(|v| v.as_str()).unwrap_or("info").to_string(),
+            text: payload.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        },
+        "send" => ScriptMessage::Send {
+            payload: payload.get("payload").cloned().unwrap_or(serde_json::Value::Null),
+        },
+        "error" => ScriptMessage::Error {
+            description: payload.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            stack: payload.get("stack").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            file_name: payload.get("fileName").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            line_number: payload.get("lineNumber").and_then(|v| v.as_u64()).map(|n| n as u32),
+        },
+        _ => return Err(format!("Unknown message type: {}", message_type)),
+    };
+
+    manager
+        .dispatch_message(&session_id, &script_id, message)
+        .await
+        .map_err(|e| e.to_string())
+}

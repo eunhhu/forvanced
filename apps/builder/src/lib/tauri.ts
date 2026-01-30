@@ -203,3 +203,94 @@ export async function unloadScript(
 ): Promise<void> {
   return invoke<void>("unload_script", { sessionId, scriptId });
 }
+
+// RPC commands
+export async function callRpc(
+  sessionId: string,
+  scriptId: string,
+  method: string,
+  args: unknown[] = [],
+): Promise<unknown> {
+  return invoke<unknown>("call_rpc", { sessionId, scriptId, method, args });
+}
+
+// Message types from Frida scripts
+export type FridaMessageType = "log" | "send" | "error" | "rpc";
+
+export interface FridaLogMessage {
+  type: "log";
+  level: string;
+  text: string;
+}
+
+export interface FridaSendMessage {
+  type: "send";
+  payload: unknown;
+}
+
+export interface FridaErrorMessage {
+  type: "error";
+  description: string;
+  stack?: string;
+  fileName?: string;
+  lineNumber?: number;
+}
+
+export interface FridaRpcMessage {
+  type: "rpc";
+  id: number;
+  result: {
+    status: "ok" | "error";
+    value?: unknown;
+    message?: string;
+  };
+}
+
+export type FridaMessage =
+  | FridaLogMessage
+  | FridaSendMessage
+  | FridaErrorMessage
+  | FridaRpcMessage;
+
+export interface FridaMessageEvent {
+  sessionId: string;
+  scriptId: string;
+  message: FridaMessage;
+}
+
+// Subscribe to Frida messages for a session
+export async function subscribeToMessages(sessionId: string): Promise<void> {
+  return invoke<void>("subscribe_to_messages", { sessionId });
+}
+
+// Listen for Frida message events
+export async function onFridaMessage(
+  callback: (event: FridaMessageEvent) => void,
+): Promise<() => void> {
+  if (!isTauri()) {
+    console.log("[Mock] onFridaMessage subscribed");
+    return () => {};
+  }
+
+  const { listen } = await import("@tauri-apps/api/event");
+  const unlisten = await listen<FridaMessageEvent>("frida-message", (event) => {
+    callback(event.payload);
+  });
+
+  return unlisten;
+}
+
+// Simulate a Frida message (mock mode only, for testing)
+export async function simulateFridaMessage(
+  sessionId: string,
+  scriptId: string,
+  messageType: FridaMessageType,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  return invoke<void>("simulate_frida_message", {
+    sessionId,
+    scriptId,
+    messageType,
+    payload,
+  });
+}

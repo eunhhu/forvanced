@@ -295,12 +295,8 @@ impl FridaManager {
         // 3. Load and enable the script
         // For now, we create a script handle entry
         let script_id = Uuid::new_v4().to_string();
-        session.add_script(script_id.clone(), "user_script".to_string()).await;
-
-        // Mark as loaded
-        if let Some(handle) = session.scripts.write().await.get_mut(&script_id) {
-            handle.loaded = true;
-        }
+        session.add_script(script_id.clone(), "user_script".to_string(), script_source.to_string()).await;
+        session.mark_script_loaded(&script_id).await;
 
         info!("Script {} injected into session {}", script_id, session_id);
         Ok(script_id)
@@ -327,6 +323,104 @@ impl FridaManager {
             .ok_or_else(|| FridaError::ScriptNotFound(script_id.to_string()))?;
 
         info!("Script {} unloaded from session {}", script_id, session_id);
+        Ok(())
+    }
+
+    /// Call an RPC method on a Frida script.
+    /// The script must export the method via `rpc.exports`.
+    ///
+    /// # Arguments
+    /// * `session_id` - The session containing the script
+    /// * `script_id` - The script to call
+    /// * `method` - The RPC method name (as exported in rpc.exports)
+    /// * `args` - JSON arguments to pass to the method
+    ///
+    /// # Returns
+    /// The JSON result from the RPC call
+    pub async fn call_rpc(
+        &self,
+        session_id: &str,
+        script_id: &str,
+        method: &str,
+        args: Vec<serde_json::Value>,
+    ) -> Result<serde_json::Value> {
+        info!(
+            "Calling RPC method '{}' on script {} in session {}",
+            method, script_id, session_id
+        );
+
+        let session = self
+            .sessions
+            .read()
+            .await
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| FridaError::SessionNotFound(session_id.to_string()))?;
+
+        // Verify script exists
+        let scripts = session.scripts.read().await;
+        if !scripts.contains_key(script_id) {
+            return Err(FridaError::ScriptNotFound(script_id.to_string()));
+        }
+        drop(scripts);
+
+        // TODO: Real implementation would:
+        // 1. Get the actual Script handle
+        // 2. Call script.exports().call(method, args)
+        // 3. Return the result
+        //
+        // For now, return a stub response indicating the call was received
+        // Real Frida RPC requires the actual frida::Script handle which
+        // we don't store currently due to lifetime/Send constraints.
+        warn!(
+            "RPC call to '{}' is stubbed - real Frida integration required",
+            method
+        );
+
+        Ok(serde_json::json!({
+            "status": "stubbed",
+            "method": method,
+            "args": args,
+            "message": "Real Frida RPC not yet implemented"
+        }))
+    }
+
+    /// Register a message callback for a session.
+    /// This callback will be invoked when the Frida script sends messages.
+    pub async fn on_session_message(
+        &self,
+        session_id: &str,
+        callback: crate::session::MessageCallback,
+    ) -> Result<()> {
+        let session = self
+            .sessions
+            .read()
+            .await
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| FridaError::SessionNotFound(session_id.to_string()))?;
+
+        session.on_message(callback).await;
+        info!("Message callback registered for session {}", session_id);
+        Ok(())
+    }
+
+    /// Dispatch a message to a session's callbacks (for testing or internal use).
+    pub async fn dispatch_message(
+        &self,
+        session_id: &str,
+        script_id: &str,
+        message: crate::session::ScriptMessage,
+    ) -> Result<()> {
+        let session = self
+            .sessions
+            .read()
+            .await
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| FridaError::SessionNotFound(session_id.to_string()))?;
+
+        session.dispatch_message(script_id, message).await;
         Ok(())
     }
 }

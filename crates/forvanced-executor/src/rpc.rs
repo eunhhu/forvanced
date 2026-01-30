@@ -6,10 +6,40 @@
 use crate::error::{ExecutorError, ExecutorResult};
 use crate::script::ScriptNode;
 use crate::value::Value;
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
+/// Trait for making RPC calls to Frida.
+/// This allows the executor to work without direct Frida dependency.
+#[async_trait]
+pub trait RpcCaller: Send + Sync {
+    /// Call an RPC method on the Frida script
+    async fn call(
+        &self,
+        method: &str,
+        args: Vec<serde_json::Value>,
+    ) -> Result<serde_json::Value, String>;
+}
+
+/// A no-op RPC caller that returns errors (for when no Frida is connected)
+pub struct NoOpRpcCaller;
+
+#[async_trait]
+impl RpcCaller for NoOpRpcCaller {
+    async fn call(
+        &self,
+        method: &str,
+        _args: Vec<serde_json::Value>,
+    ) -> Result<serde_json::Value, String> {
+        Err(format!(
+            "RPC call to '{}' failed: No Frida session connected",
+            method
+        ))
+    }
+}
 
 /// RPC request sent to the target
 #[derive(Debug, Clone, Serialize)]
@@ -34,10 +64,17 @@ pub struct RpcBridge {
     /// Current session ID
     session_id: Option<String>,
 
+    /// Current script ID
+    script_id: Option<String>,
+
+    /// RPC caller implementation
+    rpc_caller: Arc<RwLock<Option<Arc<dyn RpcCaller>>>>,
+
     /// Request counter for unique IDs
     request_counter: Arc<RwLock<u64>>,
 
     /// Timeout for RPC calls (milliseconds)
+    #[allow(dead_code)]
     timeout_ms: u64,
 }
 
@@ -46,6 +83,8 @@ impl RpcBridge {
     pub fn new() -> Self {
         Self {
             session_id: None,
+            script_id: None,
+            rpc_caller: Arc::new(RwLock::new(None)),
             request_counter: Arc::new(RwLock::new(0)),
             timeout_ms: 5000, // 5 second default timeout
         }
@@ -56,9 +95,25 @@ impl RpcBridge {
         self.session_id = Some(session_id);
     }
 
+    /// Set the script ID
+    pub fn set_script(&mut self, script_id: String) {
+        self.script_id = Some(script_id);
+    }
+
+    /// Set the RPC caller
+    pub async fn set_rpc_caller(&self, caller: Arc<dyn RpcCaller>) {
+        *self.rpc_caller.write().await = Some(caller);
+    }
+
     /// Clear the session
     pub fn clear_session(&mut self) {
         self.session_id = None;
+        self.script_id = None;
+    }
+
+    /// Clear the RPC caller
+    pub async fn clear_rpc_caller(&self) {
+        *self.rpc_caller.write().await = None;
     }
 
     /// Set the timeout for RPC calls
@@ -97,7 +152,7 @@ impl RpcBridge {
             .map(|(k, v)| (k.clone(), serde_json::Value::from(v.clone())))
             .collect();
 
-        let _request = RpcRequest {
+        let request = RpcRequest {
             id: request_id,
             node_type: node.node_type.clone(),
             config: serde_json::Value::Object(
@@ -109,19 +164,40 @@ impl RpcBridge {
             inputs: json_inputs,
         };
 
-        // TODO: Actually send the RPC request to Frida
-        // This requires integration with FridaManager
-        //
-        // The implementation would:
-        // 1. Get the script handle from FridaManager
-        // 2. Call the RPC export: await script.rpc.exports.executeTargetNode(request)
-        // 3. Wait for response with timeout
-        // 4. Parse response and convert back to Value
+        // Get the RPC caller
+        let caller_guard = self.rpc_caller.read().await;
+        let caller = caller_guard
+            .as_ref()
+            .ok_or_else(|| ExecutorError::RpcError("No RPC caller configured".to_string()))?;
 
-        // For now, return a placeholder error
-        Err(ExecutorError::RpcError(
-            "RPC not yet implemented - Frida integration required".to_string(),
-        ))
+        // Call the RPC method
+        let request_json = serde_json::to_value(&request)
+            .map_err(|e| ExecutorError::RpcError(format!("Failed to serialize request: {}", e)))?;
+
+        let response_json = caller
+            .call("executeTargetNode", vec![request_json])
+            .await
+            .map_err(|e| ExecutorError::RpcError(e))?;
+
+        // Parse the response
+        let response: RpcResponse = serde_json::from_value(response_json)
+            .map_err(|e| ExecutorError::RpcError(format!("Failed to parse response: {}", e)))?;
+
+        if !response.success {
+            return Err(ExecutorError::RpcError(
+                response.error.unwrap_or_else(|| "Unknown RPC error".to_string()),
+            ));
+        }
+
+        // Convert outputs back to Value
+        let outputs = response
+            .outputs
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(k, v)| (k, Value::from(v)))
+            .collect();
+
+        Ok(outputs)
     }
 
     /// Execute multiple target nodes in a batch (optimization)

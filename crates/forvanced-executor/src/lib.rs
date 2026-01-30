@@ -34,6 +34,7 @@ pub mod value;
 pub use context::ExecutionContext;
 pub use error::{ExecutorError, ExecutorResult};
 pub use executor::ScriptExecutor;
+pub use rpc::{RpcBridge, RpcCaller, RpcRequest, RpcResponse};
 pub use value::Value;
 
 /// Node execution context classification

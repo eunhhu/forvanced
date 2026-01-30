@@ -229,12 +229,8 @@ impl FridaManager {
             .ok_or_else(|| FridaError::SessionNotFound(session_id.to_string()))?;
 
         let script_id = Uuid::new_v4().to_string();
-        session.add_script(script_id.clone(), "mock_script".to_string()).await;
-
-        // Mark as loaded
-        if let Some(handle) = session.scripts.write().await.get_mut(&script_id) {
-            handle.loaded = true;
-        }
+        session.add_script(script_id.clone(), "mock_script".to_string(), script_source.to_string()).await;
+        session.mark_script_loaded(&script_id).await;
 
         info!("Mock: script {} injected into session {}", script_id, session_id);
         Ok(script_id)
@@ -261,6 +257,106 @@ impl FridaManager {
             .ok_or_else(|| FridaError::ScriptNotFound(script_id.to_string()))?;
 
         info!("Mock: script {} unloaded from session {}", script_id, session_id);
+        Ok(())
+    }
+
+    /// Mock RPC call - returns simulated responses for testing.
+    pub async fn call_rpc(
+        &self,
+        session_id: &str,
+        script_id: &str,
+        method: &str,
+        args: Vec<serde_json::Value>,
+    ) -> Result<serde_json::Value> {
+        info!(
+            "Mock: calling RPC method '{}' on script {} in session {}",
+            method, script_id, session_id
+        );
+
+        let session = self
+            .sessions
+            .read()
+            .await
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| FridaError::SessionNotFound(session_id.to_string()))?;
+
+        // Verify script exists
+        let scripts = session.scripts.read().await;
+        if !scripts.contains_key(script_id) {
+            return Err(FridaError::ScriptNotFound(script_id.to_string()));
+        }
+        drop(scripts);
+
+        // Return mock responses based on method name
+        let result = match method {
+            "readMemory" => serde_json::json!({
+                "address": args.first().cloned().unwrap_or(serde_json::json!("0x0")),
+                "value": 42,
+                "size": args.get(1).cloned().unwrap_or(serde_json::json!(4))
+            }),
+            "writeMemory" => serde_json::json!({
+                "success": true,
+                "address": args.first().cloned().unwrap_or(serde_json::json!("0x0"))
+            }),
+            "scanMemory" => serde_json::json!({
+                "matches": [
+                    { "address": "0x7fff1234", "value": 100 },
+                    { "address": "0x7fff5678", "value": 100 }
+                ]
+            }),
+            "getModuleBase" => serde_json::json!({
+                "name": args.first().and_then(|v| v.as_str()).unwrap_or("unknown"),
+                "base": "0x400000",
+                "size": 0x100000
+            }),
+            _ => serde_json::json!({
+                "mock": true,
+                "method": method,
+                "args": args,
+                "result": "mock_response"
+            }),
+        };
+
+        info!("Mock: RPC call '{}' returned: {:?}", method, result);
+        Ok(result)
+    }
+
+    /// Register a message callback for a session.
+    pub async fn on_session_message(
+        &self,
+        session_id: &str,
+        callback: crate::session::MessageCallback,
+    ) -> Result<()> {
+        let session = self
+            .sessions
+            .read()
+            .await
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| FridaError::SessionNotFound(session_id.to_string()))?;
+
+        session.on_message(callback).await;
+        info!("Mock: message callback registered for session {}", session_id);
+        Ok(())
+    }
+
+    /// Dispatch a message to a session's callbacks.
+    pub async fn dispatch_message(
+        &self,
+        session_id: &str,
+        script_id: &str,
+        message: crate::session::ScriptMessage,
+    ) -> Result<()> {
+        let session = self
+            .sessions
+            .read()
+            .await
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| FridaError::SessionNotFound(session_id.to_string()))?;
+
+        session.dispatch_message(script_id, message).await;
         Ok(())
     }
 }

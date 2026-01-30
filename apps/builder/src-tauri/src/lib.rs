@@ -82,6 +82,11 @@ pub fn run() {
             commands::get_ui_value,
             commands::get_all_ui_values,
             commands::set_ui_values_batch,
+            // RPC and message commands
+            commands::call_rpc,
+            commands::subscribe_to_messages,
+            #[cfg(feature = "mock")]
+            commands::simulate_frida_message,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
