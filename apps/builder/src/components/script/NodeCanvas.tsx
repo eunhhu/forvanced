@@ -246,8 +246,8 @@ export const NodeCanvas: Component = () => {
         endY: y,
       });
 
-      // If not holding Ctrl/Cmd, clear selection
-      const addToSelection = e.ctrlKey || e.metaKey;
+      // If not holding Shift, clear selection (Adobe style)
+      const addToSelection = e.shiftKey;
       if (!addToSelection) {
         scriptStore.selectNode(null);
       }
@@ -307,7 +307,7 @@ export const NodeCanvas: Component = () => {
             })
             .map((n) => n.id);
 
-          const addToSelection = e.ctrlKey || e.metaKey;
+          const addToSelection = e.shiftKey;
           scriptStore.selectMultipleNodes(selectedIds, addToSelection);
         }
       }
@@ -749,7 +749,7 @@ export const NodeCanvas: Component = () => {
 
         {/* Help text */}
         <div class="absolute bottom-2 left-2 text-[10px] text-foreground-muted/50 pointer-events-none">
-          <span>Scroll: Pan | {isMac ? "⌘" : "Ctrl"}+Scroll: Zoom | Click+Drag: Select | {isMac ? "⌘" : "Ctrl"}+Click: Add to selection</span>
+          <span>Scroll: Pan | {isMac ? "⌘" : "Ctrl"}+Scroll: Zoom | Drag: Box select | Shift+Click: Add to selection</span>
         </div>
       </div>
     </div>
@@ -852,14 +852,14 @@ const NodeComponent: Component<NodeComponentProps> = (props) => {
     e.preventDefault(); // Prevent text selection and default drag behavior
     e.stopPropagation();
 
-    // Handle Ctrl/Cmd click for multi-select
-    const addToSelection = e.ctrlKey || e.metaKey;
+    // Handle Shift+click for multi-select (Adobe style)
+    const addToSelection = e.shiftKey;
 
     // If not already selected, select this node
     if (!props.isSelected) {
       props.onSelect(addToSelection);
     } else if (addToSelection) {
-      // Toggle off if Ctrl/Cmd clicking already selected node
+      // Toggle off if Shift+clicking already selected node
       props.onSelect(true);
       return;
     }

@@ -41,7 +41,7 @@ export const DesignCanvas: Component = () => {
   const [selectionBox, setSelectionBox] = createSignal<SelectionBox | null>(null);
   const [isSelecting, setIsSelecting] = createSignal(false);
 
-  // Check if Ctrl/Cmd key is pressed (for adding to selection)
+  // Check for Mac (for display purposes)
   const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
 
   const handleDragOver = (e: DragEvent) => {
@@ -90,13 +90,10 @@ export const DesignCanvas: Component = () => {
       return;
     }
 
-    const rect = contentAreaRef.getBoundingClientRect();
-    // Account for zoom and offset when calculating drop position
-    const x = Math.max(0, (e.clientX - rect.left) / scale() - 16);
-    const y = Math.max(0, (e.clientY - rect.top) / scale() - 16);
-
-    console.log("Adding component:", { type, x, y });
-    designerStore.addComponent(type, x, y);
+    // For stack layout, x/y don't matter for position (it's determined by order)
+    // but we can use y to determine where in the stack to insert
+    // For now, just append to end
+    designerStore.addComponent(type, 0, 0);
 
     // Clear the dragging type
     designerStore.setDraggingComponentType(null);
@@ -156,8 +153,8 @@ export const DesignCanvas: Component = () => {
         endY: y,
       });
 
-      // If not holding Ctrl/Cmd, clear selection
-      const addToSelection = e.ctrlKey || e.metaKey;
+      // If not holding Shift, clear selection (Adobe style)
+      const addToSelection = e.shiftKey;
       if (!addToSelection) {
         designerStore.selectComponent(null);
       }
@@ -204,7 +201,7 @@ export const DesignCanvas: Component = () => {
           })
           .map((c) => c.id);
 
-        const addToSelection = e.ctrlKey || e.metaKey;
+        const addToSelection = e.shiftKey;
         designerStore.selectMultiple(selectedIds, addToSelection);
       }
     }
@@ -309,12 +306,12 @@ export const DesignCanvas: Component = () => {
         >
           {/* Centered content wrapper with padding */}
           <div class="flex items-start justify-center p-8">
-            {/* Preview Frame */}
+            {/* Preview Frame - Fixed size, no overflow */}
             <div
-              class="bg-surface rounded-lg shadow-lg border border-border flex-shrink-0"
+              class="bg-surface rounded-lg shadow-lg border border-border flex-shrink-0 overflow-hidden"
               style={{
                 width: `${windowWidth()}px`,
-                "min-height": `${windowHeight() + 32}px`,
+                height: `${windowHeight() + 32}px`,
               }}
               onDragOver={handleDragOver}
               onDrop={handleDrop}
@@ -331,30 +328,36 @@ export const DesignCanvas: Component = () => {
                 </div>
               </div>
 
-              {/* Content Area - Drop Zone */}
+              {/* Content Area - Drop Zone (Stack Layout for auto-arrangement) */}
               <div
                 ref={contentAreaRef}
-                class="relative p-4 canvas-content overflow-hidden"
+                class="canvas-content flex flex-col items-stretch overflow-auto"
                 style={{
-                  "min-height": `${windowHeight()}px`,
+                  width: `${windowWidth()}px`,
+                  height: `${windowHeight()}px`,
+                  padding: "12px",
+                  gap: "8px",
                 }}
                 onDragOver={handleDragOver}
                 onDragEnter={handleDragEnter}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
               >
-                {/* Render root components sorted by z-index (ascending for render) */}
+                {/* Render root components in stack layout */}
                 <For each={designerStore.getRootComponentsForRender()}>
                   {(component) => (
                     <CanvasComponent
                       component={component}
                       parentOffset={{ x: 0, y: 0 }}
+                      scale={scale()}
+                      inAutoLayout={true}
+                      parentDirection="vertical"
                     />
                   )}
                 </For>
 
                 <Show when={designerStore.components().length === 0}>
-                  <div class="absolute inset-0 flex items-center justify-center text-foreground-muted text-sm pointer-events-none">
+                  <div class="flex-1 flex items-center justify-center text-foreground-muted text-sm pointer-events-none">
                     <div class="text-center">
                       <p>Drag components here</p>
                       <p class="text-xs mt-1">to build your trainer UI</p>
@@ -389,7 +392,7 @@ export const DesignCanvas: Component = () => {
 
         {/* Help text */}
         <div class="absolute bottom-2 left-2 text-[10px] text-foreground-muted/50 pointer-events-none">
-          <span>Scroll: Pan | {isMac ? "⌘" : "Ctrl"}+Scroll: Zoom | Click+Drag: Select | {isMac ? "⌘" : "Ctrl"}+Click: Add to selection</span>
+          <span>Scroll: Pan | {isMac ? "⌘" : "Ctrl"}+Scroll: Zoom | Drag: Box select | Shift+Click: Add to selection</span>
         </div>
       </div>
     </div>
@@ -405,6 +408,8 @@ interface CanvasComponentProps {
   activeTabId?: string;
   /** Parent's flex direction for proper sizing */
   parentDirection?: LayoutDirection;
+  /** Current zoom scale for drag calculations */
+  scale?: number;
 }
 
 const CanvasComponent: Component<CanvasComponentProps> = (props) => {
@@ -450,12 +455,12 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
     e.stopPropagation();
     e.preventDefault();
 
-    // Handle selection with Ctrl/Cmd for multi-select
-    const addToSelection = e.ctrlKey || e.metaKey;
+    // Handle selection with Shift for multi-select (Adobe style)
+    const addToSelection = e.shiftKey;
     if (!isSelected()) {
       designerStore.selectComponent(props.component.id, addToSelection);
     } else if (addToSelection) {
-      // Toggle off if Ctrl/Cmd clicking already selected component
+      // Toggle off if Shift+clicking already selected component
       designerStore.selectComponent(props.component.id, true);
       return;
     }
@@ -472,6 +477,7 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
     designerStore.setIsDragging(true);
     const startX = e.clientX;
     const startY = e.clientY;
+    const currentScale = props.scale ?? 1;
 
     // Store initial positions for all selected components
     const selectedComponents = designerStore.getSelectedComponents();
@@ -481,31 +487,18 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
 
     const handleMouseMove = (e: MouseEvent) => {
       e.preventDefault();
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
+      // Apply scale factor to movement delta
+      const dx = (e.clientX - startX) / currentScale;
+      const dy = (e.clientY - startY) / currentScale;
 
       // Move all selected components
-      if (selectedComponents.length > 1) {
-        designerStore.moveSelectedComponents(dx, dy);
-        // Reset for cumulative moves (we move relative to start each time)
-        const currentComponents = designerStore.getSelectedComponents();
-        for (const comp of currentComponents) {
-          const initial = initialPositions.get(comp.id);
-          if (initial) {
-            designerStore.moveComponent(
-              comp.id,
-              initial.x + dx,
-              initial.y + dy,
-            );
-          }
-        }
-      } else {
-        const initial = initialPositions.get(props.component.id);
+      for (const comp of selectedComponents) {
+        const initial = initialPositions.get(comp.id);
         if (initial) {
           designerStore.moveComponent(
-            props.component.id,
-            initial.x + dx,
-            initial.y + dy,
+            comp.id,
+            Math.round(initial.x + dx),
+            Math.round(initial.y + dy),
           );
         }
       }
@@ -528,7 +521,7 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
   const handleClick = (e: MouseEvent) => {
     e.stopPropagation();
     if (!isEditing()) {
-      const addToSelection = e.ctrlKey || e.metaKey;
+      const addToSelection = e.shiftKey;
       designerStore.selectComponent(props.component.id, addToSelection);
     }
   };
@@ -549,8 +542,8 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
     return null;
   }
 
-  // Sizing modes
-  const widthMode = () => (props.component.widthMode as SizingMode) ?? "fixed";
+  // Sizing modes - default to "fill" width and "fixed" height for stack layout compatibility
+  const widthMode = () => (props.component.widthMode as SizingMode) ?? (props.inAutoLayout ? "fill" : "fixed");
   const heightMode = () => (props.component.heightMode as SizingMode) ?? "fixed";
   const parentDir = () => props.parentDirection ?? "vertical";
 
@@ -574,13 +567,11 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
       classes.push("absolute");
     } else {
       classes.push("flex-shrink-0");
-      // In vertical stack: fill width means stretch horizontally
-      // In horizontal stack: fill height means stretch vertically
+      // In vertical stack: fill height means grow along main axis
+      // In horizontal stack: fill width means grow along main axis
       if (parentDir() === "vertical") {
-        if (widthMode() === "fill") classes.push("self-stretch");
         if (heightMode() === "fill") classes.push("flex-grow");
       } else {
-        if (heightMode() === "fill") classes.push("self-stretch");
         if (widthMode() === "fill") classes.push("flex-grow");
       }
     }
@@ -601,23 +592,29 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
 
     const style: Record<string, string | undefined> = {};
 
-    // Width handling
+    // Width handling for auto-layout
     if (widthMode() === "fixed") {
       style.width = `${props.component.width}px`;
     } else if (widthMode() === "hug") {
       style["min-width"] = `${props.component.width}px`;
       style.width = "auto";
+    } else if (widthMode() === "fill") {
+      // fill: use 100% width in vertical stack (cross-axis stretch)
+      if (parentDir() === "vertical") {
+        style.width = "100%";
+      }
     }
-    // fill: handled by self-stretch or flex-grow class
 
-    // Height handling
+    // Height handling for auto-layout
     if (heightMode() === "fixed") {
       style.height = `${props.component.height}px`;
     } else if (heightMode() === "hug") {
       style["min-height"] = `${props.component.height}px`;
       style.height = "auto";
+    } else if (heightMode() === "fill") {
+      // fill: use flex-grow (handled by class) but need min-height
+      style["min-height"] = `${props.component.height}px`;
     }
-    // fill: handled by self-stretch or flex-grow class
 
     return style;
   };
@@ -699,6 +696,7 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
                     x: props.parentOffset.x + props.component.x + getContainerPadding(props.component),
                     y: props.parentOffset.y + props.component.y + getContainerPadding(props.component) + getContainerHeaderHeight(props.component),
                   }}
+                  scale={props.scale}
                 />
               )}
             </For>
@@ -768,6 +766,7 @@ interface AutoLayoutContainerProps {
   component: UIComponent;
   parentOffset: { x: number; y: number };
   children: UIComponent[];
+  scale?: number;
 }
 
 const AutoLayoutContainer: Component<AutoLayoutContainerProps> = (props) => {
@@ -839,6 +838,7 @@ const AutoLayoutContainer: Component<AutoLayoutContainerProps> = (props) => {
             }}
             inAutoLayout={true}
             parentDirection={direction()}
+            scale={props.scale}
           />
         )}
       </For>
@@ -853,6 +853,7 @@ interface PageContainerProps {
   component: UIComponent;
   parentOffset: { x: number; y: number };
   children: UIComponent[];
+  scale?: number;
 }
 
 const PageContainer: Component<PageContainerProps> = (props) => {
@@ -929,6 +930,7 @@ const PageContainer: Component<PageContainerProps> = (props) => {
               inAutoLayout={true}
               activeTabId={activeTab()?.id}
               parentDirection="vertical"
+              scale={props.scale}
             />
           )}
         </For>

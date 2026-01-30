@@ -262,6 +262,9 @@ function createDesignerStore() {
       visible: true,
       locked: false,
       collapsed: false,
+      // Default sizing mode: fill width (stretch to parent), fixed height
+      widthMode: defaultProps.widthMode ?? "fill",
+      heightMode: defaultProps.heightMode ?? "fixed",
     };
 
     setComponents((prev) => [...prev, component]);
@@ -395,25 +398,29 @@ function createDesignerStore() {
   }
 
   // ===== Layer/Hierarchy Management =====
+  // Stack layout convention:
+  // - Lower zIndex = rendered first = appears at TOP of screen
+  // - Higher zIndex = rendered later = appears at BOTTOM of screen
+  // - Layer panel shows items in same order as screen (top item = top of screen)
 
-  // Get root components (no parent) - sorted by z-index descending for layer panel (top = front)
+  // Get root components (no parent) - sorted by z-index ascending for layer panel (top = first in render order)
   function getRootComponents(): UIComponent[] {
     return components()
       .filter((c) => !c.parentId)
-      .sort((a, b) => b.zIndex - a.zIndex);
+      .sort((a, b) => a.zIndex - b.zIndex);
   }
 
-  // Get direct children of a component - sorted by z-index descending for layer panel
+  // Get direct children of a component - sorted by z-index ascending for layer panel
   function getChildren(parentId: string): UIComponent[] {
     const parent = components().find((c) => c.id === parentId);
     if (!parent || !parent.children) return [];
     return parent.children
       .map((id) => components().find((c) => c.id === id))
       .filter((c): c is UIComponent => c !== undefined)
-      .sort((a, b) => b.zIndex - a.zIndex);
+      .sort((a, b) => a.zIndex - b.zIndex);
   }
 
-  // Get children sorted for rendering (ascending z-index, lower = behind)
+  // Get children sorted for rendering (ascending z-index, lower = top of stack)
   function getChildrenForRender(parentId: string): UIComponent[] {
     const parent = components().find((c) => c.id === parentId);
     if (!parent || !parent.children) return [];
@@ -554,23 +561,8 @@ function createDesignerStore() {
     updateComponent(componentId, { zIndex: newZIndex });
   }
 
-  // Bring to front (highest z-index among siblings)
+  // Move to top of stack (lowest z-index = rendered first = top of screen)
   function bringToFront(id: string): void {
-    const component = components().find((c) => c.id === id);
-    if (!component) return;
-
-    const siblings = component.parentId
-      ? getChildren(component.parentId)
-      : getRootComponents();
-
-    const maxZIndex = Math.max(...siblings.map((s) => s.zIndex));
-    if (component.zIndex < maxZIndex) {
-      updateComponent(id, { zIndex: maxZIndex + 1 });
-    }
-  }
-
-  // Send to back (lowest z-index among siblings)
-  function sendToBack(id: string): void {
     const component = components().find((c) => c.id === id);
     if (!component) return;
 
@@ -584,7 +576,22 @@ function createDesignerStore() {
     }
   }
 
-  // Bring forward (swap with next sibling)
+  // Move to bottom of stack (highest z-index = rendered last = bottom of screen)
+  function sendToBack(id: string): void {
+    const component = components().find((c) => c.id === id);
+    if (!component) return;
+
+    const siblings = component.parentId
+      ? getChildren(component.parentId)
+      : getRootComponents();
+
+    const maxZIndex = Math.max(...siblings.map((s) => s.zIndex));
+    if (component.zIndex < maxZIndex) {
+      updateComponent(id, { zIndex: maxZIndex + 1 });
+    }
+  }
+
+  // Move up one position (swap with previous sibling in sorted order)
   function bringForward(id: string): void {
     const component = components().find((c) => c.id === id);
     if (!component) return;
@@ -594,16 +601,17 @@ function createDesignerStore() {
       : getRootComponents();
 
     const currentIndex = siblings.findIndex((s) => s.id === id);
-    if (currentIndex < siblings.length - 1) {
-      const nextSibling = siblings[currentIndex + 1];
+    // Move up = swap with previous (lower index in ascending sorted list)
+    if (currentIndex > 0) {
+      const prevSibling = siblings[currentIndex - 1];
       // Swap z-indexes
       const tempZIndex = component.zIndex;
-      updateComponent(id, { zIndex: nextSibling.zIndex });
-      updateComponent(nextSibling.id, { zIndex: tempZIndex });
+      updateComponent(id, { zIndex: prevSibling.zIndex });
+      updateComponent(prevSibling.id, { zIndex: tempZIndex });
     }
   }
 
-  // Send backward (swap with previous sibling)
+  // Move down one position (swap with next sibling in sorted order)
   function sendBackward(id: string): void {
     const component = components().find((c) => c.id === id);
     if (!component) return;
@@ -613,12 +621,13 @@ function createDesignerStore() {
       : getRootComponents();
 
     const currentIndex = siblings.findIndex((s) => s.id === id);
-    if (currentIndex > 0) {
-      const prevSibling = siblings[currentIndex - 1];
+    // Move down = swap with next (higher index in ascending sorted list)
+    if (currentIndex < siblings.length - 1) {
+      const nextSibling = siblings[currentIndex + 1];
       // Swap z-indexes
       const tempZIndex = component.zIndex;
-      updateComponent(id, { zIndex: prevSibling.zIndex });
-      updateComponent(prevSibling.id, { zIndex: tempZIndex });
+      updateComponent(id, { zIndex: nextSibling.zIndex });
+      updateComponent(nextSibling.id, { zIndex: tempZIndex });
     }
   }
 
@@ -903,20 +912,22 @@ function getDefaultProps(type: ComponentType): {
   width: number;
   height: number;
   props: Record<string, unknown>;
+  widthMode?: SizingMode;
+  heightMode?: SizingMode;
 } {
   switch (type) {
     case "button":
       return { width: 120, height: 36, props: { variant: "primary" } };
     case "toggle":
-      return { width: 160, height: 32, props: { defaultValue: false } };
+      return { width: 160, height: 36, props: { defaultValue: false } };
     case "slider":
       return {
         width: 200,
-        height: 40,
+        height: 48,
         props: { min: 0, max: 100, step: 1, defaultValue: 50 },
       };
     case "label":
-      return { width: 100, height: 24, props: { fontSize: 14 } };
+      return { width: 100, height: 32, props: { fontSize: 14 } };
     case "input":
       return {
         width: 180,
@@ -933,15 +944,19 @@ function getDefaultProps(type: ComponentType): {
       return {
         width: 300,
         height: 200,
+        widthMode: "fill",
+        heightMode: "hug", // Groups can grow with content
         props: { title: "Group", collapsed: false },
       };
     case "spacer":
-      return { width: 100, height: 20, props: {} };
+      return { width: 100, height: 20, widthMode: "fill", props: {} };
     // Layout Components
     case "stack":
       return {
         width: 300,
         height: 200,
+        widthMode: "fill",
+        heightMode: "hug", // Stacks grow with content
         props: {
           direction: "vertical" as LayoutDirection,
           gap: 8,
@@ -954,6 +969,8 @@ function getDefaultProps(type: ComponentType): {
       return {
         width: 350,
         height: 300,
+        widthMode: "fill",
+        heightMode: "fill", // Pages fill available space
         props: {
           tabs: [
             { id: crypto.randomUUID(), label: "Tab 1" },
@@ -968,6 +985,8 @@ function getDefaultProps(type: ComponentType): {
       return {
         width: 300,
         height: 250,
+        widthMode: "fill",
+        heightMode: "fill", // Scrolls fill available space
         props: {
           direction: "vertical" as LayoutDirection,
           showScrollbar: true,
@@ -979,6 +998,8 @@ function getDefaultProps(type: ComponentType): {
       return {
         width: 200,
         height: 2,
+        widthMode: "fill",
+        heightMode: "fixed",
         props: {
           direction: "horizontal" as LayoutDirection,
           thickness: 1,
@@ -989,6 +1010,8 @@ function getDefaultProps(type: ComponentType): {
       return {
         width: 280,
         height: 180,
+        widthMode: "fill",
+        heightMode: "hug", // Cards can grow with content
         props: {
           title: "Card Title",
           showHeader: true,

@@ -57,7 +57,11 @@ const LayerItem: Component<{
   onSetParent?: (childId: string) => void;
   settingParentFor?: string | null;
 }> = (props) => {
+  // Use multi-selection system
   const isSelected = createMemo(
+    () => designerStore.isSelected(props.component.id),
+  );
+  const isPrimarySelected = createMemo(
     () => designerStore.selectedId() === props.component.id,
   );
   const hasChildren = createMemo(
@@ -96,7 +100,9 @@ const LayerItem: Component<{
     if (props.settingParentFor && canBeParentTarget()) {
       props.onSetParent?.(props.component.id);
     } else {
-      designerStore.setSelectedId(props.component.id);
+      // Use Shift+click for multi-select (Adobe style)
+      const addToSelection = e.shiftKey;
+      designerStore.selectComponent(props.component.id, addToSelection);
     }
   };
 
@@ -117,19 +123,28 @@ const LayerItem: Component<{
 
   const IconComponent = ComponentIconMap[props.component.type] || IconBox;
 
+  // Selection style based on primary/secondary selection
+  const getSelectionClass = () => {
+    if (isPrimarySelected()) {
+      return "bg-accent/30 text-accent";
+    }
+    if (isSelected()) {
+      return "bg-accent/15 text-accent/80";
+    }
+    if (isSettingParent()) {
+      return "bg-warning/20 text-warning";
+    }
+    if (canBeParentTarget()) {
+      return "bg-success/10 text-success hover:bg-success/20";
+    }
+    return "text-text-secondary";
+  };
+
   return (
     <div class="select-none">
       {/* Layer row */}
       <div
-        class={`flex items-center gap-1 px-2 py-1 cursor-pointer hover:bg-surface-hover rounded text-sm ${
-          isSelected()
-            ? "bg-accent/20 text-accent"
-            : isSettingParent()
-              ? "bg-warning/20 text-warning"
-              : canBeParentTarget()
-                ? "bg-success/10 text-success hover:bg-success/20"
-                : "text-text-secondary"
-        }`}
+        class={`flex items-center gap-1 px-2 py-1 cursor-pointer hover:bg-surface-hover rounded text-sm ${getSelectionClass()}`}
         style={{ "padding-left": `${props.depth * 16 + 8}px` }}
         onClick={handleSelect}
       >
@@ -225,7 +240,9 @@ export const LayersPanel: Component = () => {
 
   const rootComponents = createMemo(() => designerStore.getRootComponents());
   const selectedId = createMemo(() => designerStore.selectedId());
-  const hasSelection = createMemo(() => selectedId() !== null);
+  const selectedCount = createMemo(() => designerStore.selectedIds().size);
+  const hasSelection = createMemo(() => selectedCount() > 0);
+  const hasMultiSelection = createMemo(() => selectedCount() > 1);
   const selectedComponent = createMemo(() =>
     designerStore.getSelectedComponent(),
   );
@@ -296,13 +313,13 @@ export const LayersPanel: Component = () => {
         </span>
       </div>
 
-      {/* Z-index controls toolbar */}
+      {/* Order controls toolbar (stack layout: up = top of screen) */}
       <div class="flex items-center gap-1 px-2 py-1.5 border-b border-border bg-surface-raised">
         <button
           class="p-1.5 rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={handleBringToFront}
           disabled={!hasSelection()}
-          title="Bring to Front"
+          title="Move to Top"
         >
           <IconArrowUpToLine class="w-3.5 h-3.5" />
         </button>
@@ -310,7 +327,7 @@ export const LayersPanel: Component = () => {
           class="p-1.5 rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={handleBringForward}
           disabled={!hasSelection()}
-          title="Bring Forward"
+          title="Move Up"
         >
           <IconArrowUp class="w-3.5 h-3.5" />
         </button>
@@ -318,7 +335,7 @@ export const LayersPanel: Component = () => {
           class="p-1.5 rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={handleSendBackward}
           disabled={!hasSelection()}
-          title="Send Backward"
+          title="Move Down"
         >
           <IconArrowDown class="w-3.5 h-3.5" />
         </button>
@@ -326,7 +343,7 @@ export const LayersPanel: Component = () => {
           class="p-1.5 rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={handleSendToBack}
           disabled={!hasSelection()}
-          title="Send to Back"
+          title="Move to Bottom"
         >
           <IconArrowDownToLine class="w-3.5 h-3.5" />
         </button>
@@ -392,21 +409,38 @@ export const LayersPanel: Component = () => {
       {/* Footer - selected info */}
       <Show when={hasSelection()}>
         <div class="px-3 py-2 border-t border-border text-xs text-text-tertiary">
-          <div class="flex justify-between">
-            <span>z-index:</span>
-            <span class="text-text-secondary">
-              {selectedComponent()?.zIndex ?? "-"}
-            </span>
-          </div>
-          <Show when={selectedComponent()?.parentId}>
-            <div class="flex justify-between mt-1">
-              <span>parent:</span>
-              <span class="text-text-secondary truncate max-w-[100px]">
-                {designerStore
-                  .components()
-                  .find((c) => c.id === selectedComponent()?.parentId)?.label ||
-                  "unknown"}
+          <Show
+            when={hasMultiSelection()}
+            fallback={
+              <>
+                <div class="flex justify-between">
+                  <span>z-index:</span>
+                  <span class="text-text-secondary">
+                    {selectedComponent()?.zIndex ?? "-"}
+                  </span>
+                </div>
+                <Show when={selectedComponent()?.parentId}>
+                  <div class="flex justify-between mt-1">
+                    <span>parent:</span>
+                    <span class="text-text-secondary truncate max-w-[100px]">
+                      {designerStore
+                        .components()
+                        .find((c) => c.id === selectedComponent()?.parentId)?.label ||
+                        "unknown"}
+                    </span>
+                  </div>
+                </Show>
+              </>
+            }
+          >
+            <div class="flex justify-between">
+              <span>Selected:</span>
+              <span class="text-accent">
+                {selectedCount()} components
               </span>
+            </div>
+            <div class="text-[10px] text-text-tertiary mt-1">
+              Shift+Click to add/remove
             </div>
           </Show>
         </div>
