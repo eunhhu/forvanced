@@ -7,7 +7,12 @@ import {
   createEffect,
   untrack,
 } from "solid-js";
-import { designerStore } from "@/stores/designer";
+import {
+  designerStore,
+  type LayoutDirection,
+  type Alignment,
+  type PageTab,
+} from "@/stores/designer";
 import { ChevronDownIcon, ChevronRightIcon } from "@/components/common/Icons";
 
 export const PropertyPanel: Component = () => {
@@ -197,6 +202,300 @@ export const PropertyPanel: Component = () => {
                       onChange={(val) =>
                         designerStore.updateComponent(c().id, {
                           props: { ...c().props, defaultIndex: val },
+                        })
+                      }
+                    />
+                  </PropertyRow>
+                </PropertySection>
+              </Show>
+
+              {/* Stack Layout Settings */}
+              <Show when={c().type === "stack"}>
+                <PropertySection title="Stack Layout">
+                  <PropertyRow label="Direction">
+                    <select
+                      class="w-28 px-2 py-1 text-xs bg-background border border-border rounded"
+                      value={(c().props.direction as LayoutDirection) ?? "vertical"}
+                      onChange={(e) =>
+                        designerStore.updateComponent(c().id, {
+                          props: { ...c().props, direction: e.currentTarget.value as LayoutDirection },
+                        })
+                      }
+                    >
+                      <option value="vertical">Vertical</option>
+                      <option value="horizontal">Horizontal</option>
+                    </select>
+                  </PropertyRow>
+                  <PropertyRow label="Gap">
+                    <NumberInput
+                      class="w-20 px-2 py-1 text-xs bg-background border border-border rounded"
+                      min={0}
+                      value={(c().props.gap as number) ?? 8}
+                      onChange={(val) =>
+                        designerStore.updateComponent(c().id, {
+                          props: { ...c().props, gap: val },
+                        })
+                      }
+                    />
+                  </PropertyRow>
+                  <PropertyRow label="Padding">
+                    <NumberInput
+                      class="w-20 px-2 py-1 text-xs bg-background border border-border rounded"
+                      min={0}
+                      value={(c().props.padding as number) ?? 12}
+                      onChange={(val) =>
+                        designerStore.updateComponent(c().id, {
+                          props: { ...c().props, padding: val },
+                        })
+                      }
+                    />
+                  </PropertyRow>
+                  <PropertyRow label="Align">
+                    <select
+                      class="w-28 px-2 py-1 text-xs bg-background border border-border rounded"
+                      value={(c().props.align as Alignment) ?? "stretch"}
+                      onChange={(e) =>
+                        designerStore.updateComponent(c().id, {
+                          props: { ...c().props, align: e.currentTarget.value as Alignment },
+                        })
+                      }
+                    >
+                      <option value="start">Start</option>
+                      <option value="center">Center</option>
+                      <option value="end">End</option>
+                      <option value="stretch">Stretch</option>
+                    </select>
+                  </PropertyRow>
+                  <PropertyRow label="Justify">
+                    <select
+                      class="w-28 px-2 py-1 text-xs bg-background border border-border rounded"
+                      value={(c().props.justify as Alignment) ?? "start"}
+                      onChange={(e) =>
+                        designerStore.updateComponent(c().id, {
+                          props: { ...c().props, justify: e.currentTarget.value as Alignment },
+                        })
+                      }
+                    >
+                      <option value="start">Start</option>
+                      <option value="center">Center</option>
+                      <option value="end">End</option>
+                      <option value="space-between">Space Between</option>
+                    </select>
+                  </PropertyRow>
+                </PropertySection>
+              </Show>
+
+              {/* Page Settings */}
+              <Show when={c().type === "page"}>
+                <PropertySection title="Page Tabs">
+                  <div class="space-y-2">
+                    <For each={(c().props.tabs as PageTab[]) ?? []}>
+                      {(tab, i) => (
+                        <div class="flex items-center gap-2">
+                          <input
+                            type="text"
+                            class="flex-1 px-2 py-1 text-xs bg-background border border-border rounded"
+                            value={tab.label}
+                            onInput={(e) => {
+                              const tabs = [...((c().props.tabs as PageTab[]) ?? [])];
+                              tabs[i()] = { ...tabs[i()], label: e.currentTarget.value };
+                              designerStore.updateComponent(c().id, {
+                                props: { ...c().props, tabs },
+                              });
+                            }}
+                          />
+                          <button
+                            class="w-6 h-6 flex items-center justify-center text-error hover:bg-error/10 rounded"
+                            onClick={() => {
+                              const tabs = [...((c().props.tabs as PageTab[]) ?? [])].filter(
+                                (_, idx) => idx !== i()
+                              );
+                              designerStore.updateComponent(c().id, {
+                                props: { ...c().props, tabs },
+                              });
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+                    </For>
+                    <button
+                      class="w-full px-2 py-1 text-xs bg-accent/10 text-accent rounded hover:bg-accent/20"
+                      onClick={() => {
+                        const tabs = [
+                          ...((c().props.tabs as PageTab[]) ?? []),
+                          { id: crypto.randomUUID(), label: `Tab ${((c().props.tabs as PageTab[]) ?? []).length + 1}` },
+                        ];
+                        designerStore.updateComponent(c().id, {
+                          props: { ...c().props, tabs },
+                        });
+                      }}
+                    >
+                      + Add Tab
+                    </button>
+                  </div>
+                  <PropertyRow label="Active Tab">
+                    <NumberInput
+                      class="w-20 px-2 py-1 text-xs bg-background border border-border rounded"
+                      min={0}
+                      value={(c().props.activeTabIndex as number) ?? 0}
+                      onChange={(val) =>
+                        designerStore.updateComponent(c().id, {
+                          props: { ...c().props, activeTabIndex: val },
+                        })
+                      }
+                    />
+                  </PropertyRow>
+                </PropertySection>
+              </Show>
+
+              {/* Scroll Settings */}
+              <Show when={c().type === "scroll"}>
+                <PropertySection title="Scroll Settings">
+                  <PropertyRow label="Direction">
+                    <select
+                      class="w-28 px-2 py-1 text-xs bg-background border border-border rounded"
+                      value={(c().props.direction as LayoutDirection) ?? "vertical"}
+                      onChange={(e) =>
+                        designerStore.updateComponent(c().id, {
+                          props: { ...c().props, direction: e.currentTarget.value as LayoutDirection },
+                        })
+                      }
+                    >
+                      <option value="vertical">Vertical</option>
+                      <option value="horizontal">Horizontal</option>
+                    </select>
+                  </PropertyRow>
+                  <PropertyRow label="Scrollbar">
+                    <button
+                      class={`w-10 h-5 rounded-full transition-colors relative ${
+                        ((c().props.showScrollbar as boolean) ?? true)
+                          ? "bg-accent"
+                          : "bg-background-secondary"
+                      }`}
+                      onClick={() =>
+                        designerStore.updateComponent(c().id, {
+                          props: {
+                            ...c().props,
+                            showScrollbar: !(c().props.showScrollbar as boolean ?? true),
+                          },
+                        })
+                      }
+                    >
+                      <div
+                        class={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                          ((c().props.showScrollbar as boolean) ?? true)
+                            ? "translate-x-5"
+                            : "translate-x-0.5"
+                        }`}
+                      />
+                    </button>
+                  </PropertyRow>
+                  <PropertyRow label="Padding">
+                    <NumberInput
+                      class="w-20 px-2 py-1 text-xs bg-background border border-border rounded"
+                      min={0}
+                      value={(c().props.padding as number) ?? 8}
+                      onChange={(val) =>
+                        designerStore.updateComponent(c().id, {
+                          props: { ...c().props, padding: val },
+                        })
+                      }
+                    />
+                  </PropertyRow>
+                </PropertySection>
+              </Show>
+
+              {/* Divider Settings */}
+              <Show when={c().type === "divider"}>
+                <PropertySection title="Divider Settings">
+                  <PropertyRow label="Direction">
+                    <select
+                      class="w-28 px-2 py-1 text-xs bg-background border border-border rounded"
+                      value={(c().props.direction as LayoutDirection) ?? "horizontal"}
+                      onChange={(e) =>
+                        designerStore.updateComponent(c().id, {
+                          props: { ...c().props, direction: e.currentTarget.value as LayoutDirection },
+                        })
+                      }
+                    >
+                      <option value="horizontal">Horizontal</option>
+                      <option value="vertical">Vertical</option>
+                    </select>
+                  </PropertyRow>
+                  <PropertyRow label="Thickness">
+                    <NumberInput
+                      class="w-20 px-2 py-1 text-xs bg-background border border-border rounded"
+                      min={1}
+                      value={(c().props.thickness as number) ?? 1}
+                      onChange={(val) =>
+                        designerStore.updateComponent(c().id, {
+                          props: { ...c().props, thickness: val },
+                        })
+                      }
+                    />
+                  </PropertyRow>
+                </PropertySection>
+              </Show>
+
+              {/* Card Settings */}
+              <Show when={c().type === "card"}>
+                <PropertySection title="Card Settings">
+                  <PropertyInput
+                    label="Title"
+                    value={(c().props.title as string) ?? "Card"}
+                    onChange={(value) =>
+                      designerStore.updateComponent(c().id, {
+                        props: { ...c().props, title: value },
+                      })
+                    }
+                  />
+                  <PropertyRow label="Show Header">
+                    <button
+                      class={`w-10 h-5 rounded-full transition-colors relative ${
+                        ((c().props.showHeader as boolean) ?? true)
+                          ? "bg-accent"
+                          : "bg-background-secondary"
+                      }`}
+                      onClick={() =>
+                        designerStore.updateComponent(c().id, {
+                          props: {
+                            ...c().props,
+                            showHeader: !(c().props.showHeader as boolean ?? true),
+                          },
+                        })
+                      }
+                    >
+                      <div
+                        class={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                          ((c().props.showHeader as boolean) ?? true)
+                            ? "translate-x-5"
+                            : "translate-x-0.5"
+                        }`}
+                      />
+                    </button>
+                  </PropertyRow>
+                  <PropertyRow label="Padding">
+                    <NumberInput
+                      class="w-20 px-2 py-1 text-xs bg-background border border-border rounded"
+                      min={0}
+                      value={(c().props.padding as number) ?? 16}
+                      onChange={(val) =>
+                        designerStore.updateComponent(c().id, {
+                          props: { ...c().props, padding: val },
+                        })
+                      }
+                    />
+                  </PropertyRow>
+                  <PropertyRow label="Elevation">
+                    <NumberInput
+                      class="w-20 px-2 py-1 text-xs bg-background border border-border rounded"
+                      min={0}
+                      value={(c().props.elevation as number) ?? 1}
+                      onChange={(val) =>
+                        designerStore.updateComponent(c().id, {
+                          props: { ...c().props, elevation: val },
                         })
                       }
                     />

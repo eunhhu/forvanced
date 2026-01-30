@@ -3,14 +3,33 @@ import { projectStore } from "./project";
 
 // UI Component Types
 export type ComponentType =
+  // Basic Controls
   | "button"
   | "toggle"
   | "slider"
   | "label"
   | "input"
   | "dropdown"
+  // Layout Components
   | "group"
-  | "spacer";
+  | "spacer"
+  | "stack" // Auto stack layout (horizontal/vertical)
+  | "page" // Page container with tabs
+  | "scroll" // Scrollable container
+  | "divider" // Visual separator
+  | "card"; // Card container with optional header
+
+// Layout direction for stack
+export type LayoutDirection = "horizontal" | "vertical";
+
+// Alignment options
+export type Alignment = "start" | "center" | "end" | "stretch" | "space-between";
+
+// Page tab definition
+export interface PageTab {
+  id: string;
+  label: string;
+}
 
 // Frida Action Categories
 export type FridaActionCategory =
@@ -69,6 +88,9 @@ export interface UIComponent {
   width: number;
   height: number;
   props: Record<string, unknown>;
+  // Parent-child relationship for layout components
+  parentId?: string;
+  children?: string[]; // Child component IDs
   // Note: bindings removed - use visual scripts with event_ui nodes instead
 }
 
@@ -261,6 +283,11 @@ function getDefaultLabel(type: ComponentType): string {
     dropdown: "Dropdown",
     group: "Group",
     spacer: "",
+    stack: "Stack",
+    page: "Pages",
+    scroll: "Scroll",
+    divider: "",
+    card: "Card",
   };
   return labels[type];
 }
@@ -303,6 +330,62 @@ function getDefaultProps(type: ComponentType): {
       };
     case "spacer":
       return { width: 100, height: 20, props: {} };
+    // Layout Components
+    case "stack":
+      return {
+        width: 300,
+        height: 200,
+        props: {
+          direction: "vertical" as LayoutDirection,
+          gap: 8,
+          padding: 12,
+          align: "stretch" as Alignment,
+          justify: "start" as Alignment,
+        },
+      };
+    case "page":
+      return {
+        width: 350,
+        height: 300,
+        props: {
+          tabs: [
+            { id: crypto.randomUUID(), label: "Tab 1" },
+            { id: crypto.randomUUID(), label: "Tab 2" },
+          ] as PageTab[],
+          activeTabIndex: 0,
+        },
+      };
+    case "scroll":
+      return {
+        width: 300,
+        height: 250,
+        props: {
+          direction: "vertical" as LayoutDirection,
+          showScrollbar: true,
+          padding: 8,
+        },
+      };
+    case "divider":
+      return {
+        width: 200,
+        height: 2,
+        props: {
+          direction: "horizontal" as LayoutDirection,
+          thickness: 1,
+          color: "border",
+        },
+      };
+    case "card":
+      return {
+        width: 280,
+        height: 180,
+        props: {
+          title: "Card Title",
+          showHeader: true,
+          padding: 16,
+          elevation: 1,
+        },
+      };
     default:
       return { width: 100, height: 36, props: {} };
   }

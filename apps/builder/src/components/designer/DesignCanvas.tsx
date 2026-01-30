@@ -3,6 +3,8 @@ import {
   designerStore,
   type UIComponent,
   type ComponentType,
+  type LayoutDirection,
+  type PageTab,
 } from "@/stores/designer";
 import { projectStore } from "@/stores/project";
 import { TrashIcon } from "@/components/common/Icons";
@@ -80,11 +82,9 @@ export const DesignCanvas: Component = () => {
   const handleCanvasMouseDown = (e: MouseEvent) => {
     // Deselect when clicking on empty canvas area (not on components)
     const target = e.target as HTMLElement;
-    if (
-      target.classList.contains("canvas-drop-zone") ||
-      target.classList.contains("canvas-content") ||
-      target.classList.contains("canvas-background")
-    ) {
+    // Check if clicking on a canvas component or its children
+    const isOnComponent = target.closest("[data-component-id]");
+    if (!isOnComponent) {
       designerStore.setSelectedId(null);
     }
   };
@@ -185,6 +185,7 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
   const [isEditing, setIsEditing] = createSignal(false);
   const [editValue, setEditValue] = createSignal("");
   const [isDragging, setIsDragging] = createSignal(false);
+  let componentRef: HTMLDivElement | undefined;
 
   const isSelected = () => designerStore.selectedId() === props.component.id;
 
@@ -195,9 +196,11 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
       return;
     }
 
+    // Always stop propagation to prevent canvas from deselecting
     e.stopPropagation();
     e.preventDefault();
 
+    // Select this component
     designerStore.setSelectedId(props.component.id);
 
     if (e.detail === 2) {
@@ -216,6 +219,7 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
     const startCompY = props.component.y;
 
     const handleMouseMove = (e: MouseEvent) => {
+      e.preventDefault();
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
       designerStore.moveComponent(
@@ -236,6 +240,14 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
     window.addEventListener("mouseup", handleMouseUp);
   };
 
+  // Handle click on component for selection (backup for mousedown)
+  const handleClick = (e: MouseEvent) => {
+    e.stopPropagation();
+    if (!isEditing()) {
+      designerStore.setSelectedId(props.component.id);
+    }
+  };
+
   const handleLabelSave = () => {
     designerStore.updateComponent(props.component.id, { label: editValue() });
     setIsEditing(false);
@@ -249,24 +261,28 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
 
   return (
     <div
+      ref={componentRef}
+      data-component-id={props.component.id}
       class={`absolute cursor-move select-none transition-shadow ${
         isSelected()
           ? "ring-2 ring-accent ring-offset-2 ring-offset-surface"
-          : ""
+          : "hover:ring-1 hover:ring-accent/50"
       }`}
       style={{
         left: `${props.component.x}px`,
         top: `${props.component.y}px`,
         width: `${props.component.width}px`,
         height: `${props.component.height}px`,
+        "z-index": isSelected() ? 10 : 1,
       }}
       onMouseDown={handleMouseDown}
+      onClick={handleClick}
     >
       {/* Delete button */}
       <Show when={isSelected()}>
         <button
           data-action="delete"
-          class="absolute -top-2 -right-2 w-5 h-5 bg-error rounded-full flex items-center justify-center text-white hover:bg-error/80 transition-colors z-10"
+          class="absolute -top-2 -right-2 w-5 h-5 bg-error rounded-full flex items-center justify-center text-white hover:bg-error/80 transition-colors z-20"
           onMouseDown={(e) => {
             e.stopPropagation();
             e.preventDefault();
@@ -299,7 +315,7 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
       <Show when={isSelected()}>
         <div
           data-action="resize"
-          class="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize flex items-center justify-center"
+          class="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize flex items-center justify-center z-20"
           onMouseDown={(e) => {
             e.stopPropagation();
             e.preventDefault();
@@ -450,6 +466,155 @@ const ComponentPreview: Component<ComponentPreviewProps> = (props) => {
       return (
         <div class="w-full h-full border border-dashed border-border rounded opacity-50" />
       );
+
+    case "stack": {
+      const direction = (c.props.direction as LayoutDirection) ?? "vertical";
+      const gap = (c.props.gap as number) ?? 8;
+      const padding = (c.props.padding as number) ?? 12;
+      return (
+        <div
+          class="w-full h-full border-2 border-dashed border-accent/30 rounded-lg bg-accent/5 overflow-hidden"
+          style={{ padding: `${padding}px` }}
+        >
+          <div
+            class={`w-full h-full flex ${direction === "vertical" ? "flex-col" : "flex-row"} items-center justify-center`}
+            style={{ gap: `${gap}px` }}
+          >
+            <div class="text-xs text-accent/60 flex items-center gap-1">
+              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                {direction === "vertical" ? (
+                  <>
+                    <rect x="6" y="3" width="12" height="4" rx="1" />
+                    <rect x="6" y="10" width="12" height="4" rx="1" />
+                    <rect x="6" y="17" width="12" height="4" rx="1" />
+                  </>
+                ) : (
+                  <>
+                    <rect x="3" y="6" width="4" height="12" rx="1" />
+                    <rect x="10" y="6" width="4" height="12" rx="1" />
+                    <rect x="17" y="6" width="4" height="12" rx="1" />
+                  </>
+                )}
+              </svg>
+              <span>Stack ({direction})</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    case "page": {
+      const tabs = (c.props.tabs as PageTab[]) ?? [];
+      const activeIndex = (c.props.activeTabIndex as number) ?? 0;
+      return (
+        <div class="w-full h-full border border-border rounded-lg bg-surface overflow-hidden flex flex-col">
+          {/* Tab header */}
+          <div class="h-8 border-b border-border flex items-center bg-background-secondary">
+            <For each={tabs}>
+              {(tab, i) => (
+                <div
+                  class={`px-3 h-full flex items-center text-xs ${
+                    i() === activeIndex
+                      ? "bg-surface border-b-2 border-accent text-accent"
+                      : "text-foreground-muted"
+                  }`}
+                >
+                  {tab.label}
+                </div>
+              )}
+            </For>
+          </div>
+          {/* Tab content area */}
+          <div class="flex-1 flex items-center justify-center text-xs text-foreground-muted">
+            Drop components here
+          </div>
+        </div>
+      );
+    }
+
+    case "scroll": {
+      const direction = (c.props.direction as LayoutDirection) ?? "vertical";
+      const showScrollbar = (c.props.showScrollbar as boolean) ?? true;
+      return (
+        <div class="w-full h-full border border-border rounded-lg bg-surface overflow-hidden relative">
+          <div class="absolute inset-2 flex items-center justify-center text-xs text-foreground-muted">
+            <div class="flex items-center gap-1">
+              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                {direction === "vertical" ? (
+                  <>
+                    <path d="M12 3v18M12 3l-4 4M12 3l4 4M12 21l-4-4M12 21l4-4" />
+                  </>
+                ) : (
+                  <>
+                    <path d="M3 12h18M3 12l4-4M3 12l4 4M21 12l-4-4M21 12l-4 4" />
+                  </>
+                )}
+              </svg>
+              <span>Scroll ({direction})</span>
+            </div>
+          </div>
+          {/* Scrollbar indicator */}
+          <Show when={showScrollbar}>
+            <div
+              class={`absolute bg-foreground-muted/30 rounded-full ${
+                direction === "vertical"
+                  ? "right-1 top-2 bottom-2 w-1.5"
+                  : "bottom-1 left-2 right-2 h-1.5"
+              }`}
+            >
+              <div
+                class={`bg-foreground-muted/60 rounded-full ${
+                  direction === "vertical" ? "w-full h-8" : "w-8 h-full"
+                }`}
+              />
+            </div>
+          </Show>
+        </div>
+      );
+    }
+
+    case "divider": {
+      const direction = (c.props.direction as LayoutDirection) ?? "horizontal";
+      const thickness = (c.props.thickness as number) ?? 1;
+      return (
+        <div class="w-full h-full flex items-center justify-center">
+          <div
+            class="bg-border"
+            style={{
+              width: direction === "horizontal" ? "100%" : `${thickness}px`,
+              height: direction === "horizontal" ? `${thickness}px` : "100%",
+            }}
+          />
+        </div>
+      );
+    }
+
+    case "card": {
+      const title = (c.props.title as string) ?? "Card";
+      const showHeader = (c.props.showHeader as boolean) ?? true;
+      const padding = (c.props.padding as number) ?? 16;
+      const elevation = (c.props.elevation as number) ?? 1;
+      return (
+        <div
+          class="w-full h-full rounded-lg bg-surface border border-border overflow-hidden flex flex-col"
+          style={{
+            "box-shadow": elevation > 0 ? `0 ${elevation * 2}px ${elevation * 8}px rgba(0,0,0,0.15)` : "none",
+          }}
+        >
+          <Show when={showHeader}>
+            <div class="h-10 border-b border-border px-4 flex items-center">
+              <span class="text-sm font-medium">{title}</span>
+            </div>
+          </Show>
+          <div
+            class="flex-1 flex items-center justify-center text-xs text-foreground-muted"
+            style={{ padding: `${padding}px` }}
+          >
+            Card content area
+          </div>
+        </div>
+      );
+    }
 
     default:
       return (
