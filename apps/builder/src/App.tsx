@@ -1,4 +1,4 @@
-import { Component, createSignal, Show, onMount } from "solid-js";
+import { Component, createSignal, Show, onMount, onCleanup } from "solid-js";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { ProcessList } from "@/components/process/ProcessList";
@@ -8,6 +8,7 @@ import { BuildPanel } from "@/components/build/BuildPanel";
 import { ScriptEditor } from "@/components/script/ScriptEditor";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import { targetStore } from "@/stores/target";
+import { sidebarStore } from "@/stores/sidebar";
 
 const App: Component = () => {
   const [activeTab, setActiveTab] = createSignal("project");
@@ -25,6 +26,21 @@ const App: Component = () => {
       setError(err instanceof Error ? err.message : String(err));
       setInitialized(true); // Still show UI even on error
     }
+
+    // Keyboard shortcut for sidebar toggle
+    // macOS: Cmd+\, Windows/Linux: Ctrl+\
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMac = sidebarStore.isMacOS();
+      const modifierKey = isMac ? e.metaKey : e.ctrlKey;
+
+      if (modifierKey && e.key === "\\") {
+        e.preventDefault();
+        sidebarStore.toggle();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
   });
 
   return (

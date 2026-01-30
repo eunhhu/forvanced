@@ -211,6 +211,36 @@ fn generate_component_code(component: &UIComponent) -> String {
             r#"      <div class="trainer-spacer" style="{style}"></div>"#,
             style = style,
         ),
+
+        // Layout components - placeholder implementations for code generation
+        ComponentType::Stack => format!(
+            r#"      <div class="trainer-stack" style="{style}">{label}</div>"#,
+            style = style,
+            label = component.label,
+        ),
+
+        ComponentType::Page => format!(
+            r#"      <div class="trainer-page" style="{style}">{label}</div>"#,
+            style = style,
+            label = component.label,
+        ),
+
+        ComponentType::Scroll => format!(
+            r#"      <div class="trainer-scroll" style="{style}">{label}</div>"#,
+            style = style,
+            label = component.label,
+        ),
+
+        ComponentType::Divider => format!(
+            r#"      <hr class="trainer-divider" style="{style}" />"#,
+            style = style,
+        ),
+
+        ComponentType::Card => format!(
+            r#"      <div class="trainer-card" style="{style}">{label}</div>"#,
+            style = style,
+            label = component.label,
+        ),
     }
 }
 

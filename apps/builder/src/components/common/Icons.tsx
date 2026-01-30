@@ -1158,3 +1158,79 @@ export const IconCard: Component<IconProps> = (props) => (
     <path d="M3 9h18" />
   </svg>
 );
+
+// Sidebar collapse/expand icons
+export const IconPanelLeftClose: Component<IconProps> = (props) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={props.size ?? 16}
+    height={props.size ?? 16}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    class={props.class}
+  >
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+    <path d="M9 3v18" />
+    <path d="m16 15-3-3 3-3" />
+  </svg>
+);
+
+export const IconPanelLeftOpen: Component<IconProps> = (props) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={props.size ?? 16}
+    height={props.size ?? 16}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    class={props.class}
+  >
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+    <path d="M9 3v18" />
+    <path d="m14 9 3 3-3 3" />
+  </svg>
+);
+
+export const IconMenu: Component<IconProps> = (props) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={props.size ?? 16}
+    height={props.size ?? 16}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    class={props.class}
+  >
+    <line x1="4" x2="20" y1="12" y2="12" />
+    <line x1="4" x2="20" y1="6" y2="6" />
+    <line x1="4" x2="20" y1="18" y2="18" />
+  </svg>
+);
+
+export const IconSidebar: Component<IconProps> = (props) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={props.size ?? 16}
+    height={props.size ?? 16}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    class={props.class}
+  >
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+    <path d="M9 3v18" />
+  </svg>
+);

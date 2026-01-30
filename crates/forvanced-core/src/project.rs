@@ -139,7 +139,39 @@ pub struct UIComponent {
     pub width: f64,
     pub height: f64,
     pub props: serde_json::Value,
+    #[serde(default)]
     pub bindings: Vec<ActionBinding>,
+    // Hierarchy fields
+    #[serde(rename = "parentId", skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    #[serde(default)]
+    pub children: Vec<String>,
+    // Layer management
+    #[serde(rename = "zIndex", default)]
+    pub z_index: i32,
+    #[serde(default = "default_true")]
+    pub visible: bool,
+    #[serde(default)]
+    pub locked: bool,
+    #[serde(default)]
+    pub collapsed: bool,
+    // Sizing modes
+    #[serde(rename = "widthMode", skip_serializing_if = "Option::is_none")]
+    pub width_mode: Option<SizingMode>,
+    #[serde(rename = "heightMode", skip_serializing_if = "Option::is_none")]
+    pub height_mode: Option<SizingMode>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SizingMode {
+    Fixed,
+    Fill,
+    Hug,
 }
 
 impl UIComponent {
@@ -155,6 +187,14 @@ impl UIComponent {
             height,
             props: serde_json::json!({}),
             bindings: Vec::new(),
+            parent_id: None,
+            children: Vec::new(),
+            z_index: 0,
+            visible: true,
+            locked: false,
+            collapsed: false,
+            width_mode: None,
+            height_mode: None,
         }
     }
 }
@@ -170,6 +210,12 @@ pub enum ComponentType {
     Dropdown,
     Group,
     Spacer,
+    // Layout Components
+    Stack,
+    Page,
+    Scroll,
+    Divider,
+    Card,
 }
 
 impl ComponentType {
@@ -183,6 +229,11 @@ impl ComponentType {
             Self::Dropdown => (160.0, 36.0),
             Self::Group => (300.0, 200.0),
             Self::Spacer => (100.0, 20.0),
+            Self::Stack => (300.0, 200.0),
+            Self::Page => (350.0, 300.0),
+            Self::Scroll => (300.0, 250.0),
+            Self::Divider => (200.0, 2.0),
+            Self::Card => (280.0, 180.0),
         }
     }
 }

@@ -669,6 +669,7 @@ function createDesignerStore() {
       width: c.width,
       height: c.height,
       props: c.props,
+      bindings: [], // Required by Rust backend, but we use visual scripts now
       parentId: c.parentId,
       children: c.children,
       zIndex: c.zIndex,

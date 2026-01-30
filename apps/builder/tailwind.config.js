@@ -49,7 +49,13 @@ export default {
       },
       spacing: {
         sidebar: "240px",
+        "sidebar-collapsed": "56px",
         header: "48px",
+      },
+      width: {
+        sidebar: "240px",
+        "sidebar-collapsed": "56px",
+        14: "56px",
       },
       animation: {
         "fade-in": "fade-in 0.15s ease-out",
