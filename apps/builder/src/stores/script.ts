@@ -107,6 +107,11 @@ export type ScriptNodeType =
   // Output
   | "log" // Log to console
   | "notify" // Show notification
+  // Process Control
+  | "process_attach" // Attach to process (PID, name, or identifier)
+  | "process_detach" // Detach from current process
+  | "process_spawn" // Spawn and attach to application
+  | "process_is_attached" // Check if attached
   // Functions (reusable code blocks)
   | "function_define" // Define a reusable function
   | "function_call" // Call a defined function
@@ -1396,6 +1401,99 @@ export const nodeTemplates: NodeTemplate[] = [
       },
     ],
     outputs: [{ name: "exec", type: "flow", direction: "output" }],
+  },
+
+  // ============================================
+  // Process Control - Attach/Detach actions
+  // ============================================
+  {
+    type: "process_attach",
+    label: "Attach to Process",
+    category: "Process",
+    description: "Attach to a process by PID, name, or bundle identifier",
+    defaultConfig: {
+      attachMode: "pid", // "pid" | "name" | "identifier"
+    },
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "target", type: "value", valueType: "any", direction: "input" }, // PID (number) or name/identifier (string)
+    ],
+    outputs: [
+      { name: "success", type: "flow", direction: "output" },
+      { name: "failure", type: "flow", direction: "output" },
+      {
+        name: "sessionId",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      },
+      { name: "error", type: "value", valueType: "string", direction: "output" },
+    ],
+  },
+  {
+    type: "process_detach",
+    label: "Detach from Process",
+    category: "Process",
+    description: "Detach from the currently attached process",
+    defaultConfig: {},
+    inputs: [{ name: "exec", type: "flow", direction: "input" }],
+    outputs: [
+      { name: "success", type: "flow", direction: "output" },
+      { name: "failure", type: "flow", direction: "output" },
+      { name: "error", type: "value", valueType: "string", direction: "output" },
+    ],
+  },
+  {
+    type: "process_spawn",
+    label: "Spawn & Attach",
+    category: "Process",
+    description:
+      "Spawn an application and attach to it (for apps not running yet)",
+    defaultConfig: {},
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      {
+        name: "identifier",
+        type: "value",
+        valueType: "string",
+        direction: "input",
+      }, // Bundle identifier (e.g., com.example.app)
+    ],
+    outputs: [
+      { name: "success", type: "flow", direction: "output" },
+      { name: "failure", type: "flow", direction: "output" },
+      {
+        name: "sessionId",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      },
+      { name: "pid", type: "value", valueType: "int32", direction: "output" },
+      { name: "error", type: "value", valueType: "string", direction: "output" },
+    ],
+  },
+  {
+    type: "process_is_attached",
+    label: "Is Attached?",
+    category: "Process",
+    description: "Check if currently attached to a process",
+    defaultConfig: {},
+    inputs: [],
+    outputs: [
+      {
+        name: "attached",
+        type: "value",
+        valueType: "boolean",
+        direction: "output",
+      },
+      {
+        name: "sessionId",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      },
+      { name: "pid", type: "value", valueType: "int32", direction: "output" },
+    ],
   },
 
   // Functions

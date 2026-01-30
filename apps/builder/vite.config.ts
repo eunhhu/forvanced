@@ -6,6 +6,8 @@ const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
   plugins: [solid()],
+  // Use relative paths for Tauri builds (file:// protocol)
+  base: "./",
   resolve: {
     alias: {
       "@": resolve(__dirname, "./src"),
