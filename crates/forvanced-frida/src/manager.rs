@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use frida::{DeviceManager, DeviceType, Frida};
@@ -88,33 +88,26 @@ impl FridaManager {
     }
 
     /// Enumerate installed applications on a device (for mobile/USB devices)
+    /// NOTE: frida-rust 0.17.x does not expose enumerate_applications API.
+    /// This returns an empty list with a warning. Use spawn with identifier for mobile apps.
     pub fn enumerate_applications_on_device(&self, device_id: &str) -> Result<Vec<ApplicationInfo>> {
         debug!("Enumerating applications on device: {}", device_id);
 
+        // Verify device exists
         let devices = self.device_manager.enumerate_all_devices();
-
-        let device = devices
+        let _device = devices
             .iter()
             .find(|d| d.get_id() == device_id)
             .ok_or_else(|| FridaError::DeviceNotFound(format!("Device '{}' not found", device_id)))?;
 
-        let applications = device.enumerate_applications();
+        // frida-rust 0.17.x doesn't expose enumerate_applications
+        // Return empty list with warning
+        warn!(
+            "enumerate_applications is not supported in frida-rust 0.17.x. \
+             Use spawn with bundle identifier for mobile apps."
+        );
 
-        let result: Vec<ApplicationInfo> = applications
-            .iter()
-            .map(|app| {
-                let mut info = ApplicationInfo::new(app.get_identifier(), app.get_name());
-                if let Some(pid) = app.get_pid() {
-                    if pid > 0 {
-                        info = info.with_pid(pid as u32);
-                    }
-                }
-                info
-            })
-            .collect();
-
-        info!("Found {} applications on device {}", result.len(), device_id);
-        Ok(result)
+        Ok(vec![])
     }
 
     /// Attach to a process on a specific device by device ID (legacy method for backward compatibility)
@@ -149,21 +142,30 @@ impl FridaManager {
                     (process.get_pid(), format!("name:{}", name))
                 }
                 AttachTarget::Identifier(identifier) => {
-                    // Find application by bundle identifier
-                    let applications = device.enumerate_applications();
-                    let app = applications
-                        .iter()
-                        .find(|a| a.get_identifier() == identifier)
-                        .ok_or_else(|| FridaError::ProcessNotFound(format!("Application '{}' not found", identifier)))?;
+                    // For identifier-based attach, we need to find by process name pattern
+                    // since frida-rust doesn't support enumerate_applications
+                    // Try to find a process that matches the identifier pattern
+                    let processes = device.enumerate_processes();
 
-                    // Check if the app is running
-                    let pid = app.get_pid().filter(|&p| p > 0).ok_or_else(|| {
-                        FridaError::ProcessNotFound(format!(
-                            "Application '{}' is not running. Use spawn to start it.",
-                            identifier
-                        ))
-                    })?;
-                    (pid as u32, format!("identifier:{}", identifier))
+                    // Try exact match first, then partial match
+                    let process = processes
+                        .iter()
+                        .find(|p| p.get_name() == identifier)
+                        .or_else(|| {
+                            // Try finding by partial name match (last component of identifier)
+                            let short_name = identifier.split('.').last().unwrap_or(identifier);
+                            processes.iter().find(|p| {
+                                p.get_name().to_lowercase().contains(&short_name.to_lowercase())
+                            })
+                        })
+                        .ok_or_else(|| {
+                            FridaError::ProcessNotFound(format!(
+                                "No running process found for identifier '{}'. Use spawn to start it.",
+                                identifier
+                            ))
+                        })?;
+
+                    (process.get_pid(), format!("identifier:{}", identifier))
                 }
             };
 
@@ -189,18 +191,20 @@ impl FridaManager {
     }
 
     /// Spawn and attach to an application by identifier
+    /// NOTE: spawn requires mutable access to Device, so we need to use into_iter()
     pub async fn spawn_and_attach(&self, device_id: &str, identifier: &str, _options: SpawnOptions) -> Result<String> {
         info!("Spawning and attaching to {} on device {}", identifier, device_id);
 
         let (session_id, frida_session) = {
             let devices = self.device_manager.enumerate_all_devices();
 
-            let device = devices
-                .iter()
+            // Find and take ownership of the device for mutable operations
+            let mut device = devices
+                .into_iter()
                 .find(|d| d.get_id() == device_id)
                 .ok_or_else(|| FridaError::DeviceNotFound(format!("Device '{}' not found", device_id)))?;
 
-            // Spawn the application
+            // Spawn the application (requires &mut self)
             let pid = device
                 .spawn(identifier, &frida::SpawnOptions::new())
                 .map_err(|e| FridaError::SpawnFailed(e.to_string()))?;

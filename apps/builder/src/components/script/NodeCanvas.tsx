@@ -145,14 +145,27 @@ function getNodeCategory(type: ScriptNodeType): string {
   return template?.category ?? "Flow";
 }
 
+// Selection box interface
+interface SelectionBox {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+}
+
+// Check if Mac for keyboard shortcuts
+const isMac = typeof navigator !== "undefined" && navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+
 export const NodeCanvas: Component = () => {
   let canvasRef: HTMLDivElement | undefined;
   let svgRef: SVGSVGElement | undefined;
 
   const [offset, setOffset] = createSignal({ x: 0, y: 0 });
   const [scale, setScale] = createSignal(1);
-  const [isPanning, setIsPanning] = createSignal(false);
-  const [panStart, setPanStart] = createSignal({ x: 0, y: 0 });
+
+  // Selection box state (for drag selection)
+  const [selectionBox, setSelectionBox] = createSignal<SelectionBox | null>(null);
+  const [isSelecting, setIsSelecting] = createSignal(false);
 
   // Connection dragging state
   const [draggingConnection, setDraggingConnection] = createSignal<{
@@ -174,41 +187,83 @@ export const NodeCanvas: Component = () => {
 
   const currentScript = createMemo(() => scriptStore.getCurrentScript());
 
-  // Handle mouse wheel for zooming
+  // Handle wheel for pan (normal scroll) and zoom (Ctrl/Cmd + scroll)
   const handleWheel = (e: WheelEvent) => {
     e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const newScale = Math.min(Math.max(scale() * delta, 0.25), 2);
-    setScale(newScale);
+
+    if (e.ctrlKey || e.metaKey) {
+      // Zoom with Ctrl/Cmd + scroll - smoother zoom
+      const delta = e.deltaY > 0 ? 0.97 : 1.03;
+      const newScale = Math.min(Math.max(scale() * delta, 0.25), 3);
+
+      // Zoom towards mouse position
+      if (canvasRef) {
+        const rect = canvasRef.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const oldScale = scale();
+        const scaleRatio = newScale / oldScale;
+
+        // Adjust offset to zoom towards mouse position
+        setOffset((prev) => ({
+          x: mouseX - (mouseX - prev.x) * scaleRatio,
+          y: mouseY - (mouseY - prev.y) * scaleRatio,
+        }));
+      }
+
+      setScale(newScale);
+    } else {
+      // Pan with normal scroll
+      setOffset((prev) => ({
+        x: prev.x - e.deltaX,
+        y: prev.y - e.deltaY,
+      }));
+    }
   };
 
-  // Track if space is pressed for panning
-  const [isSpaceDown, setIsSpaceDown] = createSignal(false);
-
-  // Handle canvas panning
+  // Handle canvas mouse down for selection box
   const handleMouseDown = (e: MouseEvent) => {
-    if (
-      e.button === 1 ||
-      (e.button === 0 && e.altKey) ||
-      (e.button === 0 && isSpaceDown())
-    ) {
-      // Middle click or Alt+Left click or Space+Left click to pan
-      e.preventDefault();
-      setIsPanning(true);
-      setPanStart({ x: e.clientX - offset().x, y: e.clientY - offset().y });
-    } else if (e.button === 0 && e.target === canvasRef) {
-      // Left click on empty canvas to deselect
-      scriptStore.setSelectedNodeId(null);
+    // Close context menu
+    setContextMenu(null);
+
+    // Check if clicking on empty canvas (not on nodes)
+    const target = e.target as HTMLElement;
+    const isOnNode = target.closest("[data-node-id]");
+    const isOnConnection = target.closest("[data-connection]");
+
+    if (!isOnNode && !isOnConnection && e.button === 0 && canvasRef) {
+      // Start selection box
+      const rect = canvasRef.getBoundingClientRect();
+      const x = (e.clientX - rect.left - offset().x) / scale();
+      const y = (e.clientY - rect.top - offset().y) / scale();
+
+      setIsSelecting(true);
+      setSelectionBox({
+        startX: x,
+        startY: y,
+        endX: x,
+        endY: y,
+      });
+
+      // If not holding Ctrl/Cmd, clear selection
+      const addToSelection = e.ctrlKey || e.metaKey;
+      if (!addToSelection) {
+        scriptStore.selectNode(null);
+      }
     }
   };
 
   const handleMouseMove = (e: MouseEvent) => {
-    if (isPanning()) {
-      const newOffset = {
-        x: e.clientX - panStart().x,
-        y: e.clientY - panStart().y,
-      };
-      setOffset(newOffset);
+    // Update selection box
+    if (isSelecting() && canvasRef) {
+      const rect = canvasRef.getBoundingClientRect();
+      const x = (e.clientX - rect.left - offset().x) / scale();
+      const y = (e.clientY - rect.top - offset().y) / scale();
+
+      setSelectionBox((prev) =>
+        prev ? { ...prev, endX: x, endY: y } : null,
+      );
     }
 
     // Update connection drag position
@@ -223,13 +278,46 @@ export const NodeCanvas: Component = () => {
     }
   };
 
-  const handleMouseUp = () => {
-    // Always stop panning on mouse up
-    setIsPanning(false);
+  const handleMouseUp = (e: MouseEvent) => {
+    // Handle selection box completion
+    if (isSelecting() && selectionBox()) {
+      const box = selectionBox()!;
+      const script = currentScript();
+      if (script) {
+        // Calculate actual box bounds
+        const minX = Math.min(box.startX, box.endX);
+        const maxX = Math.max(box.startX, box.endX);
+        const minY = Math.min(box.startY, box.endY);
+        const maxY = Math.max(box.startY, box.endY);
+
+        // Only consider it a drag selection if box is bigger than a few pixels
+        if (maxX - minX > 5 || maxY - minY > 5) {
+          // Find all nodes that intersect with selection box
+          const nodeWidth = 200; // Node width constant
+          const selectedIds = script.nodes
+            .filter((node) => {
+              const nodeRight = node.x + nodeWidth;
+              const nodeBottom = node.y + 60 + node.inputs.length * 24 + node.outputs.length * 24;
+              return (
+                node.x < maxX &&
+                nodeRight > minX &&
+                node.y < maxY &&
+                nodeBottom > minY
+              );
+            })
+            .map((n) => n.id);
+
+          const addToSelection = e.ctrlKey || e.metaKey;
+          scriptStore.selectMultipleNodes(selectedIds, addToSelection);
+        }
+      }
+    }
+
+    setIsSelecting(false);
+    setSelectionBox(null);
+
     // Clear dragging connection if not dropped on a valid port
     setDraggingConnection(null);
-    // Close context menu on click outside
-    setContextMenu(null);
   };
 
   // Handle right-click on connection to show context menu
@@ -253,7 +341,7 @@ export const NodeCanvas: Component = () => {
     }
   };
 
-  // Handle keyboard events for space pan
+  // Handle keyboard events
   const handleKeyDown = (e: KeyboardEvent) => {
     // Don't intercept if user is typing in an input
     const target = e.target as HTMLElement;
@@ -265,39 +353,44 @@ export const NodeCanvas: Component = () => {
       return;
     }
 
-    if (e.code === "Space" && !isSpaceDown()) {
-      e.preventDefault();
-      setIsSpaceDown(true);
-    }
     // Delete selected connection with Delete or Backspace
     if (
       (e.key === "Delete" || e.key === "Backspace") &&
       scriptStore.selectedConnectionId()
     ) {
+      e.preventDefault();
       scriptStore.deleteConnection(scriptStore.selectedConnectionId()!);
     }
-    // Delete selected node with Delete or Backspace
+
+    // Delete selected nodes with Delete or Backspace
     if (
       (e.key === "Delete" || e.key === "Backspace") &&
-      scriptStore.selectedNodeId()
+      scriptStore.selectedNodeIds().size > 0
     ) {
-      const node = currentScript()?.nodes.find(
-        (n) => n.id === scriptStore.selectedNodeId(),
+      e.preventDefault();
+      // Don't delete event nodes (entry points)
+      const selectedNodes = scriptStore.getSelectedNodes();
+      const canDelete = selectedNodes.every(
+        (n) => !n.type.startsWith("event_") || selectedNodes.length > 1,
       );
-      if (node && node.type !== "start") {
-        scriptStore.deleteNode(scriptStore.selectedNodeId()!);
+      if (canDelete) {
+        scriptStore.deleteSelectedNodes();
+      }
+    }
+
+    // Select all with Ctrl/Cmd+A
+    if ((e.ctrlKey || e.metaKey) && e.key === "a") {
+      e.preventDefault();
+      const script = currentScript();
+      if (script) {
+        const allIds = script.nodes.map((n) => n.id);
+        scriptStore.selectMultipleNodes(allIds);
       }
     }
   };
 
   const handleKeyUp = (e: KeyboardEvent) => {
-    if (e.code === "Space") {
-      setIsSpaceDown(false);
-    }
-    // Stop panning when Alt is released (for Alt+drag panning)
-    if (e.key === "Alt") {
-      setIsPanning(false);
-    }
+    // Nothing special needed now
   };
 
   // Handle drop from palette
@@ -461,6 +554,9 @@ export const NodeCanvas: Component = () => {
               }
             />
           </Show>
+          <Show when={scriptStore.selectedNodeIds().size > 1}>
+            <span class="text-xs text-accent">{scriptStore.selectedNodeIds().size} nodes selected</span>
+          </Show>
         </div>
         <div class="flex items-center gap-2 text-xs text-foreground-muted">
           <span>Zoom: {Math.round(scale() * 100)}%</span>
@@ -485,7 +581,7 @@ export const NodeCanvas: Component = () => {
             "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
           "background-size": `${20 * scale()}px ${20 * scale()}px`,
           "background-position": `${offset().x}px ${offset().y}px`,
-          cursor: isPanning() ? "grabbing" : isSpaceDown() ? "grab" : "default",
+          cursor: isSelecting() ? "crosshair" : "default",
         }}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
@@ -582,8 +678,9 @@ export const NodeCanvas: Component = () => {
             {(node) => (
               <NodeComponent
                 node={node}
-                isSelected={scriptStore.selectedNodeId() === node.id}
-                onSelect={() => scriptStore.setSelectedNodeId(node.id)}
+                isSelected={scriptStore.isNodeSelected(node.id)}
+                isPrimarySelected={scriptStore.selectedNodeId() === node.id}
+                onSelect={(addToSelection) => scriptStore.selectNode(node.id, addToSelection)}
                 onPortMouseDown={handlePortMouseDown}
                 onPortMouseUp={handlePortMouseUp}
                 getPortPosition={getPortPosition}
@@ -594,6 +691,27 @@ export const NodeCanvas: Component = () => {
             )}
           </For>
         </div>
+
+        {/* Selection box overlay */}
+        <Show when={isSelecting() && selectionBox()}>
+          {(box) => {
+            const minX = () => Math.min(box().startX, box().endX);
+            const minY = () => Math.min(box().startY, box().endY);
+            const width = () => Math.abs(box().endX - box().startX);
+            const height = () => Math.abs(box().endY - box().startY);
+            return (
+              <div
+                class="absolute pointer-events-none border-2 border-accent bg-accent/10"
+                style={{
+                  left: `${minX() * scale() + offset().x}px`,
+                  top: `${minY() * scale() + offset().y}px`,
+                  width: `${width() * scale()}px`,
+                  height: `${height() * scale()}px`,
+                }}
+              />
+            );
+          }}
+        </Show>
 
         {/* Empty state */}
         <Show when={(currentScript()?.nodes.length ?? 0) === 0}>
@@ -628,6 +746,11 @@ export const NodeCanvas: Component = () => {
             </div>
           )}
         </Show>
+
+        {/* Help text */}
+        <div class="absolute bottom-2 left-2 text-[10px] text-foreground-muted/50 pointer-events-none">
+          <span>Scroll: Pan | {isMac ? "⌘" : "Ctrl"}+Scroll: Zoom | Click+Drag: Select | {isMac ? "⌘" : "Ctrl"}+Click: Add to selection</span>
+        </div>
       </div>
     </div>
   );
@@ -698,7 +821,8 @@ const ConnectionLine: Component<ConnectionLineProps> = (props) => {
 interface NodeComponentProps {
   node: ScriptNode;
   isSelected: boolean;
-  onSelect: () => void;
+  isPrimarySelected: boolean;
+  onSelect: (addToSelection: boolean) => void;
   onPortMouseDown: (
     e: MouseEvent,
     nodeId: string,
@@ -727,28 +851,47 @@ const NodeComponent: Component<NodeComponentProps> = (props) => {
     if (e.button !== 0) return;
     e.preventDefault(); // Prevent text selection and default drag behavior
     e.stopPropagation();
-    props.onSelect();
+
+    // Handle Ctrl/Cmd click for multi-select
+    const addToSelection = e.ctrlKey || e.metaKey;
+
+    // If not already selected, select this node
+    if (!props.isSelected) {
+      props.onSelect(addToSelection);
+    } else if (addToSelection) {
+      // Toggle off if Ctrl/Cmd clicking already selected node
+      props.onSelect(true);
+      return;
+    }
 
     setIsDragging(true);
     const startX = e.clientX;
     const startY = e.clientY;
-    const startNodeX = props.node.x;
-    const startNodeY = props.node.y;
     const currentScale = props.scale;
 
-    // Flag to track if we actually moved (not just a click)
-    let hasMoved = false;
+    // Store initial positions for all selected nodes
+    const selectedNodes = scriptStore.getSelectedNodes();
+    const initialPositions = new Map(
+      selectedNodes.map((n) => [n.id, { x: n.x, y: n.y }]),
+    );
 
     const handleMove = (e: MouseEvent) => {
       e.preventDefault();
-      hasMoved = true;
       // Apply scale factor to movement delta
       const dx = (e.clientX - startX) / currentScale;
       const dy = (e.clientY - startY) / currentScale;
-      scriptStore.updateNode(props.node.id, {
-        x: Math.round(startNodeX + dx),
-        y: Math.round(startNodeY + dy),
-      });
+
+      // Move all selected nodes
+      const nodes = scriptStore.getSelectedNodes();
+      for (const node of nodes) {
+        const initial = initialPositions.get(node.id);
+        if (initial) {
+          scriptStore.updateNode(node.id, {
+            x: Math.round(initial.x + dx),
+            y: Math.round(initial.y + dy),
+          });
+        }
+      }
     };
 
     const handleUp = (e: MouseEvent) => {
@@ -765,14 +908,25 @@ const NodeComponent: Component<NodeComponentProps> = (props) => {
 
   const handleDelete = (e: MouseEvent) => {
     e.stopPropagation();
-    scriptStore.deleteNode(props.node.id);
+    // Delete all selected nodes if multiple selected, otherwise just this one
+    if (scriptStore.selectedNodeIds().size > 1) {
+      scriptStore.deleteSelectedNodes();
+    } else {
+      scriptStore.deleteNode(props.node.id);
+    }
+  };
+
+  // Ring style based on primary/secondary selection
+  const ringClass = () => {
+    if (props.isPrimarySelected) return "ring-2 ring-accent";
+    if (props.isSelected) return "ring-2 ring-accent/60";
+    return "";
   };
 
   return (
     <div
-      class={`absolute rounded-lg border shadow-lg ${colors().bg} ${colors().border} ${
-        props.isSelected ? "ring-2 ring-accent" : ""
-      }`}
+      data-node-id={props.node.id}
+      class={`absolute rounded-lg border shadow-lg ${colors().bg} ${colors().border} ${ringClass()}`}
       style={{
         left: `${props.node.x}px`,
         top: `${props.node.y}px`,

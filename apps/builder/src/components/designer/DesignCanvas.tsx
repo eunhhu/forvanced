@@ -1,4 +1,4 @@
-import { Component, For, Show, createSignal, createMemo } from "solid-js";
+import { Component, For, Show, createSignal, createMemo, onMount, onCleanup } from "solid-js";
 import {
   designerStore,
   type UIComponent,
@@ -17,12 +17,32 @@ const [canvasHeight, setCanvasHeight] = createSignal(500);
 // Export setters for external use (e.g., when loading project or changing settings)
 export { setCanvasWidth, setCanvasHeight };
 
+// Selection box interface
+interface SelectionBox {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+}
+
 export const DesignCanvas: Component = () => {
   let contentAreaRef: HTMLDivElement | undefined;
+  let canvasContainerRef: HTMLDivElement | undefined;
 
   // Use module-level canvas size signals to avoid re-renders from project sync
   const windowWidth = canvasWidth;
   const windowHeight = canvasHeight;
+
+  // Zoom and pan state
+  const [scale, setScale] = createSignal(1);
+  const [offset, setOffset] = createSignal({ x: 0, y: 0 });
+
+  // Selection box state (for drag selection)
+  const [selectionBox, setSelectionBox] = createSignal<SelectionBox | null>(null);
+  const [isSelecting, setIsSelecting] = createSignal(false);
+
+  // Check if Ctrl/Cmd key is pressed (for adding to selection)
+  const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
 
   const handleDragOver = (e: DragEvent) => {
     e.preventDefault();
@@ -71,8 +91,9 @@ export const DesignCanvas: Component = () => {
     }
 
     const rect = contentAreaRef.getBoundingClientRect();
-    const x = Math.max(0, e.clientX - rect.left - 16);
-    const y = Math.max(0, e.clientY - rect.top - 16);
+    // Account for zoom and offset when calculating drop position
+    const x = Math.max(0, (e.clientX - rect.left) / scale() - 16);
+    const y = Math.max(0, (e.clientY - rect.top) / scale() - 16);
 
     console.log("Adding component:", { type, x, y });
     designerStore.addComponent(type, x, y);
@@ -81,24 +102,180 @@ export const DesignCanvas: Component = () => {
     designerStore.setDraggingComponentType(null);
   };
 
+  // Handle wheel for pan (normal scroll) and zoom (Ctrl/Cmd + scroll)
+  const handleWheel = (e: WheelEvent) => {
+    e.preventDefault();
+
+    if (e.ctrlKey || e.metaKey) {
+      // Zoom with Ctrl/Cmd + scroll
+      const delta = e.deltaY > 0 ? 0.95 : 1.05; // Smoother zoom
+      const newScale = Math.min(Math.max(scale() * delta, 0.25), 3);
+
+      // Zoom towards mouse position
+      if (canvasContainerRef) {
+        const rect = canvasContainerRef.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const oldScale = scale();
+        const scaleRatio = newScale / oldScale;
+
+        // Adjust offset to zoom towards mouse position
+        setOffset((prev) => ({
+          x: mouseX - (mouseX - prev.x) * scaleRatio,
+          y: mouseY - (mouseY - prev.y) * scaleRatio,
+        }));
+      }
+
+      setScale(newScale);
+    } else {
+      // Pan with normal scroll
+      setOffset((prev) => ({
+        x: prev.x - e.deltaX,
+        y: prev.y - e.deltaY,
+      }));
+    }
+  };
+
   const handleCanvasMouseDown = (e: MouseEvent) => {
-    // Deselect when clicking on empty canvas area (not on components)
     const target = e.target as HTMLElement;
     // Check if clicking on a canvas component or its children
     const isOnComponent = target.closest("[data-component-id]");
-    if (!isOnComponent) {
-      designerStore.setSelectedId(null);
+
+    if (!isOnComponent && canvasContainerRef) {
+      // Start selection box on empty canvas area
+      const rect = canvasContainerRef.getBoundingClientRect();
+      const x = (e.clientX - rect.left - offset().x) / scale();
+      const y = (e.clientY - rect.top - offset().y) / scale();
+
+      setIsSelecting(true);
+      setSelectionBox({
+        startX: x,
+        startY: y,
+        endX: x,
+        endY: y,
+      });
+
+      // If not holding Ctrl/Cmd, clear selection
+      const addToSelection = e.ctrlKey || e.metaKey;
+      if (!addToSelection) {
+        designerStore.selectComponent(null);
+      }
     }
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (isSelecting() && canvasContainerRef) {
+      const rect = canvasContainerRef.getBoundingClientRect();
+      const x = (e.clientX - rect.left - offset().x) / scale();
+      const y = (e.clientY - rect.top - offset().y) / scale();
+
+      setSelectionBox((prev) =>
+        prev ? { ...prev, endX: x, endY: y } : null,
+      );
+    }
+  };
+
+  const handleMouseUp = (e: MouseEvent) => {
+    if (isSelecting() && selectionBox()) {
+      const box = selectionBox()!;
+      // Calculate actual box bounds
+      const minX = Math.min(box.startX, box.endX);
+      const maxX = Math.max(box.startX, box.endX);
+      const minY = Math.min(box.startY, box.endY);
+      const maxY = Math.max(box.startY, box.endY);
+
+      // Only consider it a drag selection if box is bigger than a few pixels
+      if (maxX - minX > 5 || maxY - minY > 5) {
+        // Find all components that intersect with selection box
+        const selectedIds = designerStore
+          .components()
+          .filter((c) => !c.parentId) // Only root components for now
+          .filter((c) => {
+            // Check if component overlaps with selection box
+            const compRight = c.x + c.width;
+            const compBottom = c.y + c.height;
+            return (
+              c.x < maxX &&
+              compRight > minX &&
+              c.y < maxY &&
+              compBottom > minY
+            );
+          })
+          .map((c) => c.id);
+
+        const addToSelection = e.ctrlKey || e.metaKey;
+        designerStore.selectMultiple(selectedIds, addToSelection);
+      }
+    }
+
+    setIsSelecting(false);
+    setSelectionBox(null);
+  };
+
+  // Keyboard shortcuts
+  const handleKeyDown = (e: KeyboardEvent) => {
+    const target = e.target as HTMLElement;
+    if (
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.isContentEditable
+    ) {
+      return;
+    }
+
+    // Delete selected components
+    if ((e.key === "Delete" || e.key === "Backspace") && designerStore.selectedIds().size > 0) {
+      e.preventDefault();
+      designerStore.deleteSelectedComponents();
+    }
+
+    // Select all with Ctrl/Cmd+A
+    if ((e.ctrlKey || e.metaKey) && e.key === "a") {
+      e.preventDefault();
+      const allIds = designerStore.components().filter((c) => !c.parentId).map((c) => c.id);
+      designerStore.selectMultiple(allIds);
+    }
+  };
+
+  onMount(() => {
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("keydown", handleKeyDown);
+  });
+
+  onCleanup(() => {
+    window.removeEventListener("mousemove", handleMouseMove);
+    window.removeEventListener("mouseup", handleMouseUp);
+    window.removeEventListener("keydown", handleKeyDown);
+  });
+
+  // Reset view function
+  const resetView = () => {
+    setScale(1);
+    setOffset({ x: 0, y: 0 });
   };
 
   return (
     <div class="flex-1 flex flex-col">
       {/* Toolbar */}
       <div class="h-10 border-b border-border flex items-center justify-between px-4">
-        <div class="text-sm text-foreground-muted">
-          {designerStore.components().length} components
+        <div class="text-sm text-foreground-muted flex items-center gap-4">
+          <span>{designerStore.components().length} components</span>
+          <Show when={designerStore.selectedIds().size > 1}>
+            <span class="text-accent">{designerStore.selectedIds().size} selected</span>
+          </Show>
         </div>
         <div class="flex items-center gap-2">
+          <span class="text-xs text-foreground-muted">
+            Zoom: {Math.round(scale() * 100)}%
+          </span>
+          <button
+            class="text-xs px-2 py-1 rounded hover:bg-surface-hover transition-colors text-foreground-muted"
+            onClick={resetView}
+          >
+            Reset View
+          </button>
           <button
             class="text-xs px-2 py-1 rounded hover:bg-surface-hover transition-colors text-foreground-muted"
             onClick={() => designerStore.clearAll()}
@@ -110,20 +287,28 @@ export const DesignCanvas: Component = () => {
 
       {/* Canvas */}
       <div
+        ref={canvasContainerRef}
         class="flex-1 relative overflow-hidden bg-background canvas-drop-zone"
         style={{
           "background-image":
             "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
-          "background-size": "20px 20px",
+          "background-size": `${20 * scale()}px ${20 * scale()}px`,
+          "background-position": `${offset().x}px ${offset().y}px`,
         }}
         onMouseDown={handleCanvasMouseDown}
+        onWheel={handleWheel}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
-        {/* Scrollable container for overflow handling */}
-        <div class="absolute inset-0 overflow-auto">
+        {/* Transform container for zoom and pan */}
+        <div
+          style={{
+            transform: `translate(${offset().x}px, ${offset().y}px) scale(${scale()})`,
+            "transform-origin": "0 0",
+          }}
+        >
           {/* Centered content wrapper with padding */}
-          <div class="min-w-full min-h-full flex items-start justify-center p-8">
+          <div class="flex items-start justify-center p-8">
             {/* Preview Frame */}
             <div
               class="bg-surface rounded-lg shadow-lg border border-border flex-shrink-0"
@@ -180,6 +365,32 @@ export const DesignCanvas: Component = () => {
             </div>
           </div>
         </div>
+
+        {/* Selection box overlay */}
+        <Show when={isSelecting() && selectionBox()}>
+          {(box) => {
+            const minX = () => Math.min(box().startX, box().endX);
+            const minY = () => Math.min(box().startY, box().endY);
+            const width = () => Math.abs(box().endX - box().startX);
+            const height = () => Math.abs(box().endY - box().startY);
+            return (
+              <div
+                class="absolute pointer-events-none border-2 border-accent bg-accent/10"
+                style={{
+                  left: `${minX() * scale() + offset().x}px`,
+                  top: `${minY() * scale() + offset().y}px`,
+                  width: `${width() * scale()}px`,
+                  height: `${height() * scale()}px`,
+                }}
+              />
+            );
+          }}
+        </Show>
+
+        {/* Help text */}
+        <div class="absolute bottom-2 left-2 text-[10px] text-foreground-muted/50 pointer-events-none">
+          <span>Scroll: Pan | {isMac ? "⌘" : "Ctrl"}+Scroll: Zoom | Click+Drag: Select | {isMac ? "⌘" : "Ctrl"}+Click: Add to selection</span>
+        </div>
       </div>
     </div>
   );
@@ -202,7 +413,9 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
   const [isDragging, setIsDragging] = createSignal(false);
   let componentRef: HTMLDivElement | undefined;
 
-  const isSelected = () => designerStore.selectedId() === props.component.id;
+  // Use multi-selection system
+  const isSelected = () => designerStore.isSelected(props.component.id);
+  const isPrimarySelected = () => designerStore.selectedId() === props.component.id;
   const isVisible = () => props.component.visible !== false;
   const isLocked = () => props.component.locked === true;
   const children = createMemo(() => designerStore.getChildrenForRender(props.component.id));
@@ -229,7 +442,7 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
     // Don't allow dragging locked components
     if (isLocked()) {
       e.stopPropagation();
-      designerStore.setSelectedId(props.component.id);
+      designerStore.selectComponent(props.component.id, e.ctrlKey || e.metaKey);
       return;
     }
 
@@ -237,8 +450,15 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
     e.stopPropagation();
     e.preventDefault();
 
-    // Select this component
-    designerStore.setSelectedId(props.component.id);
+    // Handle selection with Ctrl/Cmd for multi-select
+    const addToSelection = e.ctrlKey || e.metaKey;
+    if (!isSelected()) {
+      designerStore.selectComponent(props.component.id, addToSelection);
+    } else if (addToSelection) {
+      // Toggle off if Ctrl/Cmd clicking already selected component
+      designerStore.selectComponent(props.component.id, true);
+      return;
+    }
 
     if (e.detail === 2) {
       // Double click to edit label
@@ -247,23 +467,48 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
       return;
     }
 
-    // Start drag tracking
+    // Start drag tracking for all selected components
     setIsDragging(true);
     designerStore.setIsDragging(true);
     const startX = e.clientX;
     const startY = e.clientY;
-    const startCompX = props.component.x;
-    const startCompY = props.component.y;
+
+    // Store initial positions for all selected components
+    const selectedComponents = designerStore.getSelectedComponents();
+    const initialPositions = new Map(
+      selectedComponents.map((c) => [c.id, { x: c.x, y: c.y }]),
+    );
 
     const handleMouseMove = (e: MouseEvent) => {
       e.preventDefault();
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
-      designerStore.moveComponent(
-        props.component.id,
-        startCompX + dx,
-        startCompY + dy,
-      );
+
+      // Move all selected components
+      if (selectedComponents.length > 1) {
+        designerStore.moveSelectedComponents(dx, dy);
+        // Reset for cumulative moves (we move relative to start each time)
+        const currentComponents = designerStore.getSelectedComponents();
+        for (const comp of currentComponents) {
+          const initial = initialPositions.get(comp.id);
+          if (initial) {
+            designerStore.moveComponent(
+              comp.id,
+              initial.x + dx,
+              initial.y + dy,
+            );
+          }
+        }
+      } else {
+        const initial = initialPositions.get(props.component.id);
+        if (initial) {
+          designerStore.moveComponent(
+            props.component.id,
+            initial.x + dx,
+            initial.y + dy,
+          );
+        }
+      }
     };
 
     const handleMouseUp = () => {
@@ -283,7 +528,8 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
   const handleClick = (e: MouseEvent) => {
     e.stopPropagation();
     if (!isEditing()) {
-      designerStore.setSelectedId(props.component.id);
+      const addToSelection = e.ctrlKey || e.metaKey;
+      designerStore.selectComponent(props.component.id, addToSelection);
     }
   };
 
@@ -313,8 +559,14 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
     const classes = ["select-none", "transition-shadow", "relative"];
     if (isLocked()) classes.push("cursor-not-allowed");
     else classes.push("cursor-move");
-    if (isSelected()) classes.push("ring-2 ring-accent ring-offset-2 ring-offset-surface");
-    else classes.push("hover:ring-1 hover:ring-accent/50");
+    // Different ring styles for primary vs secondary selection
+    if (isPrimarySelected()) {
+      classes.push("ring-2 ring-accent ring-offset-2 ring-offset-surface");
+    } else if (isSelected()) {
+      classes.push("ring-2 ring-accent/60 ring-offset-1 ring-offset-surface");
+    } else {
+      classes.push("hover:ring-1 hover:ring-accent/50");
+    }
     if (isLocked()) classes.push("opacity-80");
 
     // Only use absolute positioning if not in auto-layout

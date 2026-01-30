@@ -1600,6 +1600,8 @@ function createScriptStore() {
     null,
   );
   const [selectedNodeId, setSelectedNodeId] = createSignal<string | null>(null);
+  // Multi-selection support for nodes
+  const [selectedNodeIds, setSelectedNodeIds] = createSignal<Set<string>>(new Set());
   const [selectedConnectionId, setSelectedConnectionId] = createSignal<
     string | null
   >(null);
@@ -1609,6 +1611,116 @@ function createScriptStore() {
     const id = currentScriptId();
     if (!id) return null;
     return scripts().find((s) => s.id === id) ?? null;
+  }
+
+  // Check if node is selected
+  function isNodeSelected(nodeId: string): boolean {
+    return selectedNodeIds().has(nodeId);
+  }
+
+  // Get all selected nodes
+  function getSelectedNodes(): ScriptNode[] {
+    const script = getCurrentScript();
+    if (!script) return [];
+    const ids = selectedNodeIds();
+    return script.nodes.filter((n) => ids.has(n.id));
+  }
+
+  // Select single node (clears multi-selection)
+  function selectNode(nodeId: string | null, addToSelection = false) {
+    if (!nodeId) {
+      setSelectedNodeId(null);
+      setSelectedNodeIds(new Set());
+      return;
+    }
+
+    if (addToSelection) {
+      // Toggle selection when adding
+      setSelectedNodeIds((prev) => {
+        const newSet = new Set(prev);
+        if (newSet.has(nodeId)) {
+          newSet.delete(nodeId);
+          // Update primary selection
+          if (selectedNodeId() === nodeId) {
+            const remaining = Array.from(newSet);
+            setSelectedNodeId(remaining.length > 0 ? remaining[0] : null);
+          }
+        } else {
+          newSet.add(nodeId);
+          setSelectedNodeId(nodeId);
+        }
+        return newSet;
+      });
+    } else {
+      // Replace selection
+      setSelectedNodeId(nodeId);
+      setSelectedNodeIds(new Set([nodeId]));
+    }
+  }
+
+  // Select multiple nodes (for box selection)
+  function selectMultipleNodes(nodeIds: string[], addToSelection = false) {
+    if (nodeIds.length === 0 && !addToSelection) {
+      setSelectedNodeId(null);
+      setSelectedNodeIds(new Set());
+      return;
+    }
+
+    if (addToSelection) {
+      setSelectedNodeIds((prev) => {
+        const newSet = new Set(prev);
+        for (const id of nodeIds) {
+          newSet.add(id);
+        }
+        return newSet;
+      });
+      if (nodeIds.length > 0 && !selectedNodeId()) {
+        setSelectedNodeId(nodeIds[0]);
+      }
+    } else {
+      setSelectedNodeIds(new Set(nodeIds));
+      setSelectedNodeId(nodeIds.length > 0 ? nodeIds[0] : null);
+    }
+  }
+
+  // Move all selected nodes
+  function moveSelectedNodes(dx: number, dy: number) {
+    const script = getCurrentScript();
+    if (!script) return;
+
+    const ids = selectedNodeIds();
+    if (ids.size === 0) return;
+
+    const updatedNodes = script.nodes.map((n) =>
+      ids.has(n.id)
+        ? { ...n, x: Math.round(n.x + dx), y: Math.round(n.y + dy) }
+        : n,
+    );
+
+    updateScript(script.id, { nodes: updatedNodes });
+  }
+
+  // Delete all selected nodes
+  function deleteSelectedNodes() {
+    const script = getCurrentScript();
+    if (!script) return;
+
+    const ids = Array.from(selectedNodeIds());
+    if (ids.length === 0) return;
+
+    // Remove nodes and their connections
+    const newNodes = script.nodes.filter((n) => !ids.includes(n.id));
+    const newConnections = script.connections.filter(
+      (c) => !ids.includes(c.fromNodeId) && !ids.includes(c.toNodeId),
+    );
+
+    updateScript(script.id, {
+      nodes: newNodes,
+      connections: newConnections,
+    });
+
+    setSelectedNodeIds(new Set());
+    setSelectedNodeId(null);
   }
 
   // Create new script
@@ -2020,10 +2132,20 @@ function createScriptStore() {
     scripts,
     currentScriptId,
     selectedNodeId,
+    selectedNodeIds,
     selectedConnectionId,
     setCurrentScriptId,
     setSelectedNodeId,
+    setSelectedNodeIds,
     setSelectedConnectionId,
+    // Multi-selection functions
+    isNodeSelected,
+    getSelectedNodes,
+    selectNode,
+    selectMultipleNodes,
+    moveSelectedNodes,
+    deleteSelectedNodes,
+    // Original functions
     getCurrentScript,
     createScript,
     deleteScript,

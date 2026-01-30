@@ -112,6 +112,8 @@ export interface UIComponent {
 function createDesignerStore() {
   const [components, setComponents] = createSignal<UIComponent[]>([]);
   const [selectedId, setSelectedId] = createSignal<string | null>(null);
+  // Multi-selection support
+  const [selectedIds, setSelectedIds] = createSignal<Set<string>>(new Set());
   const [isDragging, setIsDragging] = createSignal(false);
   const [dragOffset, setDragOffset] = createSignal({ x: 0, y: 0 });
 
@@ -135,11 +137,106 @@ function createDesignerStore() {
   // Flag to prevent sync loop when loading from project
   let isLoadingFromProject = false;
 
-  // Get selected component
+  // Get selected component (primary selection)
   function getSelectedComponent(): UIComponent | null {
     const id = selectedId();
     if (!id) return null;
     return components().find((c) => c.id === id) ?? null;
+  }
+
+  // Get all selected components (for multi-selection)
+  function getSelectedComponents(): UIComponent[] {
+    const ids = selectedIds();
+    return components().filter((c) => ids.has(c.id));
+  }
+
+  // Check if component is selected
+  function isSelected(id: string): boolean {
+    return selectedIds().has(id);
+  }
+
+  // Select single component (clears multi-selection)
+  function selectComponent(id: string | null, addToSelection = false) {
+    if (!id) {
+      setSelectedId(null);
+      setSelectedIds(new Set());
+      return;
+    }
+
+    if (addToSelection) {
+      // Toggle selection when adding
+      setSelectedIds((prev) => {
+        const newSet = new Set(prev);
+        if (newSet.has(id)) {
+          newSet.delete(id);
+          // Update primary selection
+          if (selectedId() === id) {
+            const remaining = Array.from(newSet);
+            setSelectedId(remaining.length > 0 ? remaining[0] : null);
+          }
+        } else {
+          newSet.add(id);
+          setSelectedId(id); // Update primary selection
+        }
+        return newSet;
+      });
+    } else {
+      // Replace selection
+      setSelectedId(id);
+      setSelectedIds(new Set([id]));
+    }
+  }
+
+  // Select multiple components (for box selection)
+  function selectMultiple(ids: string[], addToSelection = false) {
+    if (ids.length === 0 && !addToSelection) {
+      setSelectedId(null);
+      setSelectedIds(new Set());
+      return;
+    }
+
+    if (addToSelection) {
+      setSelectedIds((prev) => {
+        const newSet = new Set(prev);
+        for (const id of ids) {
+          newSet.add(id);
+        }
+        return newSet;
+      });
+      if (ids.length > 0 && !selectedId()) {
+        setSelectedId(ids[0]);
+      }
+    } else {
+      setSelectedIds(new Set(ids));
+      setSelectedId(ids.length > 0 ? ids[0] : null);
+    }
+  }
+
+  // Move multiple selected components
+  function moveSelectedComponents(dx: number, dy: number) {
+    const ids = selectedIds();
+    if (ids.size === 0) return;
+
+    setComponents((prev) =>
+      prev.map((c) =>
+        ids.has(c.id)
+          ? { ...c, x: Math.max(0, c.x + dx), y: Math.max(0, c.y + dy) }
+          : c,
+      ),
+    );
+  }
+
+  // Delete all selected components
+  function deleteSelectedComponents() {
+    const ids = Array.from(selectedIds());
+    if (ids.length === 0) return;
+
+    // Delete in reverse order to handle children properly
+    for (const id of ids) {
+      deleteComponent(id);
+    }
+    setSelectedIds(new Set());
+    setSelectedId(null);
   }
 
   // Add component
@@ -720,6 +817,7 @@ function createDesignerStore() {
     // State signals
     components,
     selectedId,
+    selectedIds,
     isDragging,
     dragOffset,
     draggingComponentType,
@@ -728,12 +826,19 @@ function createDesignerStore() {
 
     // State setters
     setSelectedId,
+    setSelectedIds,
     setIsDragging,
     setDragOffset,
     setDraggingComponentType,
 
     // Component CRUD
     getSelectedComponent,
+    getSelectedComponents,
+    isSelected,
+    selectComponent,
+    selectMultiple,
+    moveSelectedComponents,
+    deleteSelectedComponents,
     addComponent,
     updateComponent,
     deleteComponent,
