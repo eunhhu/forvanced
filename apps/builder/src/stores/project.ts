@@ -58,6 +58,8 @@ function getMockProjectResponse<T>(
         width: 400,
         height: 500,
         theme: "dark",
+        padding: 12,
+        gap: 8,
       },
       created_at: now,
       updated_at: now,
@@ -85,7 +87,7 @@ function getMockProjectResponse<T>(
         },
         hotkeys: { enabled: true, bindings: [] },
       },
-      ui: { components: [], width: 400, height: 500, theme: "dark" },
+      ui: { components: [], width: 400, height: 500, theme: "dark", padding: 12, gap: 8 },
       created_at: now,
       updated_at: now,
     },
@@ -189,6 +191,9 @@ export interface UILayout {
   width: number;
   height: number;
   theme: string;
+  // Global layout settings
+  padding: number;
+  gap: number;
 }
 
 // Simplified UIComponent - actions are now handled by visual scripts with Event Listener nodes

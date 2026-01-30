@@ -331,10 +331,11 @@ export const DesignCanvas: Component = () => {
               {/* Content Area - Drop Zone (Stack Layout for auto-arrangement) */}
               <div
                 ref={contentAreaRef}
-                class="canvas-content flex flex-col items-stretch overflow-auto"
+                class="canvas-content flex flex-col items-stretch overflow-auto bg-surface"
                 style={{
                   width: `${windowWidth()}px`,
                   height: `${windowHeight()}px`,
+                  "min-height": `${windowHeight()}px`,
                   padding: "12px",
                   gap: "8px",
                 }}
@@ -600,20 +601,22 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
       style.width = "auto";
     } else if (widthMode() === "fill") {
       // fill: use 100% width in vertical stack (cross-axis stretch)
-      if (parentDir() === "vertical") {
-        style.width = "100%";
-      }
+      style.width = "100%";
     }
 
-    // Height handling for auto-layout
+    // Height handling for auto-layout - always set a height
     if (heightMode() === "fixed") {
       style.height = `${props.component.height}px`;
     } else if (heightMode() === "hug") {
       style["min-height"] = `${props.component.height}px`;
-      style.height = "auto";
     } else if (heightMode() === "fill") {
       // fill: use flex-grow (handled by class) but need min-height
       style["min-height"] = `${props.component.height}px`;
+    }
+
+    // Fallback: always ensure minimum height
+    if (!style.height && !style["min-height"]) {
+      style.height = `${props.component.height}px`;
     }
 
     return style;

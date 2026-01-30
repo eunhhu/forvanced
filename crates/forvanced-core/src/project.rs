@@ -109,22 +109,43 @@ pub struct HotkeyBinding {
 }
 
 // UI Layout
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UILayout {
     pub components: Vec<UIComponent>,
     pub width: u32,
     pub height: u32,
     pub theme: String,
+    // Global layout settings
+    #[serde(default = "default_padding")]
+    pub padding: u32,
+    #[serde(default = "default_gap")]
+    pub gap: u32,
+}
+
+fn default_padding() -> u32 {
+    12
+}
+
+fn default_gap() -> u32 {
+    8
+}
+
+impl Default for UILayout {
+    fn default() -> Self {
+        Self {
+            components: Vec::new(),
+            width: 400,
+            height: 500,
+            theme: "dark".to_string(),
+            padding: 12,
+            gap: 8,
+        }
+    }
 }
 
 impl UILayout {
     pub fn new() -> Self {
-        Self {
-            components: Vec::new(),
-            width: 400,
-            height: 600,
-            theme: "dark".to_string(),
-        }
+        Self::default()
     }
 }
 

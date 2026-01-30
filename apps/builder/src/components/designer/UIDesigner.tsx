@@ -14,8 +14,9 @@ export const UIDesigner: Component = () => {
 
   // Extract only the values we care about to minimize reactivity
   const projectId = createMemo(() => projectStore.currentProject()?.id);
-  const projectUiWidth = createMemo(() => projectStore.currentProject()?.ui?.width ?? 400);
-  const projectUiHeight = createMemo(() => projectStore.currentProject()?.ui?.height ?? 500);
+  // Use || instead of ?? to handle 0 values as well (0 would be invalid canvas size)
+  const projectUiWidth = createMemo(() => projectStore.currentProject()?.ui?.width || 400);
+  const projectUiHeight = createMemo(() => projectStore.currentProject()?.ui?.height || 500);
 
   // Load from project when project ID changes
   createEffect(
@@ -25,23 +26,24 @@ export const UIDesigner: Component = () => {
         const project = untrack(() => projectStore.currentProject());
         if (project) {
           designerStore.loadFromProject();
-          // Set canvas size from project
-          setCanvasWidth(untrack(projectUiWidth));
-          setCanvasHeight(untrack(projectUiHeight));
+          // Set canvas size from project (use || to treat 0 as invalid)
+          setCanvasWidth(project.ui?.width || 400);
+          setCanvasHeight(project.ui?.height || 500);
         }
       }
     }),
   );
 
   // Update canvas size when UI size settings change (from settings panel)
+  // No defer - run immediately when values change
   createEffect(
     on(
       () => [projectUiWidth(), projectUiHeight()] as const,
       ([w, h]) => {
-        if (w > 0) setCanvasWidth(w);
-        if (h > 0) setCanvasHeight(h);
+        // Always set valid canvas dimensions (minimum 100px for visibility)
+        setCanvasWidth(Math.max(w, 100));
+        setCanvasHeight(Math.max(h, 100));
       },
-      { defer: true },
     ),
   );
 
