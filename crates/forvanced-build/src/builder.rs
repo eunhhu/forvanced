@@ -127,8 +127,10 @@ impl Builder {
         fs::create_dir_all(project_dir.join("src-tauri/icons")).await?;
 
         // Prepare template data
+        let sanitized_name = sanitize_name(&project.name);
         let template_data = TemplateData {
-            project_name: sanitize_name(&project.name),
+            project_name: sanitized_name.clone(),
+            lib_name: sanitized_name.replace('-', "_"), // Rust lib names can't have hyphens
             project_version: project.version.clone(),
             project_description: project.description.clone().unwrap_or_default(),
             window_width: project.ui.width,
@@ -177,6 +179,7 @@ impl Builder {
         self.write_tsconfig(&project_dir).await?;
         self.write_build_rs(&project_dir).await?;
         self.write_main_rs(&project_dir).await?;
+        self.write_default_icons(&project_dir).await?;
 
         info!("Project generated at: {}", project_dir.display());
         Ok(project_dir)
@@ -332,6 +335,76 @@ fn main() {
         let content = content.replace("forvanced_trainer_lib", &format!("{}_lib", crate_name.replace('-', "_")));
 
         fs::write(project_dir.join("src-tauri/src/main.rs"), content).await?;
+        Ok(())
+    }
+
+    async fn write_default_icons(&self, project_dir: &Path) -> Result<(), BuildError> {
+        let icons_dir = project_dir.join("src-tauri/icons");
+
+        // Create a simple 1x1 transparent PNG as placeholder
+        // PNG header + IHDR chunk + IDAT chunk + IEND chunk for 1x1 transparent pixel
+        let png_1x1: &[u8] = &[
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+            0x00, 0x00, 0x00, 0x0D, // IHDR length
+            0x49, 0x48, 0x44, 0x52, // "IHDR"
+            0x00, 0x00, 0x00, 0x01, // width: 1
+            0x00, 0x00, 0x00, 0x01, // height: 1
+            0x08, 0x06, // bit depth: 8, color type: RGBA
+            0x00, 0x00, 0x00, // compression, filter, interlace
+            0x1F, 0x15, 0xC4, 0x89, // IHDR CRC
+            0x00, 0x00, 0x00, 0x0A, // IDAT length
+            0x49, 0x44, 0x41, 0x54, // "IDAT"
+            0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, // compressed data
+            0x0D, 0x0A, 0x2D, 0xB4, // IDAT CRC
+            0x00, 0x00, 0x00, 0x00, // IEND length
+            0x49, 0x45, 0x4E, 0x44, // "IEND"
+            0xAE, 0x42, 0x60, 0x82, // IEND CRC
+        ];
+
+        // Write placeholder icons
+        fs::write(icons_dir.join("32x32.png"), png_1x1).await?;
+        fs::write(icons_dir.join("128x128.png"), png_1x1).await?;
+        fs::write(icons_dir.join("128x128@2x.png"), png_1x1).await?;
+
+        // For .ico and .icns, we'll create minimal valid files
+        // ICO file header for 1x1 image
+        let ico_data: &[u8] = &[
+            0x00, 0x00, // Reserved
+            0x01, 0x00, // Type: ICO
+            0x01, 0x00, // Number of images: 1
+            // Image directory entry
+            0x01, // Width: 1
+            0x01, // Height: 1
+            0x00, // Color palette: 0
+            0x00, // Reserved
+            0x01, 0x00, // Color planes: 1
+            0x20, 0x00, // Bits per pixel: 32
+            0x30, 0x00, 0x00, 0x00, // Image size
+            0x16, 0x00, 0x00, 0x00, // Image offset
+            // BMP data follows (simplified)
+            0x28, 0x00, 0x00, 0x00, // BMP header size
+            0x01, 0x00, 0x00, 0x00, // Width
+            0x02, 0x00, 0x00, 0x00, // Height (doubled for AND mask)
+            0x01, 0x00, // Planes
+            0x20, 0x00, // Bits per pixel
+            0x00, 0x00, 0x00, 0x00, // Compression
+            0x08, 0x00, 0x00, 0x00, // Image size
+            0x00, 0x00, 0x00, 0x00, // X pixels per meter
+            0x00, 0x00, 0x00, 0x00, // Y pixels per meter
+            0x00, 0x00, 0x00, 0x00, // Colors used
+            0x00, 0x00, 0x00, 0x00, // Important colors
+            // Pixel data (1 RGBA pixel)
+            0x00, 0x00, 0x00, 0x00,
+            // AND mask
+            0x00, 0x00, 0x00, 0x00,
+        ];
+        fs::write(icons_dir.join("icon.ico"), ico_data).await?;
+
+        // For .icns, we create a minimal file
+        // ICNS files are complex, just copy the PNG for now
+        fs::write(icons_dir.join("icon.icns"), png_1x1).await?;
+
+        debug!("Default icons written to: {}", icons_dir.display());
         Ok(())
     }
 }
@@ -601,6 +674,10 @@ fn find_executables(project_dir: &Path, release: bool) -> Result<Vec<PathBuf>, B
 #[cfg(test)]
 mod tests {
     use super::*;
+    use forvanced_core::{
+        Project, ProjectConfig, TargetConfig, BuildConfig as ProjectBuildConfig,
+        HotkeyConfig, UILayout, UIComponent, ComponentType,
+    };
 
     #[test]
     fn test_sanitize_name() {
@@ -614,5 +691,95 @@ mod tests {
         assert_eq!(BuildTarget::from_str("current"), Some(BuildTarget::Current));
         assert_eq!(BuildTarget::from_str("windows"), Some(BuildTarget::WindowsX64));
         assert_eq!(BuildTarget::from_str("macos"), Some(BuildTarget::MacOsArm64));
+    }
+
+    #[tokio::test]
+    async fn test_generate_project() {
+        let project = create_test_project();
+        let builder = Builder::new().expect("Failed to create builder");
+
+        let temp_dir = std::env::temp_dir().join("forvanced_test");
+        let _ = std::fs::remove_dir_all(&temp_dir); // Clean up any existing
+
+        let result = builder.generate_project(&project, &temp_dir).await;
+        assert!(result.is_ok(), "Project generation failed: {:?}", result.err());
+
+        let project_dir = result.unwrap();
+        assert!(project_dir.exists(), "Project directory not created");
+        assert!(project_dir.join("package.json").exists(), "package.json not created");
+        assert!(project_dir.join("src/TrainerUI.tsx").exists(), "TrainerUI.tsx not created");
+        assert!(project_dir.join("src-tauri/Cargo.toml").exists(), "Cargo.toml not created");
+        assert!(project_dir.join("src-tauri/icons/icon.ico").exists(), "icon.ico not created");
+
+        // Print generated files for inspection
+        println!("Generated project at: {:?}", project_dir);
+
+        // Verify TrainerUI.tsx content
+        let trainer_ui = std::fs::read_to_string(project_dir.join("src/TrainerUI.tsx")).unwrap();
+        assert!(trainer_ui.contains("Test Button"), "TrainerUI should contain the button label");
+
+        // Verify Cargo.toml content
+        let cargo_toml = std::fs::read_to_string(project_dir.join("src-tauri/Cargo.toml")).unwrap();
+        assert!(cargo_toml.contains("test_trainer_lib"), "Cargo.toml should have correct lib name (underscores, not hyphens)");
+        assert!(!cargo_toml.contains("forvanced-frida"), "Cargo.toml should not reference internal crates");
+
+        // Clean up
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    fn create_test_project() -> Project {
+        Project {
+            id: "test-id".to_string(),
+            name: "Test Trainer".to_string(),
+            description: Some("Test description".to_string()),
+            version: "1.0.0".to_string(),
+            author: Some("Test Author".to_string()),
+            created_at: 0,
+            updated_at: 0,
+            config: ProjectConfig {
+                target: TargetConfig {
+                    process_name: Some("test.exe".to_string()),
+                    process_patterns: vec![],
+                    adapter_type: "local_pc".to_string(),
+                    adapter_config: serde_json::Value::Null,
+                    auto_attach: true,
+                },
+                build: ProjectBuildConfig {
+                    output_name: Some("test-trainer".to_string()),
+                    targets: vec!["current".to_string()],
+                    icon: None,
+                    bundle_frida: true,
+                },
+                hotkeys: HotkeyConfig::default(),
+            },
+            ui: UILayout {
+                components: vec![
+                    UIComponent {
+                        id: "btn1".to_string(),
+                        component_type: ComponentType::Button,
+                        label: "Test Button".to_string(),
+                        x: 10.0,
+                        y: 10.0,
+                        width: 100.0,
+                        height: 36.0,
+                        props: serde_json::json!({}),
+                        bindings: vec![],
+                        parent_id: None,
+                        children: vec![],
+                        z_index: 0,
+                        visible: true,
+                        locked: false,
+                        collapsed: false,
+                        width_mode: None,
+                        height_mode: None,
+                    },
+                ],
+                width: 400,
+                height: 500,
+                theme: "dark".to_string(),
+                padding: 12,
+                gap: 8,
+            },
+        }
     }
 }

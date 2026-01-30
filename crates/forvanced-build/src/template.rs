@@ -8,6 +8,8 @@ use serde::Serialize;
 #[derive(Debug, Clone, Serialize)]
 pub struct TemplateData {
     pub project_name: String,
+    /// Rust-compatible lib name (hyphens replaced with underscores)
+    pub lib_name: String,
     pub project_version: String,
     pub project_description: String,
     pub window_width: u32,
@@ -481,6 +483,7 @@ version = "{{project_version}}"
 edition = "2021"
 
 [lib]
+name = "{{lib_name}}_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]
@@ -493,10 +496,9 @@ serde_json = "1.0"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 
-# Frida integration
-{{#if bundle_frida}}
-forvanced-frida = { path = "../../../crates/forvanced-frida" }
-{{/if}}
+# Note: Frida integration is embedded in the generated code
+# For standalone distribution, frida-rust should be added as dependency:
+# frida = "0.17"
 "#;
 
 const LIB_RS_TEMPLATE: &str = r#"use tauri::Manager;
