@@ -1,7 +1,11 @@
 mod build;
+mod executor;
 mod project;
 
 use tauri::State;
+
+// Re-export executor commands and state
+pub use executor::*;
 use tracing::{debug, info};
 
 use crate::AppState;

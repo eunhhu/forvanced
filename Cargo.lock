@@ -871,6 +871,7 @@ dependencies = [
  "dirs 5.0.1",
  "forvanced-build",
  "forvanced-core",
+ "forvanced-executor",
  "forvanced-frida",
  "serde",
  "serde_json",
@@ -894,6 +895,22 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+ "uuid",
+]
+
+[[package]]
+name = "forvanced-executor"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "forvanced-core",
+ "forvanced-frida",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
  "uuid",
 ]
 

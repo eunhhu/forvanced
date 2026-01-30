@@ -138,6 +138,11 @@ export type ValueType =
   | "boolean"
   | "any";
 
+// Node Execution Context
+// - host: Executes in Rust backend (UI operations, flow control, variables)
+// - target: Executes via Frida RPC in target process (memory, hooks, native calls)
+export type NodeContext = "host" | "target";
+
 // Port Types (for connections)
 export type PortType = "flow" | "value";
 
@@ -209,6 +214,54 @@ interface NodeTemplate {
   defaultConfig: NodeConfig;
   inputs: Omit<Port, "id">[];
   outputs: Omit<Port, "id">[];
+}
+
+// Get the execution context for a node type
+// Host nodes execute in Rust backend, Target nodes execute via Frida RPC
+export function getNodeContext(nodeType: ScriptNodeType): NodeContext {
+  // Target nodes - require Frida session and execute in target process
+  const targetNodes: ScriptNodeType[] = [
+    // Memory operations
+    "memory_scan",
+    "memory_read",
+    "memory_write",
+    "memory_freeze",
+    "memory_alloc",
+    "memory_protect",
+    // Pointer operations (executed in target for memory access)
+    "pointer_add",
+    "pointer_read",
+    "pointer_write",
+    // Module operations
+    "get_module",
+    "find_symbol",
+    "get_base_address",
+    "enumerate_modules",
+    "enumerate_exports",
+    // Native function calls
+    "call_native",
+    "native_callback",
+    // Interceptor hooks
+    "interceptor_attach",
+    "interceptor_replace",
+    "interceptor_detach",
+    "read_arg",
+    "write_arg",
+    "read_retval",
+    "replace_retval",
+  ];
+
+  return targetNodes.includes(nodeType) ? "target" : "host";
+}
+
+// Check if a node type is a target node (requires Frida session)
+export function isTargetNode(nodeType: ScriptNodeType): boolean {
+  return getNodeContext(nodeType) === "target";
+}
+
+// Check if a node type is a host node (executes locally)
+export function isHostNode(nodeType: ScriptNodeType): boolean {
+  return getNodeContext(nodeType) === "host";
 }
 
 export const nodeTemplates: NodeTemplate[] = [

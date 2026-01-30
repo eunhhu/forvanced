@@ -1,0 +1,33 @@
+[package]
+name = "forvanced-executor"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Visual script executor for Forvanced - handles Host/Target node execution"
+
+[dependencies]
+# Internal crates
+forvanced-core = { path = "../forvanced-core" }
+forvanced-frida = { path = "../forvanced-frida" }
+
+# Async runtime
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Utilities
+uuid = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

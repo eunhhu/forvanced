@@ -38,3 +38,4 @@ chrono = { workspace = true }
 forvanced-core = { path = "../../../crates/forvanced-core" }
 forvanced-frida = { path = "../../../crates/forvanced-frida", default-features = false }
 forvanced-build = { path = "../../../crates/forvanced-build" }
+forvanced-executor = { path = "../../../crates/forvanced-executor" }

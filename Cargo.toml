@@ -5,6 +5,7 @@ members = [
     "crates/forvanced-core",
     "crates/forvanced-frida",
     "crates/forvanced-build",
+    "crates/forvanced-executor",
 ]
 
 [workspace.package]

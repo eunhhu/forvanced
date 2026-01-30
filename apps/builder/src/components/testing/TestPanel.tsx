@@ -7,11 +7,10 @@ import {
   createEffect,
 } from "solid-js";
 import { targetStore } from "@/stores/target";
-import { scriptStore } from "@/stores/script";
+import { scriptStore, getNodeContext } from "@/stores/script";
 import { designerStore } from "@/stores/designer";
 import { compileVisualScript, CompileResult } from "@/lib/script-compiler";
 import { injectScript, unloadScript } from "@/lib/tauri";
-import type { ProcessInfo } from "@/lib/tauri";
 
 // ============================================
 // Types
@@ -46,7 +45,6 @@ export const TestPanel: Component = () => {
   // Derived state
   const scripts = () => scriptStore.scripts();
   const sessionId = () => targetStore.sessionId();
-  const attachedPid = () => targetStore.attachedPid();
   const uiComponents = () => designerStore.components();
 
   const selectedScript = createMemo(() => {
@@ -55,13 +53,35 @@ export const TestPanel: Component = () => {
     return scripts().find((s) => s.id === id) ?? null;
   });
 
-  const canRun = createMemo(
-    () =>
-      sessionId() !== null &&
-      selectedScript() !== null &&
-      compileResult()?.success === true &&
-      !isRunning(),
-  );
+  // Check if the script has any target nodes (requires Frida session)
+  const hasTargetNodes = createMemo(() => {
+    const script = selectedScript();
+    if (!script) return false;
+    return script.nodes.some((node) => getNodeContext(node.type) === "target");
+  });
+
+  // Script can only run if:
+  // - For scripts with target nodes: need Frida session
+  // - For host-only scripts: can run without session
+  const canRun = createMemo(() => {
+    const script = selectedScript();
+    const result = compileResult();
+    if (!script || result?.success !== true || isRunning()) return false;
+
+    // If script has target nodes, require Frida session
+    if (hasTargetNodes() && !sessionId()) return false;
+
+    return true;
+  });
+
+  // Reason why script cannot run
+  const cannotRunReason = createMemo(() => {
+    if (!selectedScript()) return "No script selected";
+    if (compileResult()?.success !== true) return "Script not compiled";
+    if (isRunning()) return "Script is running";
+    if (hasTargetNodes() && !sessionId()) return "Attach to process first (script uses target nodes)";
+    return null;
+  });
 
   // Auto-select first script if none selected
   createEffect(() => {
@@ -167,6 +187,27 @@ export const TestPanel: Component = () => {
         </select>
       </div>
 
+      {/* Script Info */}
+      <Show when={selectedScript()}>
+        <div class="px-4 py-2 border-b border-border bg-surface-raised">
+          <div class="flex items-center gap-3 text-xs">
+            <span class="text-text-tertiary">
+              {selectedScript()?.nodes.length} nodes
+            </span>
+            <Show when={hasTargetNodes()}>
+              <span class="px-1.5 py-0.5 rounded bg-warning/20 text-warning">
+                Requires Frida
+              </span>
+            </Show>
+            <Show when={!hasTargetNodes()}>
+              <span class="px-1.5 py-0.5 rounded bg-success/20 text-success">
+                Host-only
+              </span>
+            </Show>
+          </div>
+        </div>
+      </Show>
+
       {/* Controls */}
       <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
         <button
@@ -182,6 +223,7 @@ export const TestPanel: Component = () => {
             class="px-3 py-1.5 text-sm rounded bg-success text-white hover:bg-success/90 disabled:opacity-50"
             onClick={handleRun}
             disabled={!canRun()}
+            title={cannotRunReason() ?? undefined}
           >
             Run
           </button>
@@ -197,6 +239,10 @@ export const TestPanel: Component = () => {
         </Show>
 
         <div class="flex-1" />
+
+        <Show when={cannotRunReason() && !isRunning()}>
+          <span class="text-xs text-text-tertiary">{cannotRunReason()}</span>
+        </Show>
 
         <button
           class={`px-2 py-1 text-xs rounded ${

@@ -5,6 +5,7 @@ use tauri::Manager;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+pub use commands::ExecutorState;
 pub use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -27,6 +28,10 @@ pub fn run() {
             // Initialize app state
             let state = AppState::new();
             app.manage(state.clone());
+
+            // Initialize executor state
+            let executor_state = ExecutorState::new();
+            app.manage(executor_state);
 
             // Initialize async tasks (connect default adapter)
             let state_clone = state.clone();
@@ -69,6 +74,14 @@ pub fn run() {
             commands::build_trainer,
             commands::get_build_targets,
             commands::preview_generated_code,
+            // Executor commands
+            commands::execute_script,
+            commands::set_executor_session,
+            commands::clear_executor_session,
+            commands::set_ui_value,
+            commands::get_ui_value,
+            commands::get_all_ui_values,
+            commands::set_ui_values_batch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
