@@ -7,7 +7,7 @@ use uuid::Uuid;
 use frida::{DeviceManager, DeviceType, Frida};
 
 use crate::error::{FridaError, Result};
-use crate::process::{DeviceInfo, FridaDeviceType, ProcessInfo};
+use crate::process::{ApplicationInfo, AttachTarget, DeviceInfo, FridaDeviceType, ProcessInfo, SpawnOptions};
 use crate::session::FridaSession;
 
 pub struct FridaManager {
@@ -87,10 +87,45 @@ impl FridaManager {
         Ok(result)
     }
 
-    /// Attach to a process on a specific device by device ID
-    /// NOTE: All Frida operations (devices, attach) happen synchronously before any await
+    /// Enumerate installed applications on a device (for mobile/USB devices)
+    pub fn enumerate_applications_on_device(&self, device_id: &str) -> Result<Vec<ApplicationInfo>> {
+        debug!("Enumerating applications on device: {}", device_id);
+
+        let devices = self.device_manager.enumerate_all_devices();
+
+        let device = devices
+            .iter()
+            .find(|d| d.get_id() == device_id)
+            .ok_or_else(|| FridaError::DeviceNotFound(format!("Device '{}' not found", device_id)))?;
+
+        let applications = device.enumerate_applications();
+
+        let result: Vec<ApplicationInfo> = applications
+            .iter()
+            .map(|app| {
+                let mut info = ApplicationInfo::new(app.get_identifier(), app.get_name());
+                if let Some(pid) = app.get_pid() {
+                    if pid > 0 {
+                        info = info.with_pid(pid as u32);
+                    }
+                }
+                info
+            })
+            .collect();
+
+        info!("Found {} applications on device {}", result.len(), device_id);
+        Ok(result)
+    }
+
+    /// Attach to a process on a specific device by device ID (legacy method for backward compatibility)
     pub async fn attach_on_device(&self, device_id: &str, pid: u32) -> Result<String> {
-        info!("Attaching to process {} on device {}", pid, device_id);
+        self.attach_target(device_id, AttachTarget::Pid(pid)).await
+    }
+
+    /// Attach to a target on a specific device
+    /// Supports multiple attach modes: pid, name, identifier
+    pub async fn attach_target(&self, device_id: &str, target: AttachTarget) -> Result<String> {
+        info!("Attaching to {} on device {}", target, device_id);
 
         // Do all Frida work synchronously first (no await crossing)
         let (session_id, frida_session) = {
@@ -101,11 +136,42 @@ impl FridaManager {
                 .find(|d| d.get_id() == device_id)
                 .ok_or_else(|| FridaError::DeviceNotFound(format!("Device '{}' not found", device_id)))?;
 
+            // Resolve target to PID
+            let (pid, target_name) = match &target {
+                AttachTarget::Pid(pid) => (*pid, format!("pid:{}", pid)),
+                AttachTarget::Name(name) => {
+                    // Find process by name
+                    let processes = device.enumerate_processes();
+                    let process = processes
+                        .iter()
+                        .find(|p| p.get_name() == name)
+                        .ok_or_else(|| FridaError::ProcessNotFound(format!("Process '{}' not found", name)))?;
+                    (process.get_pid(), format!("name:{}", name))
+                }
+                AttachTarget::Identifier(identifier) => {
+                    // Find application by bundle identifier
+                    let applications = device.enumerate_applications();
+                    let app = applications
+                        .iter()
+                        .find(|a| a.get_identifier() == identifier)
+                        .ok_or_else(|| FridaError::ProcessNotFound(format!("Application '{}' not found", identifier)))?;
+
+                    // Check if the app is running
+                    let pid = app.get_pid().filter(|&p| p > 0).ok_or_else(|| {
+                        FridaError::ProcessNotFound(format!(
+                            "Application '{}' is not running. Use spawn to start it.",
+                            identifier
+                        ))
+                    })?;
+                    (pid as u32, format!("identifier:{}", identifier))
+                }
+            };
+
             let _session = device
                 .attach(pid)
                 .map_err(|e| FridaError::AttachFailed(e.to_string()))?;
 
-            let process_info = ProcessInfo::new(pid, format!("{}:pid:{}", device_id, pid));
+            let process_info = ProcessInfo::new(pid, format!("{}:{}", device_id, target_name));
             let session_id = Uuid::new_v4().to_string();
             let frida_session = Arc::new(FridaSession::new(session_id.clone(), process_info));
 
@@ -118,7 +184,48 @@ impl FridaManager {
             .await
             .insert(session_id.clone(), frida_session);
 
-        info!("Attached to process {} on device {}, session: {}", pid, device_id, session_id);
+        info!("Attached to {} on device {}, session: {}", target, device_id, session_id);
+        Ok(session_id)
+    }
+
+    /// Spawn and attach to an application by identifier
+    pub async fn spawn_and_attach(&self, device_id: &str, identifier: &str, _options: SpawnOptions) -> Result<String> {
+        info!("Spawning and attaching to {} on device {}", identifier, device_id);
+
+        let (session_id, frida_session) = {
+            let devices = self.device_manager.enumerate_all_devices();
+
+            let device = devices
+                .iter()
+                .find(|d| d.get_id() == device_id)
+                .ok_or_else(|| FridaError::DeviceNotFound(format!("Device '{}' not found", device_id)))?;
+
+            // Spawn the application
+            let pid = device
+                .spawn(identifier, &frida::SpawnOptions::new())
+                .map_err(|e| FridaError::SpawnFailed(e.to_string()))?;
+
+            // Attach to the spawned process
+            let _session = device
+                .attach(pid)
+                .map_err(|e| FridaError::AttachFailed(e.to_string()))?;
+
+            let process_info = ProcessInfo::new(pid, format!("{}:spawn:{}", device_id, identifier));
+            let session_id = Uuid::new_v4().to_string();
+            let frida_session = Arc::new(FridaSession::new(session_id.clone(), process_info));
+
+            // Resume the process (it's suspended after spawn)
+            device.resume(pid).map_err(|e| FridaError::ResumeFailed(e.to_string()))?;
+
+            (session_id, frida_session)
+        };
+
+        self.sessions
+            .write()
+            .await
+            .insert(session_id.clone(), frida_session);
+
+        info!("Spawned and attached to {} on device {}, session: {}", identifier, device_id, session_id);
         Ok(session_id)
     }
 

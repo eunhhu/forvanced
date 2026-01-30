@@ -20,6 +20,12 @@ pub enum FridaError {
     #[error("Failed to detach from process: {0}")]
     DetachFailed(String),
 
+    #[error("Failed to spawn process: {0}")]
+    SpawnFailed(String),
+
+    #[error("Failed to resume process: {0}")]
+    ResumeFailed(String),
+
     #[error("Script injection failed: {0}")]
     ScriptInjectionFailed(String),
 

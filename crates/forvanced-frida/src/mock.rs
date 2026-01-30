@@ -10,7 +10,7 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::error::{FridaError, Result};
-use crate::process::{DeviceInfo, FridaDeviceType, ProcessInfo};
+use crate::process::{ApplicationInfo, AttachTarget, DeviceInfo, FridaDeviceType, ProcessInfo, SpawnOptions};
 use crate::session::FridaSession;
 
 /// Mock FridaManager that simulates Frida functionality for development.
@@ -34,6 +34,8 @@ impl FridaManager {
 
         let mock_devices = vec![
             DeviceInfo::new("local", "Local System", FridaDeviceType::Local),
+            DeviceInfo::new("usb-iphone", "iPhone (USB)", FridaDeviceType::Usb),
+            DeviceInfo::new("usb-android", "Pixel 8 (USB)", FridaDeviceType::Usb),
         ];
 
         info!("Mock: returning {} devices", mock_devices.len());
@@ -71,18 +73,71 @@ impl FridaManager {
         Ok(mock_processes)
     }
 
-    /// Simulates attaching to a process on a device.
-    pub async fn attach_on_device(&self, device_id: &str, pid: u32) -> Result<String> {
-        info!("Mock: attaching to process {} on device {}", pid, device_id);
+    /// Returns a simulated list of applications for mobile devices.
+    pub fn enumerate_applications_on_device(&self, device_id: &str) -> Result<Vec<ApplicationInfo>> {
+        debug!("Mock: enumerating applications on device {}", device_id);
 
-        if device_id != "local" {
+        if device_id == "local" {
+            // Desktop doesn't have bundle identifiers in the same way
+            return Ok(vec![]);
+        }
+
+        // Return mock mobile apps
+        let mock_apps = if device_id.contains("iphone") {
+            vec![
+                ApplicationInfo::new("com.apple.mobilesafari", "Safari").with_pid(1001),
+                ApplicationInfo::new("com.apple.AppStore", "App Store"),
+                ApplicationInfo::new("com.spotify.client", "Spotify").with_pid(1002),
+                ApplicationInfo::new("com.instagram.ios", "Instagram"),
+                ApplicationInfo::new("com.example.targetgame", "Target Game").with_pid(1003),
+            ]
+        } else {
+            // Android
+            vec![
+                ApplicationInfo::new("com.android.chrome", "Chrome").with_pid(2001),
+                ApplicationInfo::new("com.google.android.youtube", "YouTube"),
+                ApplicationInfo::new("com.spotify.music", "Spotify").with_pid(2002),
+                ApplicationInfo::new("com.instagram.android", "Instagram"),
+                ApplicationInfo::new("com.example.targetgame", "Target Game").with_pid(2003),
+            ]
+        };
+
+        info!("Mock: returning {} fake applications", mock_apps.len());
+        Ok(mock_apps)
+    }
+
+    /// Simulates attaching to a process on a device (legacy).
+    pub async fn attach_on_device(&self, device_id: &str, pid: u32) -> Result<String> {
+        self.attach_target(device_id, AttachTarget::Pid(pid)).await
+    }
+
+    /// Simulates attaching to a target on a device.
+    pub async fn attach_target(&self, device_id: &str, target: AttachTarget) -> Result<String> {
+        info!("Mock: attaching to {} on device {}", target, device_id);
+
+        let valid_devices = ["local", "usb-iphone", "usb-android"];
+        if !valid_devices.contains(&device_id) {
             return Err(FridaError::DeviceNotFound(format!(
                 "Mock: Device '{}' not found",
                 device_id
             )));
         }
 
-        let process_info = ProcessInfo::new(pid, format!("mock_process_{}", pid));
+        let (pid, target_name) = match &target {
+            AttachTarget::Pid(pid) => (*pid, format!("pid:{}", pid)),
+            AttachTarget::Name(name) => {
+                // Simulate finding by name
+                let mock_pid = name.len() as u32 * 100;
+                (mock_pid, format!("name:{}", name))
+            }
+            AttachTarget::Identifier(identifier) => {
+                // Simulate finding by identifier
+                let mock_pid = identifier.len() as u32 * 50;
+                (mock_pid, format!("identifier:{}", identifier))
+            }
+        };
+
+        let process_info = ProcessInfo::new(pid, format!("{}:{}", device_id, target_name));
         let session_id = Uuid::new_v4().to_string();
         let frida_session = Arc::new(FridaSession::new(session_id.clone(), process_info));
 
@@ -91,7 +146,33 @@ impl FridaManager {
             .await
             .insert(session_id.clone(), frida_session);
 
-        info!("Mock: attached to process {}, session: {}", pid, session_id);
+        info!("Mock: attached to {}, session: {}", target, session_id);
+        Ok(session_id)
+    }
+
+    /// Simulates spawning and attaching to an application.
+    pub async fn spawn_and_attach(&self, device_id: &str, identifier: &str, _options: SpawnOptions) -> Result<String> {
+        info!("Mock: spawning and attaching to {} on device {}", identifier, device_id);
+
+        let valid_devices = ["local", "usb-iphone", "usb-android"];
+        if !valid_devices.contains(&device_id) {
+            return Err(FridaError::DeviceNotFound(format!(
+                "Mock: Device '{}' not found",
+                device_id
+            )));
+        }
+
+        let pid = identifier.len() as u32 * 100 + 5000;
+        let process_info = ProcessInfo::new(pid, format!("{}:spawn:{}", device_id, identifier));
+        let session_id = Uuid::new_v4().to_string();
+        let frida_session = Arc::new(FridaSession::new(session_id.clone(), process_info));
+
+        self.sessions
+            .write()
+            .await
+            .insert(session_id.clone(), frida_session);
+
+        info!("Mock: spawned and attached to {}, session: {}", identifier, session_id);
         Ok(session_id)
     }
 
@@ -203,15 +284,22 @@ mod tests {
     #[test]
     fn test_mock_enumerate_processes() {
         let manager = FridaManager::new().unwrap();
-        let processes = manager.enumerate_local_processes().unwrap();
+        let processes = manager.enumerate_processes_on_device("local").unwrap();
         assert!(!processes.is_empty());
+    }
+
+    #[test]
+    fn test_mock_enumerate_applications() {
+        let manager = FridaManager::new().unwrap();
+        let apps = manager.enumerate_applications_on_device("usb-iphone").unwrap();
+        assert!(!apps.is_empty());
     }
 
     #[tokio::test]
     async fn test_mock_attach_detach() {
         let manager = FridaManager::new().unwrap();
 
-        let session_id = manager.attach_local(1234).await.unwrap();
+        let session_id = manager.attach_on_device("local", 1234).await.unwrap();
         assert!(!session_id.is_empty());
 
         let sessions = manager.list_sessions().await;
@@ -221,5 +309,16 @@ mod tests {
 
         let sessions = manager.list_sessions().await;
         assert!(sessions.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_mock_attach_by_identifier() {
+        let manager = FridaManager::new().unwrap();
+
+        let session_id = manager
+            .attach_target("usb-iphone", AttachTarget::Identifier("com.example.app".to_string()))
+            .await
+            .unwrap();
+        assert!(!session_id.is_empty());
     }
 }

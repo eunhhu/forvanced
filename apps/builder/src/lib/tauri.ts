@@ -4,11 +4,19 @@ export interface ProcessInfo {
   path?: string;
 }
 
+export interface ApplicationInfo {
+  identifier: string;
+  name: string;
+  pid?: number;
+}
+
 export interface DeviceInfo {
   id: string;
   name: string;
   device_type: "local" | "usb" | "remote";
 }
+
+export type AttachMode = "pid" | "name" | "identifier";
 
 // Check if running in Tauri environment (Tauri 2.0 uses __TAURI_INTERNALS__)
 function isTauri(): boolean {
@@ -38,6 +46,8 @@ function getMockResponse<T>(cmd: string, args?: Record<string, unknown>): T {
     // Device commands
     list_devices: [
       { id: "local", name: "Local System", device_type: "local" },
+      { id: "usb-iphone", name: "iPhone (USB)", device_type: "usb" },
+      { id: "usb-android", name: "Pixel 8 (USB)", device_type: "usb" },
     ],
     select_device: undefined,
     get_current_device: "local",
@@ -59,7 +69,16 @@ function getMockResponse<T>(cmd: string, args?: Record<string, unknown>): T {
       { pid: 800, name: "Chrome", path: "/Applications/Google Chrome.app" },
       { pid: 900, name: "ExampleGame", path: "/Users/user/Games/ExampleGame.app" },
     ],
+    enumerate_applications: [
+      { identifier: "com.apple.mobilesafari", name: "Safari", pid: 1001 },
+      { identifier: "com.spotify.client", name: "Spotify", pid: 1002 },
+      { identifier: "com.instagram.ios", name: "Instagram" },
+      { identifier: "com.example.targetgame", name: "Target Game", pid: 1003 },
+    ],
     attach_to_process: `mock-session-${args?.pid || "unknown"}`,
+    attach_by_name: `mock-session-name-${args?.name || "unknown"}`,
+    attach_by_identifier: `mock-session-id-${args?.identifier || "unknown"}`,
+    spawn_and_attach: `mock-session-spawn-${args?.identifier || "unknown"}`,
     detach_from_process: undefined,
     inject_script: `mock-script-${Date.now()}`,
     unload_script: undefined,
@@ -146,8 +165,24 @@ export async function enumerateProcesses(): Promise<ProcessInfo[]> {
   return invoke<ProcessInfo[]>("enumerate_processes");
 }
 
+export async function enumerateApplications(): Promise<ApplicationInfo[]> {
+  return invoke<ApplicationInfo[]>("enumerate_applications");
+}
+
 export async function attachToProcess(pid: number): Promise<string> {
   return invoke<string>("attach_to_process", { pid });
+}
+
+export async function attachByName(name: string): Promise<string> {
+  return invoke<string>("attach_by_name", { name });
+}
+
+export async function attachByIdentifier(identifier: string): Promise<string> {
+  return invoke<string>("attach_by_identifier", { identifier });
+}
+
+export async function spawnAndAttach(identifier: string): Promise<string> {
+  return invoke<string>("spawn_and_attach", { identifier });
 }
 
 export async function detachFromProcess(sessionId: string): Promise<void> {

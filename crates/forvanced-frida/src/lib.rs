@@ -11,7 +11,7 @@ pub mod mock;
 pub mod manager;
 
 pub use error::FridaError;
-pub use process::{DeviceInfo, FridaDeviceType, ProcessInfo};
+pub use process::{ApplicationInfo, AttachTarget, DeviceInfo, FridaDeviceType, ProcessInfo, SpawnOptions};
 pub use session::FridaSession;
 
 #[cfg(all(feature = "mock", not(feature = "real")))]

@@ -47,7 +47,11 @@ pub fn run() {
             commands::add_remote_device,
             // Process commands
             commands::enumerate_processes,
+            commands::enumerate_applications,
             commands::attach_to_process,
+            commands::attach_by_name,
+            commands::attach_by_identifier,
+            commands::spawn_and_attach,
             commands::detach_from_process,
             commands::inject_script,
             commands::unload_script,

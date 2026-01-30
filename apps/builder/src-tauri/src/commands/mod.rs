@@ -5,7 +5,7 @@ use tauri::State;
 use tracing::{debug, info};
 
 use crate::AppState;
-use forvanced_frida::{DeviceInfo, ProcessInfo};
+use forvanced_frida::{ApplicationInfo, AttachTarget, DeviceInfo, ProcessInfo, SpawnOptions};
 
 // Re-export project commands
 pub use project::*;
@@ -83,7 +83,27 @@ pub async fn enumerate_processes(state: State<'_, AppState>) -> Result<Vec<Proce
         .map_err(|e| e.to_string())
 }
 
-/// Attach to a process on current device
+/// Enumerate applications on current device (for mobile/USB devices)
+#[tauri::command]
+pub async fn enumerate_applications(state: State<'_, AppState>) -> Result<Vec<ApplicationInfo>, String> {
+    debug!("enumerate_applications called");
+
+    let device_id = state
+        .current_device_id
+        .read()
+        .await
+        .clone()
+        .ok_or("No device selected")?;
+
+    let guard = state.frida_manager.read().await;
+    let manager = guard.as_ref().ok_or("Frida not initialized")?;
+
+    manager
+        .enumerate_applications_on_device(&device_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Attach to a process on current device by PID
 #[tauri::command]
 pub async fn attach_to_process(state: State<'_, AppState>, pid: u32) -> Result<String, String> {
     info!("attach_to_process called with pid: {}", pid);
@@ -100,6 +120,72 @@ pub async fn attach_to_process(state: State<'_, AppState>, pid: u32) -> Result<S
 
     manager
         .attach_on_device(&device_id, pid)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Attach to a process on current device by name
+#[tauri::command]
+pub async fn attach_by_name(state: State<'_, AppState>, name: String) -> Result<String, String> {
+    info!("attach_by_name called with name: {}", name);
+
+    let device_id = state
+        .current_device_id
+        .read()
+        .await
+        .clone()
+        .ok_or("No device selected")?;
+
+    let guard = state.frida_manager.read().await;
+    let manager = guard.as_ref().ok_or("Frida not initialized")?;
+
+    manager
+        .attach_target(&device_id, AttachTarget::Name(name))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Attach to an application on current device by bundle identifier
+#[tauri::command]
+pub async fn attach_by_identifier(state: State<'_, AppState>, identifier: String) -> Result<String, String> {
+    info!("attach_by_identifier called with identifier: {}", identifier);
+
+    let device_id = state
+        .current_device_id
+        .read()
+        .await
+        .clone()
+        .ok_or("No device selected")?;
+
+    let guard = state.frida_manager.read().await;
+    let manager = guard.as_ref().ok_or("Frida not initialized")?;
+
+    manager
+        .attach_target(&device_id, AttachTarget::Identifier(identifier))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Spawn and attach to an application by identifier
+#[tauri::command]
+pub async fn spawn_and_attach(
+    state: State<'_, AppState>,
+    identifier: String,
+) -> Result<String, String> {
+    info!("spawn_and_attach called with identifier: {}", identifier);
+
+    let device_id = state
+        .current_device_id
+        .read()
+        .await
+        .clone()
+        .ok_or("No device selected")?;
+
+    let guard = state.frida_manager.read().await;
+    let manager = guard.as_ref().ok_or("Frida not initialized")?;
+
+    manager
+        .spawn_and_attach(&device_id, &identifier, SpawnOptions::default())
         .await
         .map_err(|e| e.to_string())
 }

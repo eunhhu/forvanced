@@ -107,17 +107,20 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
         <div
           role="dialog"
           aria-modal="true"
+          aria-labelledby="settings-title"
           class="bg-surface rounded-lg shadow-xl w-[700px] max-h-[80vh] flex flex-col"
         >
           {/* Header */}
           <div class="flex items-center justify-between p-4 border-b border-border">
-            <h2 class="text-lg font-semibold flex items-center gap-2">
-              <IconSettings class="w-5 h-5" />
+            <h2 id="settings-title" class="text-lg font-semibold flex items-center gap-2">
+              <IconSettings class="w-5 h-5" aria-hidden="true" />
               Settings
             </h2>
             <button
+              type="button"
               class="p-1 hover:bg-surface-hover rounded text-xl leading-none"
               onClick={props.onClose}
+              aria-label="Close settings"
             >
               &times;
             </button>
@@ -126,22 +129,31 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
           {/* Content */}
           <div class="flex flex-1 overflow-hidden">
             {/* Sidebar */}
-            <div class="w-48 border-r border-border p-2 space-y-1">
-              <For each={sections}>
-                {(section) => (
-                  <button
-                    class={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
-                      activeSection() === section.id
-                        ? "bg-accent text-white"
-                        : "hover:bg-surface-hover"
-                    }`}
-                    onClick={() => setActiveSection(section.id)}
-                  >
-                    {section.label}
-                  </button>
-                )}
-              </For>
-            </div>
+            <nav class="w-48 border-r border-border p-2 space-y-1" aria-label="Settings sections">
+              <ul role="tablist" aria-orientation="vertical" class="space-y-1">
+                <For each={sections}>
+                  {(section) => (
+                    <li role="presentation">
+                      <button
+                        type="button"
+                        role="tab"
+                        id={`tab-${section.id}`}
+                        aria-selected={activeSection() === section.id}
+                        aria-controls={`panel-${section.id}`}
+                        class={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
+                          activeSection() === section.id
+                            ? "bg-accent text-white"
+                            : "hover:bg-surface-hover"
+                        }`}
+                        onClick={() => setActiveSection(section.id)}
+                      >
+                        {section.label}
+                      </button>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </nav>
 
             {/* Settings Panel */}
             <div class="flex-1 p-4 overflow-y-auto">
@@ -324,15 +336,20 @@ interface SettingItemProps {
 }
 
 const SettingItem: Component<SettingItemProps> = (props) => {
+  const labelId = () => `setting-${props.label.toLowerCase().replace(/\s+/g, "-")}`;
+  const descId = () => `${labelId()}-desc`;
+
   return (
     <div class="flex items-start justify-between gap-4">
       <div class="flex-1">
-        <div class="text-sm font-medium">{props.label}</div>
-        <div class="text-xs text-foreground-muted mt-0.5">
+        <div id={labelId()} class="text-sm font-medium">{props.label}</div>
+        <div id={descId()} class="text-xs text-foreground-muted mt-0.5">
           {props.description}
         </div>
       </div>
-      <div class="flex-shrink-0">{props.children}</div>
+      <div class="flex-shrink-0" aria-labelledby={labelId()} aria-describedby={descId()}>
+        {props.children}
+      </div>
     </div>
   );
 };
@@ -345,6 +362,9 @@ interface ToggleSwitchProps {
 const ToggleSwitch: Component<ToggleSwitchProps> = (props) => {
   return (
     <button
+      type="button"
+      role="switch"
+      aria-checked={props.checked}
       class={`w-10 h-5 rounded-full transition-colors relative ${
         props.checked ? "bg-accent" : "bg-background-secondary"
       }`}
@@ -354,6 +374,7 @@ const ToggleSwitch: Component<ToggleSwitchProps> = (props) => {
         class={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
           props.checked ? "translate-x-5" : "translate-x-0.5"
         }`}
+        aria-hidden="true"
       />
     </button>
   );
