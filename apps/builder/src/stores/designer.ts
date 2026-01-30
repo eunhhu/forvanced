@@ -1,4 +1,4 @@
-import { createSignal, createRoot, createEffect } from "solid-js";
+import { createSignal, createRoot } from "solid-js";
 import { projectStore } from "./project";
 
 // UI Component Types
@@ -159,7 +159,7 @@ function createDesignerStore() {
   function selectComponent(id: string | null, addToSelection = false) {
     if (!id) {
       setSelectedId(null);
-      setSelectedIds(new Set());
+      setSelectedIds(new Set<string>());
       return;
     }
 
@@ -191,7 +191,7 @@ function createDesignerStore() {
   function selectMultiple(ids: string[], addToSelection = false) {
     if (ids.length === 0 && !addToSelection) {
       setSelectedId(null);
-      setSelectedIds(new Set());
+      setSelectedIds(new Set<string>());
       return;
     }
 
@@ -235,7 +235,7 @@ function createDesignerStore() {
     for (const id of ids) {
       deleteComponent(id);
     }
-    setSelectedIds(new Set());
+    setSelectedIds(new Set<string>());
     setSelectedId(null);
   }
 

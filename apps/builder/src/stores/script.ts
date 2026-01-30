@@ -1683,7 +1683,7 @@ function createScriptStore() {
   function selectNode(nodeId: string | null, addToSelection = false) {
     if (!nodeId) {
       setSelectedNodeId(null);
-      setSelectedNodeIds(new Set());
+      setSelectedNodeIds(new Set<string>());
       return;
     }
 
@@ -1715,7 +1715,7 @@ function createScriptStore() {
   function selectMultipleNodes(nodeIds: string[], addToSelection = false) {
     if (nodeIds.length === 0 && !addToSelection) {
       setSelectedNodeId(null);
-      setSelectedNodeIds(new Set());
+      setSelectedNodeIds(new Set<string>());
       return;
     }
 
@@ -1772,7 +1772,7 @@ function createScriptStore() {
       connections: newConnections,
     });
 
-    setSelectedNodeIds(new Set());
+    setSelectedNodeIds(new Set<string>());
     setSelectedNodeId(null);
   }
 
@@ -2181,6 +2181,31 @@ function createScriptStore() {
     }));
   }
 
+  // Set all scripts (for loading from project)
+  function setScriptsFromProject(projectScripts: Script[]) {
+    setScripts(projectScripts);
+    // Select first script if available and none selected
+    if (projectScripts.length > 0 && !currentScriptId()) {
+      setCurrentScriptId(projectScripts[0].id);
+    } else if (projectScripts.length === 0) {
+      setCurrentScriptId(null);
+    }
+  }
+
+  // Get all scripts (for saving to project)
+  function getAllScripts(): Script[] {
+    return scripts();
+  }
+
+  // Clear all scripts (for closing project)
+  function clearScripts() {
+    setScripts([]);
+    setCurrentScriptId(null);
+    setSelectedNodeId(null);
+    setSelectedNodeIds(new Set<string>());
+    setSelectedConnectionId(null);
+  }
+
   return {
     scripts,
     currentScriptId,
@@ -2213,6 +2238,10 @@ function createScriptStore() {
     updateScript,
     getNodeCategories,
     nodeTemplates,
+    // Project integration functions
+    setScriptsFromProject,
+    getAllScripts,
+    clearScripts,
   };
 }
 

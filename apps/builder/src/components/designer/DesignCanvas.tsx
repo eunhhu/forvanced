@@ -418,7 +418,8 @@ interface CanvasComponentProps {
 const CanvasComponent: Component<CanvasComponentProps> = (props) => {
   const [isEditing, setIsEditing] = createSignal(false);
   const [editValue, setEditValue] = createSignal("");
-  const [isDragging, setIsDragging] = createSignal(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_isDragging, setIsDragging] = createSignal(false);
   let componentRef: HTMLDivElement | undefined;
 
   // Use multi-selection system

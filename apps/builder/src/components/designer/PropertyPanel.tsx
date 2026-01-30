@@ -727,44 +727,6 @@ const NumberInput: Component<NumberInputProps> = (props) => {
   );
 };
 
-// Uncontrolled text input for binding params
-interface TextInputProps {
-  value: string;
-  onChange: (value: string) => void;
-  class?: string;
-  type?: "text" | "number";
-}
-
-const TextInput: Component<TextInputProps> = (props) => {
-  const [localValue, setLocalValue] = createSignal(props.value);
-  const [isFocused, setIsFocused] = createSignal(false);
-
-  createEffect(() => {
-    const val = props.value;
-    if (untrack(() => !isFocused())) {
-      setLocalValue(val);
-    }
-  });
-
-  return (
-    <input
-      type={props.type ?? "text"}
-      class={
-        props.class ??
-        "w-24 px-1.5 py-0.5 text-[10px] bg-background border border-border rounded"
-      }
-      value={localValue()}
-      onFocus={() => setIsFocused(true)}
-      onInput={(e) => {
-        const val = e.currentTarget.value;
-        setLocalValue(val);
-        props.onChange(val);
-      }}
-      onBlur={() => setIsFocused(false)}
-    />
-  );
-};
-
 interface PropertyInputProps {
   label: string;
   value: string;

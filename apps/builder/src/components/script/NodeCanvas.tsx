@@ -12,7 +12,6 @@ import {
   type ScriptNode,
   type ScriptNodeType,
   type Port,
-  type ValueType,
 } from "@/stores/script";
 import { TrashIcon } from "@/components/common/Icons";
 
@@ -389,7 +388,7 @@ export const NodeCanvas: Component = () => {
     }
   };
 
-  const handleKeyUp = (e: KeyboardEvent) => {
+  const handleKeyUp = (_e: KeyboardEvent) => {
     // Nothing special needed now
   };
 
@@ -940,7 +939,7 @@ const NodeComponent: Component<NodeComponentProps> = (props) => {
         class={`px-3 py-1.5 rounded-t-lg border-b ${colors().header} ${colors().border} flex items-center justify-between`}
       >
         <span class="text-xs font-medium truncate">{props.node.label}</span>
-        <Show when={props.isSelected && props.node.type !== "start"}>
+        <Show when={props.isSelected && !props.node.type.startsWith("event_")}>
           <button
             class="p-0.5 hover:bg-error/30 rounded transition-colors"
             onClick={handleDelete}

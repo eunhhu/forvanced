@@ -321,12 +321,9 @@ export const ProjectPanel: Component = () => {
                     </div>
                   </div>
                   <div class="p-3 bg-background rounded-lg">
-                    <div class="text-foreground-muted">Actions</div>
+                    <div class="text-foreground-muted">Scripts</div>
                     <div class="text-xl font-semibold">
-                      {project().ui.components.reduce(
-                        (sum, c) => sum + c.bindings.length,
-                        0,
-                      )}
+                      {project().scripts?.length ?? 0}
                     </div>
                   </div>
                 </div>

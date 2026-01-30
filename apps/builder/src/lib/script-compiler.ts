@@ -5,14 +5,8 @@
  * that can be injected into a target process.
  */
 
-import {
-  Script,
-  ScriptNode,
-  Connection,
-  ScriptNodeType,
-  UIComponent,
-} from "../stores/script";
-import { UIComponent as DesignerUIComponent } from "../stores/designer";
+import { Script, ScriptNode } from "../stores/script";
+import { UIComponent } from "../stores/designer";
 
 // ============================================
 // Types
@@ -32,7 +26,7 @@ export interface CompileError {
 
 interface CompileContext {
   script: Script;
-  uiComponents: DesignerUIComponent[];
+  uiComponents: UIComponent[];
   output: string[];
   indent: number;
   errors: CompileError[];
@@ -48,7 +42,7 @@ interface CompileContext {
 
 export function compileVisualScript(
   script: Script,
-  uiComponents: DesignerUIComponent[],
+  uiComponents: UIComponent[],
 ): CompileResult {
   const ctx: CompileContext = {
     script,
@@ -157,7 +151,7 @@ function emitUIState(ctx: CompileContext) {
   emitLine(ctx);
 }
 
-function getDefaultValueForComponent(component: DesignerUIComponent): unknown {
+function getDefaultValueForComponent(component: UIComponent): unknown {
   switch (component.type) {
     case "toggle":
       return (component.props.defaultValue as boolean) ?? false;

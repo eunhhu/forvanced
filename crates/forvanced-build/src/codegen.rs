@@ -458,6 +458,8 @@ fn value_type_to_str(vt: &ValueType) -> &'static str {
         ValueType::Double => "double",
         ValueType::Pointer => "pointer",
         ValueType::String => "string",
+        ValueType::Boolean => "boolean",
+        ValueType::Any => "any",
     }
 }
 

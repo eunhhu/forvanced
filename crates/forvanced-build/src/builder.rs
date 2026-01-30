@@ -780,6 +780,7 @@ mod tests {
                 padding: 12,
                 gap: 8,
             },
+            scripts: vec![],
         }
     }
 }

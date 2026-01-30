@@ -1,4 +1,4 @@
-import { Component, For, Show, createMemo, createSignal, JSX } from "solid-js";
+import { Component, For, Show, createMemo, createSignal } from "solid-js";
 import {
   designerStore,
   UIComponent,
@@ -255,13 +255,6 @@ export const LayersPanel: Component = () => {
   const hasParent = createMemo(() => {
     const selectedComps = designerStore.getSelectedComponents();
     return selectedComps.some((c) => !!c.parentId);
-  });
-
-  // Check if selected component can have children
-  const canHaveChildren = createMemo(() => {
-    const comp = selectedComponent();
-    if (!comp) return false;
-    return ["group", "stack", "page", "scroll", "card"].includes(comp.type);
   });
 
   const handleBringToFront = () => {

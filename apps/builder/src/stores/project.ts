@@ -61,6 +61,7 @@ function getMockProjectResponse<T>(
         padding: 12,
         gap: 8,
       },
+      scripts: [],
       created_at: now,
       updated_at: now,
     },
@@ -88,6 +89,7 @@ function getMockProjectResponse<T>(
         hotkeys: { enabled: true, bindings: [] },
       },
       ui: { components: [], width: 400, height: 500, theme: "dark", padding: 12, gap: 8 },
+      scripts: [],
       created_at: now,
       updated_at: now,
     },
@@ -141,6 +143,10 @@ async function openDialogTauri(): Promise<string | null> {
   return result as string | null;
 }
 
+// Import Script type and store from script store
+import type { Script } from "./script";
+import { scriptStore } from "./script";
+
 // Project types (matching Rust schema)
 export interface Project {
   id: string;
@@ -150,6 +156,7 @@ export interface Project {
   author: string | null;
   config: ProjectConfig;
   ui: UILayout;
+  scripts: Script[];
   created_at: number;
   updated_at: number;
 }
@@ -196,7 +203,10 @@ export interface UILayout {
   gap: number;
 }
 
-// Simplified UIComponent - actions are now handled by visual scripts with Event Listener nodes
+// Sizing mode for responsive components
+export type SizingMode = "fixed" | "fill" | "hug";
+
+// UI Component - matches designer.ts definition for serialization
 export interface UIComponent {
   id: string;
   type: ComponentType;
@@ -206,18 +216,35 @@ export interface UIComponent {
   width: number;
   height: number;
   props: Record<string, unknown>;
-  // Note: bindings removed - use visual scripts with event_ui nodes instead
+  // Parent-child relationship for layout components
+  parentId?: string;
+  children?: string[];
+  // Layer management
+  zIndex: number;
+  visible?: boolean;
+  locked?: boolean;
+  collapsed?: boolean;
+  // Sizing modes for responsive layout
+  widthMode?: SizingMode;
+  heightMode?: SizingMode;
 }
 
 export type ComponentType =
+  // Basic Controls
   | "button"
   | "toggle"
   | "slider"
   | "label"
   | "input"
   | "dropdown"
+  // Layout Components
   | "group"
-  | "spacer";
+  | "spacer"
+  | "stack"
+  | "page"
+  | "scroll"
+  | "divider"
+  | "card";
 
 // Legacy types kept for backward compatibility with old project files
 export interface ActionBinding {
@@ -317,16 +344,24 @@ function createProjectStore() {
 
   // Separate signal for UI components to avoid re-rendering entire app on component changes
   // This is synced with currentProject but can be updated independently
-  const [uiComponentsVersion, setUiComponentsVersion] = createSignal(0);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_uiComponentsVersion, setUiComponentsVersion] = createSignal(0);
 
   async function createNew(name: string): Promise<Project> {
     setIsLoading(true);
     setError(null);
     try {
       const project = await invoke<Project>("create_project", { name });
+      // Initialize with empty scripts array if not present
+      if (!project.scripts) {
+        project.scripts = [];
+      }
       setCurrentProject(project);
       setProjectPath(null);
       setIsDirty(true);
+      // Clear and set scripts in script store
+      scriptStore.clearScripts();
+      scriptStore.setScriptsFromProject(project.scripts);
       return project;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -344,12 +379,20 @@ function createProjectStore() {
     setIsLoading(true);
     setError(null);
     try {
+      // Include current scripts from script store
+      const projectWithScripts: Project = {
+        ...project,
+        scripts: scriptStore.getAllScripts(),
+      };
+
       const savedPath = await invoke<string>("save_project", {
-        project,
+        project: projectWithScripts,
         path: path ?? projectPath(),
       });
       setProjectPath(savedPath);
       setIsDirty(false);
+      // Update local project state with scripts
+      setCurrentProject(projectWithScripts);
       return savedPath;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -375,9 +418,15 @@ function createProjectStore() {
     setError(null);
     try {
       const project = await invoke<Project>("load_project", { path });
+      // Ensure scripts array exists (for backward compatibility with old projects)
+      if (!project.scripts) {
+        project.scripts = [];
+      }
       setCurrentProject(project);
       setProjectPath(path);
       setIsDirty(false);
+      // Load scripts into script store
+      scriptStore.setScriptsFromProject(project.scripts);
       return project;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -401,6 +450,8 @@ function createProjectStore() {
       setCurrentProject(null);
       setProjectPath(null);
       setIsDirty(false);
+      // Clear scripts from script store
+      scriptStore.clearScripts();
     } finally {
       setIsLoading(false);
     }
@@ -416,6 +467,8 @@ function createProjectStore() {
     const updated = {
       ...project,
       ...updates,
+      // Always include latest scripts from script store
+      scripts: scriptStore.getAllScripts(),
       updated_at: Date.now(),
     };
     setCurrentProject(updated);

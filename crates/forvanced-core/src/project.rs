@@ -10,6 +10,9 @@ pub struct Project {
     pub author: Option<String>,
     pub config: ProjectConfig,
     pub ui: UILayout,
+    /// Visual scripts associated with this project
+    #[serde(default)]
+    pub scripts: Vec<VisualScript>,
     #[serde(default)]
     pub created_at: i64,
     #[serde(default)]
@@ -27,6 +30,7 @@ impl Project {
             author: None,
             config: ProjectConfig::default(),
             ui: UILayout::default(),
+            scripts: Vec::new(),
             created_at: now,
             updated_at: now,
         }
@@ -396,6 +400,113 @@ pub enum ValueType {
     Double,
     Pointer,
     String,
+    Boolean,
+    Any,
+}
+
+// ============================================
+// Visual Script Types
+// ============================================
+
+/// A visual script with nodes and connections
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VisualScript {
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub variables: Vec<ScriptVariable>,
+    #[serde(default)]
+    pub nodes: Vec<ScriptNode>,
+    #[serde(default)]
+    pub connections: Vec<ScriptConnection>,
+}
+
+impl VisualScript {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            name: name.into(),
+            description: None,
+            variables: Vec::new(),
+            nodes: Vec::new(),
+            connections: Vec::new(),
+        }
+    }
+}
+
+/// A variable defined in the script
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScriptVariable {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub value_type: ValueType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_value: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+/// A node in the visual script
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScriptNode {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub node_type: String,
+    pub label: String,
+    pub x: f64,
+    pub y: f64,
+    #[serde(default)]
+    pub config: serde_json::Map<String, serde_json::Value>,
+    #[serde(default)]
+    pub inputs: Vec<ScriptPort>,
+    #[serde(default)]
+    pub outputs: Vec<ScriptPort>,
+}
+
+/// A port on a node (input or output)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScriptPort {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub port_type: PortType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value_type: Option<ValueType>,
+    pub direction: PortDirection,
+}
+
+/// Type of a port
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PortType {
+    Flow,
+    Value,
+}
+
+/// Direction of a port
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PortDirection {
+    Input,
+    Output,
+}
+
+/// A connection between two ports
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScriptConnection {
+    pub id: String,
+    pub from_node_id: String,
+    pub from_port_id: String,
+    pub to_node_id: String,
+    pub to_port_id: String,
 }
 
 #[cfg(test)]
