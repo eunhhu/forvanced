@@ -302,6 +302,20 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
             <EventUIConfig node={props.node} />
           </Show>
 
+          {/* UI Value Nodes */}
+          <Show
+            when={
+              props.node.type === "ui_get_value" ||
+              props.node.type === "ui_set_value"
+            }
+          >
+            <UIValueConfig node={props.node} />
+          </Show>
+
+          <Show when={props.node.type === "ui_get_props"}>
+            <UIPropsConfig node={props.node} />
+          </Show>
+
           <Show when={props.node.type === "event_hotkey"}>
             <PropertyRow label="Hotkey">
               <InspectorTextInput
@@ -1483,5 +1497,215 @@ const PropertyRow: Component<PropertyRowProps> = (props) => (
     {props.children}
   </div>
 );
+
+// ============================================
+// UI Value Config - For ui_get_value / ui_set_value nodes
+// ============================================
+interface UIValueConfigProps {
+  node: ScriptNode;
+}
+
+const UIValueConfig: Component<UIValueConfigProps> = (props) => {
+  // Get all UI components from designer store
+  const uiComponents = createMemo(() => designerStore.components());
+
+  // Only show components that have values (not containers/spacers/dividers)
+  const valueComponents = createMemo(() =>
+    uiComponents().filter((c) =>
+      ["toggle", "slider", "input", "dropdown", "button"].includes(c.type),
+    ),
+  );
+
+  const selectedComponent = createMemo(() => {
+    const compId = props.node.config.componentId as string;
+    return uiComponents().find((c) => c.id === compId);
+  });
+
+  const getValueTypeHint = (componentType: string): string => {
+    switch (componentType) {
+      case "toggle":
+        return "boolean (true/false)";
+      case "slider":
+        return "number (slider value)";
+      case "input":
+        return "string (text value)";
+      case "dropdown":
+        return "string (selected option)";
+      case "button":
+        return "boolean (always true on click)";
+      default:
+        return "any";
+    }
+  };
+
+  return (
+    <>
+      <PropertyRow label="Component">
+        <select
+          class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+          value={(props.node.config.componentId as string) ?? ""}
+          onChange={(e) => {
+            scriptStore.updateNode(props.node.id, {
+              config: {
+                ...props.node.config,
+                componentId: e.currentTarget.value,
+              },
+            });
+          }}
+        >
+          <option value="">Select component...</option>
+          <For each={valueComponents()}>
+            {(comp) => (
+              <option value={comp.id}>
+                {comp.label} ({comp.type})
+              </option>
+            )}
+          </For>
+        </select>
+      </PropertyRow>
+
+      <Show when={selectedComponent()}>
+        <div class="text-[9px] text-foreground-muted p-2 bg-background/50 rounded">
+          <Show when={props.node.type === "ui_get_value"}>
+            Reads: <code>value</code> ={" "}
+            {getValueTypeHint(selectedComponent()!.type)}
+          </Show>
+          <Show when={props.node.type === "ui_set_value"}>
+            Sets: <code>value</code> input →{" "}
+            {getValueTypeHint(selectedComponent()!.type)}
+          </Show>
+        </div>
+      </Show>
+
+      <Show when={!selectedComponent() && props.node.config.componentId}>
+        <div class="text-[9px] text-warning p-2 bg-warning/10 rounded">
+          ⚠ Component not found (may have been deleted)
+        </div>
+      </Show>
+    </>
+  );
+};
+
+// ============================================
+// UI Props Config - For ui_get_props node
+// ============================================
+interface UIPropsConfigProps {
+  node: ScriptNode;
+}
+
+const UIPropsConfig: Component<UIPropsConfigProps> = (props) => {
+  // Get all UI components from designer store
+  const uiComponents = createMemo(() => designerStore.components());
+
+  const selectedComponent = createMemo(() => {
+    const compId = props.node.config.componentId as string;
+    return uiComponents().find((c) => c.id === compId);
+  });
+
+  // Available props depend on component type
+  const getAvailableProps = (
+    componentType: string,
+  ): { value: string; label: string }[] => {
+    const commonProps = [
+      { value: "label", label: "Label (string)" },
+      { value: "id", label: "ID (string)" },
+      { value: "type", label: "Type (string)" },
+    ];
+
+    switch (componentType) {
+      case "slider":
+        return [
+          ...commonProps,
+          { value: "min", label: "Min Value (number)" },
+          { value: "max", label: "Max Value (number)" },
+          { value: "step", label: "Step (number)" },
+          { value: "defaultValue", label: "Default Value (number)" },
+        ];
+      case "input":
+        return [
+          ...commonProps,
+          { value: "placeholder", label: "Placeholder (string)" },
+          { value: "defaultValue", label: "Default Value (string)" },
+        ];
+      case "dropdown":
+        return [
+          ...commonProps,
+          { value: "options", label: "Options (array)" },
+        ];
+      case "toggle":
+        return [
+          ...commonProps,
+          { value: "defaultValue", label: "Default Value (boolean)" },
+        ];
+      default:
+        return commonProps;
+    }
+  };
+
+  const availableProps = createMemo(() => {
+    const comp = selectedComponent();
+    if (!comp) return [{ value: "label", label: "Label (string)" }];
+    return getAvailableProps(comp.type);
+  });
+
+  return (
+    <>
+      <PropertyRow label="Component">
+        <select
+          class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+          value={(props.node.config.componentId as string) ?? ""}
+          onChange={(e) => {
+            const compId = e.currentTarget.value;
+            const comp = uiComponents().find((c) => c.id === compId);
+            const availProps = comp ? getAvailableProps(comp.type) : [];
+            scriptStore.updateNode(props.node.id, {
+              config: {
+                ...props.node.config,
+                componentId: compId,
+                propName: availProps[0]?.value ?? "label",
+              },
+            });
+          }}
+        >
+          <option value="">Select component...</option>
+          <For each={uiComponents()}>
+            {(comp) => (
+              <option value={comp.id}>
+                {comp.label} ({comp.type})
+              </option>
+            )}
+          </For>
+        </select>
+      </PropertyRow>
+
+      <Show when={selectedComponent()}>
+        <PropertyRow label="Property">
+          <select
+            class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+            value={(props.node.config.propName as string) ?? "label"}
+            onChange={(e) =>
+              scriptStore.updateNode(props.node.id, {
+                config: {
+                  ...props.node.config,
+                  propName: e.currentTarget.value,
+                },
+              })
+            }
+          >
+            <For each={availableProps()}>
+              {(prop) => <option value={prop.value}>{prop.label}</option>}
+            </For>
+          </select>
+        </PropertyRow>
+      </Show>
+
+      <Show when={!selectedComponent() && props.node.config.componentId}>
+        <div class="text-[9px] text-warning p-2 bg-warning/10 rounded">
+          ⚠ Component not found (may have been deleted)
+        </div>
+      </Show>
+    </>
+  );
+};
 
 export default NodeInspector;

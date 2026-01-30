@@ -156,8 +156,14 @@ export const DesignCanvas: Component = () => {
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
               >
-                <For each={designerStore.components()}>
-                  {(component) => <CanvasComponent component={component} />}
+                {/* Render root components sorted by z-index */}
+                <For each={designerStore.getRootComponents()}>
+                  {(component) => (
+                    <CanvasComponent
+                      component={component}
+                      parentOffset={{ x: 0, y: 0 }}
+                    />
+                  )}
                 </For>
 
                 <Show when={designerStore.components().length === 0}>
@@ -179,6 +185,7 @@ export const DesignCanvas: Component = () => {
 
 interface CanvasComponentProps {
   component: UIComponent;
+  parentOffset: { x: number; y: number };
 }
 
 const CanvasComponent: Component<CanvasComponentProps> = (props) => {
@@ -188,11 +195,26 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
   let componentRef: HTMLDivElement | undefined;
 
   const isSelected = () => designerStore.selectedId() === props.component.id;
+  const isVisible = () => props.component.visible !== false;
+  const isLocked = () => props.component.locked === true;
+  const children = createMemo(() => designerStore.getChildren(props.component.id));
+  const hasChildren = createMemo(() => children().length > 0);
+
+  // Check if this component is a container type
+  const isContainer = () =>
+    ["group", "stack", "page", "scroll", "card"].includes(props.component.type);
 
   const handleMouseDown = (e: MouseEvent) => {
     // Ignore if clicking on delete button or resize handle
     const target = e.target as HTMLElement;
     if (target.closest("[data-action]")) {
+      return;
+    }
+
+    // Don't allow dragging locked components
+    if (isLocked()) {
+      e.stopPropagation();
+      designerStore.setSelectedId(props.component.id);
       return;
     }
 
@@ -259,21 +281,28 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
     designerStore.deleteComponent(props.component.id);
   };
 
+  // Don't render if not visible
+  if (!isVisible()) {
+    return null;
+  }
+
   return (
     <div
       ref={componentRef}
       data-component-id={props.component.id}
-      class={`absolute cursor-move select-none transition-shadow ${
+      class={`absolute select-none transition-shadow ${
+        isLocked() ? "cursor-not-allowed" : "cursor-move"
+      } ${
         isSelected()
           ? "ring-2 ring-accent ring-offset-2 ring-offset-surface"
           : "hover:ring-1 hover:ring-accent/50"
-      }`}
+      } ${isLocked() ? "opacity-80" : ""}`}
       style={{
         left: `${props.component.x}px`,
         top: `${props.component.y}px`,
         width: `${props.component.width}px`,
         height: `${props.component.height}px`,
-        "z-index": isSelected() ? 10 : 1,
+        "z-index": isSelected() ? 1000 : props.component.zIndex,
       }}
       onMouseDown={handleMouseDown}
       onClick={handleClick}
@@ -309,6 +338,38 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
         }
       >
         <ComponentPreview component={props.component} />
+      </Show>
+
+      {/* Render children inside container */}
+      <Show when={isContainer() && hasChildren()}>
+        <div
+          class="absolute pointer-events-auto"
+          style={{
+            left: `${getContainerPadding(props.component)}px`,
+            top: `${getContainerPadding(props.component) + getContainerHeaderHeight(props.component)}px`,
+            right: `${getContainerPadding(props.component)}px`,
+            bottom: `${getContainerPadding(props.component)}px`,
+          }}
+        >
+          <For each={children()}>
+            {(child) => (
+              <CanvasComponent
+                component={child}
+                parentOffset={{
+                  x: props.parentOffset.x + props.component.x + getContainerPadding(props.component),
+                  y: props.parentOffset.y + props.component.y + getContainerPadding(props.component) + getContainerHeaderHeight(props.component),
+                }}
+              />
+            )}
+          </For>
+        </div>
+      </Show>
+
+      {/* Locked indicator */}
+      <Show when={isLocked() && isSelected()}>
+        <div class="absolute top-1 left-1 text-xs bg-warning/80 text-warning-foreground px-1 rounded">
+          🔒
+        </div>
       </Show>
 
       {/* Resize handle */}
@@ -356,6 +417,37 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
     </div>
   );
 };
+
+// Helper functions for container layout
+function getContainerPadding(component: UIComponent): number {
+  switch (component.type) {
+    case "stack":
+      return (component.props.padding as number) ?? 12;
+    case "scroll":
+      return (component.props.padding as number) ?? 8;
+    case "card":
+      return (component.props.padding as number) ?? 16;
+    case "group":
+      return 8;
+    case "page":
+      return 8;
+    default:
+      return 0;
+  }
+}
+
+function getContainerHeaderHeight(component: UIComponent): number {
+  switch (component.type) {
+    case "group":
+      return 28; // Header height
+    case "page":
+      return 32; // Tab bar height
+    case "card":
+      return component.props.showHeader !== false ? 40 : 0;
+    default:
+      return 0;
+  }
+}
 
 interface ComponentPreviewProps {
   component: UIComponent;

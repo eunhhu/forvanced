@@ -106,6 +106,33 @@ impl TargetAdapter for LocalPCAdapter {
             supports_swift: cfg!(target_os = "macos"),
         }
     }
+
+    async fn inject_script(&self, session_id: &str, script_source: &str) -> Result<String> {
+        info!("Injecting script into session {} via LocalPCAdapter", session_id);
+
+        let guard = self.frida_manager.read().await;
+        let manager = guard.as_ref().ok_or(AdapterError::NotConnected)?;
+
+        manager
+            .inject_script(session_id, script_source)
+            .await
+            .map_err(|e| e.into())
+    }
+
+    async fn unload_script(&self, session_id: &str, script_id: &str) -> Result<()> {
+        info!(
+            "Unloading script {} from session {} via LocalPCAdapter",
+            script_id, session_id
+        );
+
+        let guard = self.frida_manager.read().await;
+        let manager = guard.as_ref().ok_or(AdapterError::NotConnected)?;
+
+        manager
+            .unload_script(session_id, script_id)
+            .await
+            .map_err(|e| e.into())
+    }
 }
 
 #[cfg(test)]

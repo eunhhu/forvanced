@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
+use uuid::Uuid;
 
 use frida::{DeviceManager, DeviceType, Frida};
 
@@ -126,6 +127,65 @@ impl FridaManager {
 
     pub async fn list_sessions(&self) -> Vec<String> {
         self.sessions.read().await.keys().cloned().collect()
+    }
+
+    /// Inject a Frida script into a session.
+    /// NOTE: Real implementation requires storing actual Frida Session handles.
+    /// Currently stubbed for compilation.
+    pub async fn inject_script(&self, session_id: &str, script_source: &str) -> Result<String> {
+        info!(
+            "Injecting script into session {}, source length: {}",
+            session_id,
+            script_source.len()
+        );
+
+        let session = self
+            .sessions
+            .read()
+            .await
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| FridaError::SessionNotFound(session_id.to_string()))?;
+
+        // TODO: Real implementation would:
+        // 1. Get the actual Frida session handle
+        // 2. Create a Script from the source
+        // 3. Load and enable the script
+        // For now, we create a script handle entry
+        let script_id = Uuid::new_v4().to_string();
+        session.add_script(script_id.clone(), "user_script".to_string()).await;
+
+        // Mark as loaded
+        if let Some(handle) = session.scripts.write().await.get_mut(&script_id) {
+            handle.loaded = true;
+        }
+
+        info!("Script {} injected into session {}", script_id, session_id);
+        Ok(script_id)
+    }
+
+    /// Unload a script from a session.
+    pub async fn unload_script(&self, session_id: &str, script_id: &str) -> Result<()> {
+        info!(
+            "Unloading script {} from session {}",
+            script_id, session_id
+        );
+
+        let session = self
+            .sessions
+            .read()
+            .await
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| FridaError::SessionNotFound(session_id.to_string()))?;
+
+        session
+            .remove_script(script_id)
+            .await
+            .ok_or_else(|| FridaError::ScriptNotFound(script_id.to_string()))?;
+
+        info!("Script {} unloaded from session {}", script_id, session_id);
+        Ok(())
     }
 }
 

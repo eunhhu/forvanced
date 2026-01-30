@@ -102,6 +102,58 @@ impl FridaManager {
     pub async fn list_sessions(&self) -> Vec<String> {
         self.sessions.read().await.keys().cloned().collect()
     }
+
+    /// Simulates injecting a script into a session.
+    pub async fn inject_script(&self, session_id: &str, script_source: &str) -> Result<String> {
+        info!(
+            "Mock: injecting script into session {}, source length: {}",
+            session_id,
+            script_source.len()
+        );
+
+        let session = self
+            .sessions
+            .read()
+            .await
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| FridaError::SessionNotFound(session_id.to_string()))?;
+
+        let script_id = Uuid::new_v4().to_string();
+        session.add_script(script_id.clone(), "mock_script".to_string()).await;
+
+        // Mark as loaded
+        if let Some(handle) = session.scripts.write().await.get_mut(&script_id) {
+            handle.loaded = true;
+        }
+
+        info!("Mock: script {} injected into session {}", script_id, session_id);
+        Ok(script_id)
+    }
+
+    /// Simulates unloading a script from a session.
+    pub async fn unload_script(&self, session_id: &str, script_id: &str) -> Result<()> {
+        info!(
+            "Mock: unloading script {} from session {}",
+            script_id, session_id
+        );
+
+        let session = self
+            .sessions
+            .read()
+            .await
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| FridaError::SessionNotFound(session_id.to_string()))?;
+
+        session
+            .remove_script(script_id)
+            .await
+            .ok_or_else(|| FridaError::ScriptNotFound(script_id.to_string()))?;
+
+        info!("Mock: script {} unloaded from session {}", script_id, session_id);
+        Ok(())
+    }
 }
 
 impl Default for FridaManager {

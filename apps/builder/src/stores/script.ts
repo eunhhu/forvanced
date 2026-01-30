@@ -110,7 +110,11 @@ export type ScriptNodeType =
   // Functions (reusable code blocks)
   | "function_define" // Define a reusable function
   | "function_call" // Call a defined function
-  | "function_return"; // Return from function          // Show notification
+  | "function_return" // Return from function
+  // UI Value Operations (for UI-Script binding)
+  | "ui_get_value" // Read current UI component value
+  | "ui_set_value" // Set UI component value programmatically
+  | "ui_get_props"; // Read UI component properties (label, min, max, etc.)
 
 // Value Types
 export type ValueType =
@@ -1438,6 +1442,53 @@ export const nodeTemplates: NodeTemplate[] = [
       { name: "value", type: "value", valueType: "any", direction: "input" },
     ],
     outputs: [],
+  },
+
+  // ============================================
+  // UI Value Operations - Read/Write UI component values
+  // ============================================
+  {
+    type: "ui_get_value",
+    label: "Get UI Value",
+    category: "UI",
+    description:
+      "Read the current value of a UI component (toggle state, slider value, input text, dropdown selection)",
+    defaultConfig: { componentId: "" },
+    inputs: [],
+    outputs: [
+      { name: "value", type: "value", valueType: "any", direction: "output" },
+      {
+        name: "componentId",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      },
+    ],
+  },
+  {
+    type: "ui_set_value",
+    label: "Set UI Value",
+    category: "UI",
+    description:
+      "Set the value of a UI component programmatically (toggle on/off, slider position, input text)",
+    defaultConfig: { componentId: "" },
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "value", type: "value", valueType: "any", direction: "input" },
+    ],
+    outputs: [{ name: "exec", type: "flow", direction: "output" }],
+  },
+  {
+    type: "ui_get_props",
+    label: "Get UI Props",
+    category: "UI",
+    description:
+      "Read a property of a UI component (label, min, max, options, placeholder)",
+    defaultConfig: { componentId: "", propName: "label" },
+    inputs: [],
+    outputs: [
+      { name: "value", type: "value", valueType: "any", direction: "output" },
+    ],
   },
 ];
 

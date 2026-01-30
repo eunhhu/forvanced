@@ -19,7 +19,7 @@ export const PropertyPanel: Component = () => {
   const component = createMemo(() => designerStore.getSelectedComponent());
 
   return (
-    <div class="w-72 border-l border-border bg-surface flex flex-col">
+    <div class="h-full bg-surface flex flex-col overflow-hidden">
       <div class="p-3 border-b border-border">
         <h3 class="font-medium text-sm">Properties</h3>
         <Show when={component()}>

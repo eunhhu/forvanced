@@ -112,7 +112,7 @@ pub async fn get_current_adapter(state: State<'_, AppState>) -> Result<Option<St
 
 #[tauri::command]
 pub async fn inject_script(
-    _state: State<'_, AppState>,
+    state: State<'_, AppState>,
     session_id: String,
     script: String,
 ) -> Result<String, String> {
@@ -122,13 +122,21 @@ pub async fn inject_script(
         script.len()
     );
 
-    // TODO: Implement script injection
-    Err("Script injection not yet implemented".to_string())
+    let registry = state.adapter_registry.read().await;
+    let adapter = registry
+        .current_adapter()
+        .ok_or_else(|| "No adapter selected".to_string())?;
+
+    let adapter_guard = adapter.read().await;
+    adapter_guard
+        .inject_script(&session_id, &script)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn unload_script(
-    _state: State<'_, AppState>,
+    state: State<'_, AppState>,
     session_id: String,
     script_id: String,
 ) -> Result<(), String> {
@@ -137,6 +145,14 @@ pub async fn unload_script(
         session_id, script_id
     );
 
-    // TODO: Implement script unloading
-    Err("Script unloading not yet implemented".to_string())
+    let registry = state.adapter_registry.read().await;
+    let adapter = registry
+        .current_adapter()
+        .ok_or_else(|| "No adapter selected".to_string())?;
+
+    let adapter_guard = adapter.read().await;
+    adapter_guard
+        .unload_script(&session_id, &script_id)
+        .await
+        .map_err(|e| e.to_string())
 }

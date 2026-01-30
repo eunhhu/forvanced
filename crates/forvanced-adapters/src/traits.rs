@@ -65,4 +65,20 @@ pub trait TargetAdapter: Send + Sync {
 
     /// Get the adapter's capabilities
     fn capabilities(&self) -> AdapterCapabilities;
+
+    /// Inject a Frida script into a session
+    async fn inject_script(&self, session_id: &str, script_source: &str) -> Result<String> {
+        let _ = (session_id, script_source);
+        Err(crate::error::AdapterError::NotSupported(
+            "inject_script not supported by this adapter".to_string(),
+        ))
+    }
+
+    /// Unload a script from a session
+    async fn unload_script(&self, session_id: &str, script_id: &str) -> Result<()> {
+        let _ = (session_id, script_id);
+        Err(crate::error::AdapterError::NotSupported(
+            "unload_script not supported by this adapter".to_string(),
+        ))
+    }
 }

@@ -26,6 +26,9 @@ pub enum FridaError {
     #[error("Session not found: {0}")]
     SessionNotFound(String),
 
+    #[error("Script not found: {0}")]
+    ScriptNotFound(String),
+
     #[error("Not connected to any device")]
     NotConnected,
 

@@ -83,14 +83,19 @@ export interface UIComponent {
   id: string;
   type: ComponentType;
   label: string;
-  x: number;
-  y: number;
+  x: number; // Relative to parent if parentId exists, otherwise absolute to canvas
+  y: number; // Relative to parent if parentId exists, otherwise absolute to canvas
   width: number;
   height: number;
   props: Record<string, unknown>;
   // Parent-child relationship for layout components
   parentId?: string;
-  children?: string[]; // Child component IDs
+  children?: string[]; // Child component IDs (ordered for z-index within parent)
+  // Layer management
+  zIndex: number; // Explicit z-index for rendering order
+  visible?: boolean; // Visibility toggle (default true)
+  locked?: boolean; // Lock toggle for editing (default false)
+  collapsed?: boolean; // Collapsed state in layers panel
   // Note: bindings removed - use visual scripts with event_ui nodes instead
 }
 
@@ -104,6 +109,19 @@ function createDesignerStore() {
   // Track the component type being dragged from palette (workaround for WebView dataTransfer issues)
   const [draggingComponentType, setDraggingComponentType] =
     createSignal<ComponentType | null>(null);
+
+  // Layers panel expanded nodes
+  const [expandedNodes, setExpandedNodes] = createSignal<Set<string>>(
+    new Set(),
+  );
+
+  // Component runtime values (for UI-Script binding)
+  const [componentValues, setComponentValues] = createSignal<
+    Map<string, unknown>
+  >(new Map());
+
+  // Counter for generating unique z-index
+  let nextZIndex = 1;
 
   // Flag to prevent sync loop when loading from project
   let isLoadingFromProject = false;
@@ -120,6 +138,7 @@ function createDesignerStore() {
     type: ComponentType,
     x: number,
     y: number,
+    parentId?: string,
   ): UIComponent {
     const defaultProps = getDefaultProps(type);
     const component: UIComponent = {
@@ -131,11 +150,59 @@ function createDesignerStore() {
       width: defaultProps.width,
       height: defaultProps.height,
       props: defaultProps.props,
+      parentId,
+      children: [],
+      zIndex: nextZIndex++,
+      visible: true,
+      locked: false,
+      collapsed: false,
     };
 
     setComponents((prev) => [...prev, component]);
+
+    // If parent exists, add to parent's children
+    if (parentId) {
+      setComponents((prev) =>
+        prev.map((c) =>
+          c.id === parentId
+            ? { ...c, children: [...(c.children || []), component.id] }
+            : c,
+        ),
+      );
+    }
+
+    // Initialize default value for value-holding components
+    initializeComponentValue(component);
+
     setSelectedId(component.id);
     return component;
+  }
+
+  // Initialize component value based on type
+  function initializeComponentValue(component: UIComponent) {
+    let defaultValue: unknown = null;
+    switch (component.type) {
+      case "toggle":
+        defaultValue = component.props.defaultValue ?? false;
+        break;
+      case "slider":
+        defaultValue = component.props.defaultValue ?? 50;
+        break;
+      case "input":
+        defaultValue = "";
+        break;
+      case "dropdown":
+        const options = component.props.options as string[] | undefined;
+        defaultValue = options?.[0] ?? "";
+        break;
+    }
+    if (defaultValue !== null) {
+      setComponentValues((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(component.id, defaultValue);
+        return newMap;
+      });
+    }
   }
 
   // Update component
@@ -145,9 +212,38 @@ function createDesignerStore() {
     );
   }
 
-  // Delete component
+  // Delete component (also removes from parent and deletes children recursively)
   function deleteComponent(id: string) {
+    const component = components().find((c) => c.id === id);
+    if (!component) return;
+
+    // Recursively delete children first
+    const children = component.children || [];
+    for (const childId of children) {
+      deleteComponent(childId);
+    }
+
+    // Remove from parent's children array
+    if (component.parentId) {
+      setComponents((prev) =>
+        prev.map((c) =>
+          c.id === component.parentId
+            ? { ...c, children: (c.children || []).filter((cid) => cid !== id) }
+            : c,
+        ),
+      );
+    }
+
+    // Remove the component itself
     setComponents((prev) => prev.filter((c) => c.id !== id));
+
+    // Remove component value
+    setComponentValues((prev) => {
+      const newMap = new Map(prev);
+      newMap.delete(id);
+      return newMap;
+    });
+
     if (selectedId() === id) {
       setSelectedId(null);
     }
@@ -172,6 +268,274 @@ function createDesignerStore() {
   function clearAll() {
     setComponents([]);
     setSelectedId(null);
+    setComponentValues(new Map());
+    nextZIndex = 1;
+  }
+
+  // ===== Layer/Hierarchy Management =====
+
+  // Get root components (no parent)
+  function getRootComponents(): UIComponent[] {
+    return components()
+      .filter((c) => !c.parentId)
+      .sort((a, b) => a.zIndex - b.zIndex);
+  }
+
+  // Get direct children of a component
+  function getChildren(parentId: string): UIComponent[] {
+    const parent = components().find((c) => c.id === parentId);
+    if (!parent || !parent.children) return [];
+    return parent.children
+      .map((id) => components().find((c) => c.id === id))
+      .filter((c): c is UIComponent => c !== undefined)
+      .sort((a, b) => a.zIndex - b.zIndex);
+  }
+
+  // Get all ancestors (parent chain) from immediate parent to root
+  function getAncestors(componentId: string): UIComponent[] {
+    const ancestors: UIComponent[] = [];
+    let current = components().find((c) => c.id === componentId);
+    while (current?.parentId) {
+      const parent = components().find((c) => c.id === current!.parentId);
+      if (parent) {
+        ancestors.push(parent);
+        current = parent;
+      } else {
+        break;
+      }
+    }
+    return ancestors;
+  }
+
+  // Get all descendants (recursive children)
+  function getDescendants(componentId: string): UIComponent[] {
+    const descendants: UIComponent[] = [];
+    const children = getChildren(componentId);
+    for (const child of children) {
+      descendants.push(child);
+      descendants.push(...getDescendants(child.id));
+    }
+    return descendants;
+  }
+
+  // Check if component is descendant of another
+  function isDescendantOf(componentId: string, ancestorId: string): boolean {
+    const ancestors = getAncestors(componentId);
+    return ancestors.some((a) => a.id === ancestorId);
+  }
+
+  // Get siblings (same parent)
+  function getSiblings(componentId: string): UIComponent[] {
+    const component = components().find((c) => c.id === componentId);
+    if (!component) return [];
+    if (component.parentId) {
+      return getChildren(component.parentId).filter((c) => c.id !== componentId);
+    } else {
+      return getRootComponents().filter((c) => c.id !== componentId);
+    }
+  }
+
+  // Reparent component
+  function reparentComponent(
+    componentId: string,
+    newParentId: string | null,
+  ): void {
+    const component = components().find((c) => c.id === componentId);
+    if (!component) return;
+
+    // Prevent making a component its own ancestor
+    if (newParentId && isDescendantOf(newParentId, componentId)) return;
+    // Prevent setting parent to self
+    if (newParentId === componentId) return;
+
+    const oldParentId = component.parentId;
+
+    // Remove from old parent's children
+    if (oldParentId) {
+      setComponents((prev) =>
+        prev.map((c) =>
+          c.id === oldParentId
+            ? {
+                ...c,
+                children: (c.children || []).filter((id) => id !== componentId),
+              }
+            : c,
+        ),
+      );
+    }
+
+    // Add to new parent's children
+    if (newParentId) {
+      setComponents((prev) =>
+        prev.map((c) =>
+          c.id === newParentId
+            ? { ...c, children: [...(c.children || []), componentId] }
+            : c,
+        ),
+      );
+    }
+
+    // Update component's parentId
+    updateComponent(componentId, { parentId: newParentId || undefined });
+  }
+
+  // Reorder within siblings (move before/after target)
+  function reorderSibling(
+    componentId: string,
+    targetId: string,
+    position: "before" | "after",
+  ): void {
+    const component = components().find((c) => c.id === componentId);
+    const target = components().find((c) => c.id === targetId);
+    if (!component || !target) return;
+    if (component.parentId !== target.parentId) return; // Must be siblings
+
+    // Get all siblings sorted by zIndex
+    const siblings = component.parentId
+      ? getChildren(component.parentId)
+      : getRootComponents();
+
+    // Calculate new zIndex
+    const targetIndex = siblings.findIndex((s) => s.id === targetId);
+    if (targetIndex === -1) return;
+
+    let newZIndex: number;
+    if (position === "before") {
+      const prevSibling = siblings[targetIndex - 1];
+      newZIndex = prevSibling
+        ? (prevSibling.zIndex + target.zIndex) / 2
+        : target.zIndex - 1;
+    } else {
+      const nextSibling = siblings[targetIndex + 1];
+      newZIndex = nextSibling
+        ? (target.zIndex + nextSibling.zIndex) / 2
+        : target.zIndex + 1;
+    }
+
+    updateComponent(componentId, { zIndex: newZIndex });
+  }
+
+  // Bring to front (highest z-index among siblings)
+  function bringToFront(id: string): void {
+    const component = components().find((c) => c.id === id);
+    if (!component) return;
+
+    const siblings = component.parentId
+      ? getChildren(component.parentId)
+      : getRootComponents();
+
+    const maxZIndex = Math.max(...siblings.map((s) => s.zIndex));
+    if (component.zIndex < maxZIndex) {
+      updateComponent(id, { zIndex: maxZIndex + 1 });
+    }
+  }
+
+  // Send to back (lowest z-index among siblings)
+  function sendToBack(id: string): void {
+    const component = components().find((c) => c.id === id);
+    if (!component) return;
+
+    const siblings = component.parentId
+      ? getChildren(component.parentId)
+      : getRootComponents();
+
+    const minZIndex = Math.min(...siblings.map((s) => s.zIndex));
+    if (component.zIndex > minZIndex) {
+      updateComponent(id, { zIndex: minZIndex - 1 });
+    }
+  }
+
+  // Bring forward (swap with next sibling)
+  function bringForward(id: string): void {
+    const component = components().find((c) => c.id === id);
+    if (!component) return;
+
+    const siblings = component.parentId
+      ? getChildren(component.parentId)
+      : getRootComponents();
+
+    const currentIndex = siblings.findIndex((s) => s.id === id);
+    if (currentIndex < siblings.length - 1) {
+      const nextSibling = siblings[currentIndex + 1];
+      // Swap z-indexes
+      const tempZIndex = component.zIndex;
+      updateComponent(id, { zIndex: nextSibling.zIndex });
+      updateComponent(nextSibling.id, { zIndex: tempZIndex });
+    }
+  }
+
+  // Send backward (swap with previous sibling)
+  function sendBackward(id: string): void {
+    const component = components().find((c) => c.id === id);
+    if (!component) return;
+
+    const siblings = component.parentId
+      ? getChildren(component.parentId)
+      : getRootComponents();
+
+    const currentIndex = siblings.findIndex((s) => s.id === id);
+    if (currentIndex > 0) {
+      const prevSibling = siblings[currentIndex - 1];
+      // Swap z-indexes
+      const tempZIndex = component.zIndex;
+      updateComponent(id, { zIndex: prevSibling.zIndex });
+      updateComponent(prevSibling.id, { zIndex: tempZIndex });
+    }
+  }
+
+  // Toggle visibility
+  function toggleVisibility(id: string): void {
+    const component = components().find((c) => c.id === id);
+    if (component) {
+      updateComponent(id, { visible: !(component.visible ?? true) });
+    }
+  }
+
+  // Toggle lock
+  function toggleLock(id: string): void {
+    const component = components().find((c) => c.id === id);
+    if (component) {
+      updateComponent(id, { locked: !component.locked });
+    }
+  }
+
+  // Toggle collapsed state in layers panel
+  function toggleCollapsed(id: string): void {
+    const component = components().find((c) => c.id === id);
+    if (component) {
+      updateComponent(id, { collapsed: !component.collapsed });
+    }
+  }
+
+  // Expand/collapse node in layers panel (UI state only)
+  function toggleExpanded(id: string): void {
+    setExpandedNodes((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  }
+
+  function isExpanded(id: string): boolean {
+    return expandedNodes().has(id);
+  }
+
+  // ===== Component Values (UI-Script Binding) =====
+
+  function getComponentValue(componentId: string): unknown | undefined {
+    return componentValues().get(componentId);
+  }
+
+  function setComponentValue(componentId: string, value: unknown): void {
+    setComponentValues((prev) => {
+      const newMap = new Map(prev);
+      newMap.set(componentId, value);
+      return newMap;
+    });
   }
 
   // Load from project
@@ -180,20 +544,41 @@ function createDesignerStore() {
     try {
       const project = projectStore.currentProject();
       if (project?.ui?.components) {
-        // Convert project components to designer format (simplified - no bindings)
-        const converted = project.ui.components.map((c) => ({
-          id: c.id,
-          type: c.type as ComponentType,
-          label: c.label,
-          x: c.x,
-          y: c.y,
-          width: c.width,
-          height: c.height,
-          props: c.props || {},
-        }));
+        // Find max zIndex to continue from
+        let maxZ = 0;
+        // Convert project components to designer format
+        const converted = project.ui.components.map((c, index) => {
+          const zIndex = (c as UIComponent).zIndex ?? index + 1;
+          if (zIndex > maxZ) maxZ = zIndex;
+          return {
+            id: c.id,
+            type: c.type as ComponentType,
+            label: c.label,
+            x: c.x,
+            y: c.y,
+            width: c.width,
+            height: c.height,
+            props: c.props || {},
+            parentId: (c as UIComponent).parentId,
+            children: (c as UIComponent).children || [],
+            zIndex,
+            visible: (c as UIComponent).visible ?? true,
+            locked: (c as UIComponent).locked ?? false,
+            collapsed: (c as UIComponent).collapsed ?? false,
+          };
+        });
+        nextZIndex = maxZ + 1;
         setComponents(converted);
+
+        // Initialize component values
+        setComponentValues(new Map());
+        for (const comp of converted) {
+          initializeComponentValue(comp);
+        }
       } else {
         setComponents([]);
+        setComponentValues(new Map());
+        nextZIndex = 1;
       }
       setSelectedId(null);
     } finally {
@@ -220,7 +605,7 @@ function createDesignerStore() {
 
     // Debounce the sync
     syncTimer = setTimeout(() => {
-      // Simplified - no bindings, just UI component definitions
+      // Include all component data including hierarchy
       const uiComponents = components().map((c) => ({
         id: c.id,
         type: c.type,
@@ -230,6 +615,12 @@ function createDesignerStore() {
         width: c.width,
         height: c.height,
         props: c.props,
+        parentId: c.parentId,
+        children: c.children,
+        zIndex: c.zIndex,
+        visible: c.visible,
+        locked: c.locked,
+        collapsed: c.collapsed,
       }));
 
       projectStore.updateUI({
@@ -251,15 +642,22 @@ function createDesignerStore() {
   });
 
   return {
+    // State signals
     components,
     selectedId,
     isDragging,
     dragOffset,
     draggingComponentType,
+    expandedNodes,
+    componentValues,
+
+    // State setters
     setSelectedId,
     setIsDragging,
     setDragOffset,
     setDraggingComponentType,
+
+    // Component CRUD
     getSelectedComponent,
     addComponent,
     updateComponent,
@@ -269,6 +667,33 @@ function createDesignerStore() {
     clearAll,
     loadFromProject,
     syncToProject,
+
+    // Hierarchy management
+    getRootComponents,
+    getChildren,
+    getAncestors,
+    getDescendants,
+    isDescendantOf,
+    getSiblings,
+    reparentComponent,
+    reorderSibling,
+
+    // Z-index management
+    bringToFront,
+    sendToBack,
+    bringForward,
+    sendBackward,
+
+    // Layer properties
+    toggleVisibility,
+    toggleLock,
+    toggleCollapsed,
+    toggleExpanded,
+    isExpanded,
+
+    // Component values (UI-Script binding)
+    getComponentValue,
+    setComponentValue,
   };
 }
 
