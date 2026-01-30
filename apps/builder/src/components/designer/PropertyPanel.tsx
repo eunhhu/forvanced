@@ -238,13 +238,11 @@ export const PropertyPanel: Component = () => {
                     <For each={(c().props.options as string[]) ?? ["Option 1", "Option 2"]}>
                       {(option, i) => (
                         <div class="flex items-center gap-2">
-                          <input
-                            type="text"
-                            class="flex-1 px-2 py-1 text-xs bg-background border border-border rounded"
+                          <ArrayItemInput
                             value={option}
-                            onInput={(e) => {
+                            onChange={(value) => {
                               const options = [...((c().props.options as string[]) ?? ["Option 1", "Option 2"])];
-                              options[i()] = e.currentTarget.value;
+                              options[i()] = value;
                               designerStore.updateComponent(c().id, {
                                 props: { ...c().props, options },
                               });
@@ -379,13 +377,11 @@ export const PropertyPanel: Component = () => {
                     <For each={(c().props.tabs as PageTab[]) ?? []}>
                       {(tab, i) => (
                         <div class="flex items-center gap-2">
-                          <input
-                            type="text"
-                            class="flex-1 px-2 py-1 text-xs bg-background border border-border rounded"
+                          <ArrayItemInput
                             value={tab.label}
-                            onInput={(e) => {
+                            onChange={(value) => {
                               const tabs = [...((c().props.tabs as PageTab[]) ?? [])];
-                              tabs[i()] = { ...tabs[i()], label: e.currentTarget.value };
+                              tabs[i()] = { ...tabs[i()], label: value };
                               designerStore.updateComponent(c().id, {
                                 props: { ...c().props, tabs },
                               });
@@ -805,6 +801,41 @@ const PropertyInput: Component<PropertyInputProps> = (props) => {
         onBlur={() => setIsFocused(false)}
       />
     </div>
+  );
+};
+
+// Uncontrolled text input for array items (tabs, dropdown options) that doesn't lose focus
+interface ArrayItemInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  class?: string;
+}
+
+const ArrayItemInput: Component<ArrayItemInputProps> = (props) => {
+  const [localValue, setLocalValue] = createSignal(props.value);
+  const [isFocused, setIsFocused] = createSignal(false);
+
+  // Sync from props when not focused
+  createEffect(() => {
+    const val = props.value;
+    if (untrack(() => !isFocused())) {
+      setLocalValue(val);
+    }
+  });
+
+  return (
+    <input
+      type="text"
+      class={props.class ?? "flex-1 px-2 py-1 text-xs bg-background border border-border rounded"}
+      value={localValue()}
+      onFocus={() => setIsFocused(true)}
+      onInput={(e) => {
+        const val = e.currentTarget.value;
+        setLocalValue(val);
+        props.onChange(val);
+      }}
+      onBlur={() => setIsFocused(false)}
+    />
   );
 };
 
