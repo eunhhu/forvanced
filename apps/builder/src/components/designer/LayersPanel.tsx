@@ -54,8 +54,8 @@ const ComponentIconMap: Record<ComponentType, Component<{ class?: string }>> = {
 const LayerItem: Component<{
   component: UIComponent;
   depth: number;
-  onSetParent?: (childId: string) => void;
-  settingParentFor?: string | null;
+  onSetParent?: (newParentId: string) => void;
+  settingParentFor?: string[]; // Array of component IDs being reparented
 }> = (props) => {
   // Use multi-selection system
   const isSelected = createMemo(
@@ -81,23 +81,28 @@ const LayerItem: Component<{
     ["group", "stack", "page", "scroll", "card"].includes(props.component.type),
   );
 
-  // Check if we're setting parent for this component
+  // Check if we're setting parent for this component (any in the array)
   const isSettingParent = createMemo(
-    () => props.settingParentFor === props.component.id,
+    () => (props.settingParentFor ?? []).includes(props.component.id),
   );
 
-  // Can be parent target (not self, not descendant of setting parent)
+  // Can be parent target (not self, not descendant of any setting parent)
   const canBeParentTarget = createMemo(() => {
-    if (!props.settingParentFor) return false;
-    if (props.settingParentFor === props.component.id) return false;
-    if (designerStore.isDescendantOf(props.component.id, props.settingParentFor))
-      return false;
+    const settingFor = props.settingParentFor ?? [];
+    if (settingFor.length === 0) return false;
+    // Can't be target if this component is one of the ones being reparented
+    if (settingFor.includes(props.component.id)) return false;
+    // Can't be target if this component is a descendant of any being reparented
+    for (const id of settingFor) {
+      if (designerStore.isDescendantOf(props.component.id, id)) return false;
+    }
     return isContainer();
   });
 
   const handleSelect = (e: MouseEvent) => {
     e.stopPropagation();
-    if (props.settingParentFor && canBeParentTarget()) {
+    const settingFor = props.settingParentFor ?? [];
+    if (settingFor.length > 0 && canBeParentTarget()) {
       props.onSetParent?.(props.component.id);
     } else {
       // Use Shift+click for multi-select (Adobe style)
@@ -234,9 +239,8 @@ const LayerItem: Component<{
 
 // Main Layers Panel
 export const LayersPanel: Component = () => {
-  const [settingParentFor, setSettingParentFor] = createSignal<string | null>(
-    null,
-  );
+  // Changed to array to support multi-selection parenting
+  const [settingParentFor, setSettingParentFor] = createSignal<string[]>([]);
 
   const rootComponents = createMemo(() => designerStore.getRootComponents());
   const selectedId = createMemo(() => designerStore.selectedId());
@@ -247,8 +251,11 @@ export const LayersPanel: Component = () => {
     designerStore.getSelectedComponent(),
   );
 
-  // Check if selected component has a parent
-  const hasParent = createMemo(() => !!selectedComponent()?.parentId);
+  // Check if any selected component has a parent
+  const hasParent = createMemo(() => {
+    const selectedComps = designerStore.getSelectedComponents();
+    return selectedComps.some((c) => !!c.parentId);
+  });
 
   // Check if selected component can have children
   const canHaveChildren = createMemo(() => {
@@ -278,28 +285,39 @@ export const LayersPanel: Component = () => {
   };
 
   const handleStartSetParent = () => {
-    const id = selectedId();
-    if (id) {
-      setSettingParentFor(id);
+    // Get all selected component IDs
+    const ids = Array.from(designerStore.selectedIds());
+    if (ids.length > 0) {
+      setSettingParentFor(ids);
     }
   };
 
   const handleCancelSetParent = () => {
-    setSettingParentFor(null);
+    setSettingParentFor([]);
   };
 
   const handleSetParent = (newParentId: string) => {
-    const childId = settingParentFor();
-    if (childId) {
-      designerStore.reparentComponent(childId, newParentId);
-      setSettingParentFor(null);
+    const childIds = settingParentFor();
+    if (childIds.length > 0) {
+      // Reparent all selected components
+      for (const childId of childIds) {
+        // Skip if trying to set self as parent or if target is descendant
+        if (childId !== newParentId && !designerStore.isDescendantOf(newParentId, childId)) {
+          designerStore.reparentComponent(childId, newParentId);
+        }
+      }
+      setSettingParentFor([]);
     }
   };
 
   const handleRemoveParent = () => {
-    const id = selectedId();
-    if (id) {
-      designerStore.reparentComponent(id, null);
+    // Remove parent for all selected components that have parents
+    const ids = Array.from(designerStore.selectedIds());
+    for (const id of ids) {
+      const comp = designerStore.components().find((c) => c.id === id);
+      if (comp?.parentId) {
+        designerStore.reparentComponent(id, null);
+      }
     }
   };
 
@@ -351,7 +369,7 @@ export const LayersPanel: Component = () => {
         <div class="w-px h-4 bg-border mx-1" />
 
         {/* Parent/Child controls */}
-        <Show when={!settingParentFor()}>
+        <Show when={settingParentFor().length === 0}>
           <button
             class="p-1.5 rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed"
             onClick={handleStartSetParent}
@@ -370,8 +388,12 @@ export const LayersPanel: Component = () => {
           </button>
         </Show>
 
-        <Show when={settingParentFor()}>
-          <span class="text-xs text-warning px-2">Select parent...</span>
+        <Show when={settingParentFor().length > 0}>
+          <span class="text-xs text-warning px-2">
+            {settingParentFor().length > 1
+              ? `Select parent for ${settingParentFor().length} items...`
+              : "Select parent..."}
+          </span>
           <button
             class="px-2 py-1 text-xs rounded bg-surface-hover hover:bg-surface-active"
             onClick={handleCancelSetParent}

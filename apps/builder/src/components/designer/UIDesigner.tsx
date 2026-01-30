@@ -1,6 +1,6 @@
 import { Component, createEffect, createSignal, createMemo, on, untrack } from "solid-js";
 import { ComponentPalette } from "./ComponentPalette";
-import { DesignCanvas, setCanvasWidth, setCanvasHeight } from "./DesignCanvas";
+import { DesignCanvas, setCanvasWidth, setCanvasHeight, setCanvasPadding, setCanvasGap } from "./DesignCanvas";
 import { PropertyPanel } from "./PropertyPanel";
 import { LayersPanel } from "./LayersPanel";
 import { designerStore } from "@/stores/designer";
@@ -17,6 +17,9 @@ export const UIDesigner: Component = () => {
   // Use || instead of ?? to handle 0 values as well (0 would be invalid canvas size)
   const projectUiWidth = createMemo(() => projectStore.currentProject()?.ui?.width || 400);
   const projectUiHeight = createMemo(() => projectStore.currentProject()?.ui?.height || 500);
+  // Padding and gap can be 0, so use ?? instead of ||
+  const projectUiPadding = createMemo(() => projectStore.currentProject()?.ui?.padding ?? 12);
+  const projectUiGap = createMemo(() => projectStore.currentProject()?.ui?.gap ?? 8);
 
   // Load from project when project ID changes
   createEffect(
@@ -29,6 +32,8 @@ export const UIDesigner: Component = () => {
           // Set canvas size from project (use || to treat 0 as invalid)
           setCanvasWidth(project.ui?.width || 400);
           setCanvasHeight(project.ui?.height || 500);
+          setCanvasPadding(project.ui?.padding ?? 12);
+          setCanvasGap(project.ui?.gap ?? 8);
         }
       }
     }),
@@ -43,6 +48,17 @@ export const UIDesigner: Component = () => {
         // Always set valid canvas dimensions (minimum 100px for visibility)
         setCanvasWidth(Math.max(w, 100));
         setCanvasHeight(Math.max(h, 100));
+      },
+    ),
+  );
+
+  // Update canvas padding/gap when layout settings change
+  createEffect(
+    on(
+      () => [projectUiPadding(), projectUiGap()] as const,
+      ([padding, gap]) => {
+        setCanvasPadding(padding);
+        setCanvasGap(gap);
       },
     ),
   );

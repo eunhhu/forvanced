@@ -13,9 +13,11 @@ import { TrashIcon } from "@/components/common/Icons";
 // This is populated by the UI Designer when loading a project
 const [canvasWidth, setCanvasWidth] = createSignal(400);
 const [canvasHeight, setCanvasHeight] = createSignal(500);
+const [canvasPadding, setCanvasPadding] = createSignal(12);
+const [canvasGap, setCanvasGap] = createSignal(8);
 
 // Export setters for external use (e.g., when loading project or changing settings)
-export { setCanvasWidth, setCanvasHeight };
+export { setCanvasWidth, setCanvasHeight, setCanvasPadding, setCanvasGap };
 
 // Selection box interface
 interface SelectionBox {
@@ -336,8 +338,8 @@ export const DesignCanvas: Component = () => {
                   width: `${windowWidth()}px`,
                   height: `${windowHeight()}px`,
                   "min-height": `${windowHeight()}px`,
-                  padding: "12px",
-                  gap: "8px",
+                  padding: `${canvasPadding()}px`,
+                  gap: `${canvasGap()}px`,
                 }}
                 onDragOver={handleDragOver}
                 onDragEnter={handleDragEnter}

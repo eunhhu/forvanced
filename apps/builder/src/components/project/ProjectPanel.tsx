@@ -234,6 +234,36 @@ export const ProjectPanel: Component = () => {
                 </div>
               </ProjectSection>
 
+              {/* Layout Settings */}
+              <ProjectSection title="Layout Settings">
+                <div class="space-y-3">
+                  <WindowSizeInput
+                    label="Padding"
+                    value={project().ui.padding ?? 12}
+                    min={0}
+                    max={64}
+                    onChange={(val) => {
+                      projectStore.updateUI({
+                        ...project().ui,
+                        padding: val,
+                      });
+                    }}
+                  />
+                  <WindowSizeInput
+                    label="Gap"
+                    value={project().ui.gap ?? 8}
+                    min={0}
+                    max={48}
+                    onChange={(val) => {
+                      projectStore.updateUI({
+                        ...project().ui,
+                        gap: val,
+                      });
+                    }}
+                  />
+                </div>
+              </ProjectSection>
+
               {/* Build Settings */}
               <ProjectSection title="Build Settings">
                 <div class="space-y-3">
