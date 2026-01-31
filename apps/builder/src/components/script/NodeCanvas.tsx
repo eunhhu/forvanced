@@ -249,6 +249,7 @@ export const NodeCanvas: Component = () => {
       const addToSelection = e.shiftKey;
       if (!addToSelection) {
         scriptStore.selectNode(null);
+        scriptStore.setSelectedConnectionId(null);
       }
     }
   };

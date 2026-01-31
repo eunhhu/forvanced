@@ -1,7 +1,7 @@
 import { createSignal, createRoot } from "solid-js";
 
 // Tab types
-export type MainTab = "project" | "designer" | "scripts" | "build";
+export type MainTab = "project" | "designer" | "scripts" | "testing" | "build";
 
 function createUIStore() {
   // Active main tab

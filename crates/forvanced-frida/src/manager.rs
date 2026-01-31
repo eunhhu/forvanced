@@ -1,20 +1,99 @@
+//! Real Frida manager implementation
+//!
+//! This module provides actual Frida integration using frida-rust bindings.
+//! Requires the Frida devkit to be installed.
+
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use frida::{DeviceManager, DeviceType, Frida};
+use frida::{DeviceManager, DeviceType, Frida, Message, ScriptHandler, ScriptOption};
 
 use crate::error::{FridaError, Result};
 use crate::process::{ApplicationInfo, AttachTarget, DeviceInfo, FridaDeviceType, ProcessInfo, SpawnOptions};
-use crate::session::FridaSession;
+use crate::session::{FridaSession, MessageCallback, ScriptMessage};
+
+/// Wrapper for actual Frida session to handle lifetimes
+struct RealSession {
+    #[allow(dead_code)]
+    device_id: String,
+    pid: u32,
+}
+
+/// Wrapper for actual Frida script
+struct RealScript {
+    #[allow(dead_code)]
+    session_id: String,
+}
+
+/// Message handler that implements ScriptHandler trait
+struct MessageHandler {
+    session_id: String,
+    script_id: String,
+    message_tx: mpsc::UnboundedSender<(String, String, ScriptMessage)>,
+}
+
+impl ScriptHandler for MessageHandler {
+    fn on_message(&mut self, message: Message, _data: Option<Vec<u8>>) {
+        let script_message = match message {
+            Message::Log(log) => {
+                let level = match log.level {
+                    frida::MessageLogLevel::Info => "info",
+                    frida::MessageLogLevel::Debug => "debug",
+                    frida::MessageLogLevel::Warning => "warning",
+                    frida::MessageLogLevel::Error => "error",
+                };
+                ScriptMessage::Log {
+                    level: level.to_string(),
+                    text: log.payload,
+                }
+            }
+            Message::Send(send) => {
+                // Convert SendPayload to serde_json::Value
+                let payload = serde_json::json!({
+                    "type": send.payload.r#type,
+                    "id": send.payload.id,
+                    "result": send.payload.result,
+                    "returns": send.payload.returns,
+                });
+                ScriptMessage::Send { payload }
+            }
+            Message::Error(err) => ScriptMessage::Error {
+                description: err.description,
+                stack: Some(err.stack),
+                file_name: Some(err.file_name),
+                line_number: Some(err.line_number as u32),
+            },
+            Message::Other(value) => {
+                // Try to handle as a generic send message
+                ScriptMessage::Send { payload: value }
+            }
+        };
+
+        let _ = self.message_tx.send((
+            self.session_id.clone(),
+            self.script_id.clone(),
+            script_message,
+        ));
+    }
+}
 
 pub struct FridaManager {
     #[allow(dead_code)]
     frida: Arc<Frida>,
     device_manager: DeviceManager<'static>,
     sessions: Arc<RwLock<HashMap<String, Arc<FridaSession>>>>,
+    /// Store real session info for device lookup
+    real_sessions: Arc<RwLock<HashMap<String, RealSession>>>,
+    /// Store real script info
+    real_scripts: Arc<RwLock<HashMap<String, RealScript>>>,
+    /// Message sender for dispatching script messages
+    message_tx: mpsc::UnboundedSender<(String, String, ScriptMessage)>,
+    /// Message receiver handle (spawned task)
+    #[allow(dead_code)]
+    message_rx_handle: Arc<RwLock<Option<tokio::task::JoinHandle<()>>>>,
 }
 
 // SAFETY: FridaManager is thread-safe because:
@@ -26,7 +105,7 @@ unsafe impl Sync for FridaManager {}
 
 impl FridaManager {
     pub fn new() -> Result<Self> {
-        info!("Initializing Frida manager");
+        info!("Initializing Real Frida manager");
 
         let frida = unsafe { Frida::obtain() };
         let frida = Arc::new(frida);
@@ -35,10 +114,30 @@ impl FridaManager {
         let frida_ref: &'static Frida = Box::leak(Box::new(unsafe { Frida::obtain() }));
         let device_manager = DeviceManager::obtain(frida_ref);
 
+        // Create message channel for async message dispatching
+        let (message_tx, mut message_rx) = mpsc::unbounded_channel::<(String, String, ScriptMessage)>();
+
+        let sessions_for_task: Arc<RwLock<HashMap<String, Arc<FridaSession>>>> = Arc::new(RwLock::new(HashMap::new()));
+        let sessions_clone = sessions_for_task.clone();
+
+        // Spawn message dispatcher task
+        let handle = tokio::spawn(async move {
+            while let Some((session_id, script_id, message)) = message_rx.recv().await {
+                let sessions = sessions_clone.read().await;
+                if let Some(session) = sessions.get(&session_id) {
+                    session.dispatch_message(&script_id, message).await;
+                }
+            }
+        });
+
         Ok(Self {
             frida,
             device_manager,
-            sessions: Arc::new(RwLock::new(HashMap::new())),
+            sessions: sessions_for_task,
+            real_sessions: Arc::new(RwLock::new(HashMap::new())),
+            real_scripts: Arc::new(RwLock::new(HashMap::new())),
+            message_tx,
+            message_rx_handle: Arc::new(RwLock::new(Some(handle))),
         })
     }
 
@@ -121,7 +220,7 @@ impl FridaManager {
         info!("Attaching to {} on device {}", target, device_id);
 
         // Do all Frida work synchronously first (no await crossing)
-        let (session_id, frida_session) = {
+        let (session_id, frida_session, pid) = {
             let devices = self.device_manager.enumerate_all_devices();
 
             let device = devices
@@ -169,6 +268,7 @@ impl FridaManager {
                 }
             };
 
+            // Attach to process - this creates the actual Frida session
             let _session = device
                 .attach(pid)
                 .map_err(|e| FridaError::AttachFailed(e.to_string()))?;
@@ -177,8 +277,17 @@ impl FridaManager {
             let session_id = Uuid::new_v4().to_string();
             let frida_session = Arc::new(FridaSession::new(session_id.clone(), process_info));
 
-            (session_id, frida_session)
+            (session_id, frida_session, pid)
         }; // devices and _session are dropped here, before any await
+
+        // Store real session info
+        self.real_sessions.write().await.insert(
+            session_id.clone(),
+            RealSession {
+                device_id: device_id.to_string(),
+                pid,
+            },
+        );
 
         // Now we can safely await
         self.sessions
@@ -195,7 +304,7 @@ impl FridaManager {
     pub async fn spawn_and_attach(&self, device_id: &str, identifier: &str, _options: SpawnOptions) -> Result<String> {
         info!("Spawning and attaching to {} on device {}", identifier, device_id);
 
-        let (session_id, frida_session) = {
+        let (session_id, frida_session, pid) = {
             let devices = self.device_manager.enumerate_all_devices();
 
             // Find and take ownership of the device for mutable operations
@@ -221,8 +330,17 @@ impl FridaManager {
             // Resume the process (it's suspended after spawn)
             device.resume(pid).map_err(|e| FridaError::ResumeFailed(e.to_string()))?;
 
-            (session_id, frida_session)
+            (session_id, frida_session, pid)
         };
+
+        // Store real session info
+        self.real_sessions.write().await.insert(
+            session_id.clone(),
+            RealSession {
+                device_id: device_id.to_string(),
+                pid,
+            },
+        );
 
         self.sessions
             .write()
@@ -258,6 +376,22 @@ impl FridaManager {
             .remove(session_id)
             .ok_or_else(|| FridaError::SessionNotFound(session_id.to_string()))?;
 
+        // Clean up real session
+        self.real_sessions.write().await.remove(session_id);
+
+        // Clean up scripts for this session
+        let script_ids: Vec<String> = {
+            let scripts = self.real_scripts.read().await;
+            scripts
+                .iter()
+                .filter(|(_, s)| s.session_id == session_id)
+                .map(|(id, _)| id.clone())
+                .collect()
+        };
+        for script_id in script_ids {
+            self.real_scripts.write().await.remove(&script_id);
+        }
+
         session.mark_detached().await;
         info!("Session {} detached", session_id);
         Ok(())
@@ -272,8 +406,7 @@ impl FridaManager {
     }
 
     /// Inject a Frida script into a session.
-    /// NOTE: Real implementation requires storing actual Frida Session handles.
-    /// Currently stubbed for compilation.
+    /// This creates and loads an actual Frida script.
     pub async fn inject_script(&self, session_id: &str, script_source: &str) -> Result<String> {
         info!(
             "Injecting script into session {}, source length: {}",
@@ -289,14 +422,66 @@ impl FridaManager {
             .cloned()
             .ok_or_else(|| FridaError::SessionNotFound(session_id.to_string()))?;
 
-        // TODO: Real implementation would:
-        // 1. Get the actual Frida session handle
-        // 2. Create a Script from the source
-        // 3. Load and enable the script
-        // For now, we create a script handle entry
-        let script_id = Uuid::new_v4().to_string();
+        // Get real session info
+        let real_session = self
+            .real_sessions
+            .read()
+            .await
+            .get(session_id)
+            .map(|s| (s.device_id.clone(), s.pid))
+            .ok_or_else(|| FridaError::SessionNotFound(format!("Real session not found: {}", session_id)))?;
+
+        let (device_id, pid) = real_session;
+
+        // Create and load actual Frida script
+        let script_id = {
+            let devices = self.device_manager.enumerate_all_devices();
+            let device = devices
+                .iter()
+                .find(|d| d.get_id() == device_id)
+                .ok_or_else(|| FridaError::DeviceNotFound(format!("Device '{}' not found", device_id)))?;
+
+            // Re-attach to get session handle
+            let frida_session = device
+                .attach(pid)
+                .map_err(|e| FridaError::AttachFailed(format!("Failed to re-attach: {}", e)))?;
+
+            // Create script with message handler
+            let script_id = Uuid::new_v4().to_string();
+
+            let mut script_option = ScriptOption::new();
+
+            // Create the script
+            let mut script = frida_session
+                .create_script(script_source, &mut script_option)
+                .map_err(|e| FridaError::ScriptCreationFailed(e.to_string()))?;
+
+            // Set up message handler using ScriptHandler trait
+            let handler = MessageHandler {
+                session_id: session_id.to_string(),
+                script_id: script_id.clone(),
+                message_tx: self.message_tx.clone(),
+            };
+            script.handle_message(handler)
+                .map_err(|e| FridaError::ScriptCreationFailed(format!("Failed to set message handler: {}", e)))?;
+
+            // Load the script
+            script.load().map_err(|e| FridaError::ScriptLoadFailed(e.to_string()))?;
+
+            script_id
+        };
+
+        // Store in our session
         session.add_script(script_id.clone(), "user_script".to_string(), script_source.to_string()).await;
         session.mark_script_loaded(&script_id).await;
+
+        // Store real script info
+        self.real_scripts.write().await.insert(
+            script_id.clone(),
+            RealScript {
+                session_id: session_id.to_string(),
+            },
+        );
 
         info!("Script {} injected into session {}", script_id, session_id);
         Ok(script_id)
@@ -321,6 +506,9 @@ impl FridaManager {
             .remove_script(script_id)
             .await
             .ok_or_else(|| FridaError::ScriptNotFound(script_id.to_string()))?;
+
+        // Clean up real script
+        self.real_scripts.write().await.remove(script_id);
 
         info!("Script {} unloaded from session {}", script_id, session_id);
         Ok(())
@@ -364,25 +552,59 @@ impl FridaManager {
         }
         drop(scripts);
 
-        // TODO: Real implementation would:
-        // 1. Get the actual Script handle
-        // 2. Call script.exports().call(method, args)
-        // 3. Return the result
-        //
-        // For now, return a stub response indicating the call was received
-        // Real Frida RPC requires the actual frida::Script handle which
-        // we don't store currently due to lifetime/Send constraints.
-        warn!(
-            "RPC call to '{}' is stubbed - real Frida integration required",
-            method
-        );
+        // Get real session info
+        let real_session = self
+            .real_sessions
+            .read()
+            .await
+            .get(session_id)
+            .map(|s| (s.device_id.clone(), s.pid))
+            .ok_or_else(|| FridaError::SessionNotFound(format!("Real session not found: {}", session_id)))?;
 
-        Ok(serde_json::json!({
-            "status": "stubbed",
-            "method": method,
-            "args": args,
-            "message": "Real Frida RPC not yet implemented"
-        }))
+        let (device_id, pid) = real_session;
+
+        // Get script source to recreate script for RPC call
+        // NOTE: This is a workaround because frida-rust Script doesn't impl Send
+        // In production, we'd need a different architecture (e.g., dedicated thread per session)
+        let script_source = {
+            let scripts = session.scripts.read().await;
+            scripts.get(script_id)
+                .map(|h| h.source.clone())
+                .ok_or_else(|| FridaError::ScriptNotFound(script_id.to_string()))?
+        };
+
+        // Perform RPC call
+        let result = {
+            let devices = self.device_manager.enumerate_all_devices();
+            let device = devices
+                .iter()
+                .find(|d| d.get_id() == device_id)
+                .ok_or_else(|| FridaError::DeviceNotFound(format!("Device '{}' not found", device_id)))?;
+
+            let frida_session = device
+                .attach(pid)
+                .map_err(|e| FridaError::AttachFailed(format!("Failed to re-attach: {}", e)))?;
+
+            let mut script_option = ScriptOption::new();
+            let mut script = frida_session
+                .create_script(&script_source, &mut script_option)
+                .map_err(|e| FridaError::ScriptCreationFailed(e.to_string()))?;
+
+            script.load().map_err(|e| FridaError::ScriptLoadFailed(e.to_string()))?;
+
+            // Convert args to serde_json::Value for frida-rust
+            let args_value: serde_json::Value = serde_json::Value::Array(args);
+
+            // Call the RPC method using exports field
+            let result = script.exports.call(method, Some(args_value))
+                .map_err(|e| FridaError::RpcCallFailed(e.to_string()))?;
+
+            // Return result or null
+            result.unwrap_or(serde_json::Value::Null)
+        };
+
+        info!("RPC call '{}' completed", method);
+        Ok(result)
     }
 
     /// Register a message callback for a session.
@@ -390,7 +612,7 @@ impl FridaManager {
     pub async fn on_session_message(
         &self,
         session_id: &str,
-        callback: crate::session::MessageCallback,
+        callback: MessageCallback,
     ) -> Result<()> {
         let session = self
             .sessions
@@ -410,7 +632,7 @@ impl FridaManager {
         &self,
         session_id: &str,
         script_id: &str,
-        message: crate::session::ScriptMessage,
+        message: ScriptMessage,
     ) -> Result<()> {
         let session = self
             .sessions

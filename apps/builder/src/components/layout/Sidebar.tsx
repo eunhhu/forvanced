@@ -1,11 +1,11 @@
 import { Component, For, Show } from "solid-js";
 import {
   IconFolder,
-  IconCpu,
   IconLayout,
   IconPackage,
   IconSettings,
   IconWorkflow,
+  IconPlay,
   IconPanelLeftClose,
   IconPanelLeftOpen,
 } from "@/components/common/Icons";
@@ -23,7 +23,8 @@ const navItems: NavItem[] = [
   { id: "project", label: "Project", icon: IconFolder, shortcut: ["Cmd", "1"] },
   { id: "designer", label: "Designer", icon: IconLayout, shortcut: ["Cmd", "2"] },
   { id: "scripts", label: "Scripts", icon: IconWorkflow, shortcut: ["Cmd", "3"] },
-  { id: "build", label: "Build", icon: IconPackage, shortcut: ["Cmd", "4"] },
+  { id: "testing", label: "Testing", icon: IconPlay, shortcut: ["Cmd", "4"] },
+  { id: "build", label: "Build", icon: IconPackage, shortcut: ["Cmd", "5"] },
 ];
 
 interface SidebarProps {

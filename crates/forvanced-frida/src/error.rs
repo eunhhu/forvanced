@@ -29,8 +29,17 @@ pub enum FridaError {
     #[error("Script injection failed: {0}")]
     ScriptInjectionFailed(String),
 
+    #[error("Script creation failed: {0}")]
+    ScriptCreationFailed(String),
+
+    #[error("Script load failed: {0}")]
+    ScriptLoadFailed(String),
+
     #[error("Script execution error: {0}")]
     ScriptExecutionError(String),
+
+    #[error("RPC call failed: {0}")]
+    RpcCallFailed(String),
 
     #[error("Session not found: {0}")]
     SessionNotFound(String),

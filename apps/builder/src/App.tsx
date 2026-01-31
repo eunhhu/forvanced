@@ -5,6 +5,7 @@ import { UIDesigner } from "@/components/designer/UIDesigner";
 import { ProjectPanel } from "@/components/project/ProjectPanel";
 import { BuildPanel } from "@/components/build/BuildPanel";
 import { ScriptEditor } from "@/components/script/ScriptEditor";
+import { TestPanel } from "@/components/testing/TestPanel";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { HotkeysHelp } from "@/components/common/HotkeysHelp";
@@ -87,8 +88,15 @@ const App: Component = () => {
         action: () => setActiveTab("scripts"),
       },
       {
-        id: "nav-build",
+        id: "nav-testing",
         keys: ["Cmd", "4"],
+        description: "Go to Testing",
+        category: "navigation",
+        action: () => setActiveTab("testing"),
+      },
+      {
+        id: "nav-build",
+        keys: ["Cmd", "5"],
         description: "Go to Build",
         category: "navigation",
         action: () => setActiveTab("build"),
@@ -232,6 +240,10 @@ const App: Component = () => {
 
           <Show when={activeTab() === "scripts"}>
             <ScriptEditor />
+          </Show>
+
+          <Show when={activeTab() === "testing"}>
+            <TestPanel />
           </Show>
 
           <Show when={activeTab() === "build"}>

@@ -40,7 +40,6 @@ export const HotkeysHelp: Component = () => {
     "project",
     "designer",
     "script",
-    "target",
   ];
 
   return (

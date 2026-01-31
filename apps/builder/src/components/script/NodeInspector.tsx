@@ -993,6 +993,113 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
               Enter the name of a defined function
             </div>
           </Show>
+
+          {/* Device Select */}
+          <Show when={props.node.type === "device_select"}>
+            <DeviceSelectConfig node={props.node} />
+          </Show>
+
+          {/* Process Enumerate */}
+          <Show when={props.node.type === "process_enumerate"}>
+            <PropertyRow label="Scope">
+              <select
+                class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+                value={(props.node.config.scope as string) ?? "minimal"}
+                onChange={(e) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: {
+                      ...props.node.config,
+                      scope: e.currentTarget.value,
+                    },
+                  })
+                }
+              >
+                <option value="minimal">Minimal (faster)</option>
+                <option value="full">Full (more details)</option>
+              </select>
+            </PropertyRow>
+            <div class="text-[9px] text-foreground-muted">
+              Minimal: PID, name only. Full: includes parameters, icons
+            </div>
+          </Show>
+
+          {/* Application Enumerate */}
+          <Show when={props.node.type === "application_enumerate"}>
+            <PropertyRow label="Scope">
+              <select
+                class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+                value={(props.node.config.scope as string) ?? "minimal"}
+                onChange={(e) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: {
+                      ...props.node.config,
+                      scope: e.currentTarget.value,
+                    },
+                  })
+                }
+              >
+                <option value="minimal">Minimal (faster)</option>
+                <option value="full">Full (more details)</option>
+              </select>
+            </PropertyRow>
+            <PropertyRow label="Include Running">
+              <input
+                type="checkbox"
+                checked={(props.node.config.includeRunning as boolean) ?? true}
+                onChange={(e) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: {
+                      ...props.node.config,
+                      includeRunning: e.currentTarget.checked,
+                    },
+                  })
+                }
+              />
+            </PropertyRow>
+            <PropertyRow label="Include Installed">
+              <input
+                type="checkbox"
+                checked={(props.node.config.includeInstalled as boolean) ?? true}
+                onChange={(e) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: {
+                      ...props.node.config,
+                      includeInstalled: e.currentTarget.checked,
+                    },
+                  })
+                }
+              />
+            </PropertyRow>
+            <div class="text-[9px] text-foreground-muted">
+              For mobile devices. Returns app identifier, name, PID if running.
+            </div>
+          </Show>
+
+          {/* Process Attach */}
+          <Show when={props.node.type === "process_attach"}>
+            <ProcessAttachConfig node={props.node} />
+          </Show>
+
+          {/* Process Spawn */}
+          <Show when={props.node.type === "process_spawn"}>
+            <PropertyRow label="Resume After Spawn">
+              <input
+                type="checkbox"
+                checked={(props.node.config.resumeAfterSpawn as boolean) ?? true}
+                onChange={(e) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: {
+                      ...props.node.config,
+                      resumeAfterSpawn: e.currentTarget.checked,
+                    },
+                  })
+                }
+              />
+            </PropertyRow>
+            <div class="text-[9px] text-foreground-muted">
+              If unchecked, app starts paused. Use for early instrumentation.
+            </div>
+          </Show>
         </div>
       </Show>
     </div>
@@ -1707,6 +1814,133 @@ const UIPropsConfig: Component<UIPropsConfigProps> = (props) => {
           <span>Component not found (may have been deleted)</span>
         </div>
       </Show>
+    </>
+  );
+};
+
+// ============================================
+// Device Select Config - For device_select node
+// ============================================
+interface DeviceSelectConfigProps {
+  node: ScriptNode;
+}
+
+const DeviceSelectConfig: Component<DeviceSelectConfigProps> = (props) => {
+  const selectionMode = () =>
+    (props.node.config.selectionMode as string) ?? "type";
+
+  return (
+    <>
+      <PropertyRow label="Selection Mode">
+        <select
+          class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+          value={selectionMode()}
+          onChange={(e) =>
+            scriptStore.updateNode(props.node.id, {
+              config: {
+                ...props.node.config,
+                selectionMode: e.currentTarget.value,
+              },
+            })
+          }
+        >
+          <option value="type">By Type (local/usb/remote)</option>
+          <option value="id">By Device ID</option>
+        </select>
+      </PropertyRow>
+
+      <Show when={selectionMode() === "type"}>
+        <PropertyRow label="Device Type">
+          <select
+            class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+            value={(props.node.config.deviceType as string) ?? "local"}
+            onChange={(e) =>
+              scriptStore.updateNode(props.node.id, {
+                config: {
+                  ...props.node.config,
+                  deviceType: e.currentTarget.value,
+                },
+              })
+            }
+          >
+            <option value="local">Local (this machine)</option>
+            <option value="usb">USB (connected device)</option>
+            <option value="remote">Remote (frida-server)</option>
+          </select>
+        </PropertyRow>
+        <div class="text-[9px] text-foreground-muted">
+          <strong>Local:</strong> Current machine processes
+          <br />
+          <strong>USB:</strong> Android/iOS device via USB
+          <br />
+          <strong>Remote:</strong> Network frida-server
+        </div>
+      </Show>
+
+      <Show when={selectionMode() === "id"}>
+        <div class="text-[9px] text-foreground-muted p-2 bg-background/50 rounded">
+          Connect <code>deviceId</code> input from "Enumerate Devices" output or
+          provide a constant string.
+        </div>
+      </Show>
+    </>
+  );
+};
+
+// ============================================
+// Process Attach Config - For process_attach node
+// ============================================
+interface ProcessAttachConfigProps {
+  node: ScriptNode;
+}
+
+const ProcessAttachConfig: Component<ProcessAttachConfigProps> = (props) => {
+  const attachMode = () => (props.node.config.attachMode as string) ?? "pid";
+
+  return (
+    <>
+      <PropertyRow label="Attach Mode">
+        <select
+          class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+          value={attachMode()}
+          onChange={(e) =>
+            scriptStore.updateNode(props.node.id, {
+              config: {
+                ...props.node.config,
+                attachMode: e.currentTarget.value,
+              },
+            })
+          }
+        >
+          <option value="pid">By PID (number)</option>
+          <option value="name">By Process Name</option>
+          <option value="identifier">By Bundle Identifier</option>
+        </select>
+      </PropertyRow>
+
+      <div class="text-[9px] text-foreground-muted p-2 bg-background/50 rounded space-y-1">
+        <Show when={attachMode() === "pid"}>
+          <p>
+            <strong>PID:</strong> Connect a number to <code>target</code> input.
+            Get PID from "Enumerate Processes".
+          </p>
+        </Show>
+        <Show when={attachMode() === "name"}>
+          <p>
+            <strong>Name:</strong> Connect process name string (e.g.,
+            "notepad.exe") to <code>target</code>.
+          </p>
+        </Show>
+        <Show when={attachMode() === "identifier"}>
+          <p>
+            <strong>Identifier:</strong> For mobile apps, use bundle ID (e.g.,
+            "com.example.app").
+          </p>
+        </Show>
+        <p class="pt-1 border-t border-border/50">
+          Use "Select Device" first to choose the target device.
+        </p>
+      </div>
     </>
   );
 };

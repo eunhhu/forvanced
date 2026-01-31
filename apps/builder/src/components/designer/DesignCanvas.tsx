@@ -7,7 +7,8 @@ import {
   type PageTab,
   type SizingMode,
 } from "@/stores/designer";
-import { TrashIcon, IconLock } from "@/components/common/Icons";
+import { TrashIcon, IconLock, IconPlay } from "@/components/common/Icons";
+import { UIPreview } from "./UIPreview";
 
 // Canvas size is managed separately to avoid re-renders from project sync
 // This is populated by the UI Designer when loading a project
@@ -42,6 +43,9 @@ export const DesignCanvas: Component = () => {
   // Selection box state (for drag selection)
   const [selectionBox, setSelectionBox] = createSignal<SelectionBox | null>(null);
   const [isSelecting, setIsSelecting] = createSignal(false);
+
+  // Preview modal state
+  const [isPreviewOpen, setIsPreviewOpen] = createSignal(false);
 
   // Check for Mac (for display purposes)
   const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
@@ -257,6 +261,14 @@ export const DesignCanvas: Component = () => {
           >
             Clear All
           </button>
+          <div class="w-px h-4 bg-border mx-1" />
+          <button
+            class="flex items-center gap-1.5 text-xs px-3 py-1 rounded bg-accent text-white hover:bg-accent/90 transition-colors"
+            onClick={() => setIsPreviewOpen(true)}
+          >
+            <IconPlay class="w-3 h-3" />
+            Preview
+          </button>
         </div>
       </div>
 
@@ -374,6 +386,9 @@ export const DesignCanvas: Component = () => {
           <span>Scroll: Pan | {isMac ? "⌘" : "Ctrl"}+Scroll: Zoom | Drag: Box select | Shift+Click: Add to selection</span>
         </div>
       </div>
+
+      {/* Preview Modal */}
+      <UIPreview isOpen={isPreviewOpen()} onClose={() => setIsPreviewOpen(false)} />
     </div>
   );
 };

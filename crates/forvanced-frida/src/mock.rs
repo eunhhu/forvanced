@@ -288,8 +288,111 @@ impl FridaManager {
         }
         drop(scripts);
 
-        // Return mock responses based on method name
+        // Return mock responses based on method name (matching frida-agent.ts RPC exports)
         let result = match method {
+            // Memory Operations
+            "memoryRead" => {
+                let value_type = args.get(2).and_then(|v| v.as_str()).unwrap_or("uint32");
+                match value_type {
+                    "int8" | "uint8" => serde_json::json!(42),
+                    "int16" | "uint16" => serde_json::json!(1234),
+                    "int32" | "uint32" => serde_json::json!(123456),
+                    "int64" | "uint64" => serde_json::json!("123456789"),
+                    "float" => serde_json::json!(3.14),
+                    "double" => serde_json::json!(3.14159265359),
+                    "pointer" => serde_json::json!("0x7fff1234"),
+                    "string" => serde_json::json!("mock_string"),
+                    _ => serde_json::json!([0x48, 0x65, 0x6c, 0x6c, 0x6f]), // "Hello" bytes
+                }
+            },
+            "memoryWrite" => serde_json::json!({ "success": true }),
+            "memoryScan" => serde_json::json!([
+                "0x7fff1234",
+                "0x7fff5678",
+                "0x7fff9abc"
+            ]),
+            "memoryProtect" => serde_json::json!({ "success": true }),
+            "memoryAlloc" => serde_json::json!("0x7fff0000"),
+
+            // Module Operations
+            "getModuleBase" => {
+                let name = args.first().and_then(|v| v.as_str()).unwrap_or("unknown");
+                serde_json::json!(format!("0x{:x}", name.len() * 0x100000))
+            },
+            "getModuleInfo" => {
+                let name = args.first().and_then(|v| v.as_str()).unwrap_or("unknown");
+                serde_json::json!({
+                    "name": name,
+                    "base": format!("0x{:x}", name.len() * 0x100000),
+                    "size": 0x100000,
+                    "path": format!("/usr/lib/{}", name)
+                })
+            },
+            "enumerateModules" => serde_json::json!([
+                { "name": "libc.so", "base": "0x7fff100000", "size": 0x200000, "path": "/usr/lib/libc.so" },
+                { "name": "libm.so", "base": "0x7fff300000", "size": 0x50000, "path": "/usr/lib/libm.so" },
+                { "name": "app.so", "base": "0x400000", "size": 0x100000, "path": "/data/app/app.so" }
+            ]),
+            "enumerateExports" => serde_json::json!([
+                { "type": "function", "name": "malloc", "address": "0x7fff100100" },
+                { "type": "function", "name": "free", "address": "0x7fff100200" },
+                { "type": "function", "name": "printf", "address": "0x7fff100300" }
+            ]),
+            "findExportByName" => {
+                let export_name = args.get(1).and_then(|v| v.as_str()).unwrap_or("unknown");
+                serde_json::json!(format!("0x7fff{:04x}", export_name.len() * 0x100))
+            },
+
+            // Interceptor Operations
+            "interceptorAttach" => {
+                let address = args.first().and_then(|v| v.as_str()).unwrap_or("0x0");
+                let hook_id = args.get(1).and_then(|v| v.as_str()).unwrap_or("hook_1");
+                info!("Mock: interceptor attached at {} with hookId {}", address, hook_id);
+                serde_json::json!({ "success": true, "hookId": hook_id })
+            },
+            "interceptorDetach" => {
+                let hook_id = args.first().and_then(|v| v.as_str()).unwrap_or("unknown");
+                info!("Mock: interceptor detached: {}", hook_id);
+                serde_json::json!({ "success": true })
+            },
+            "interceptorDetachAll" => {
+                info!("Mock: all interceptors detached");
+                serde_json::json!({ "success": true })
+            },
+
+            // Memory Watch Operations
+            "memoryWatchAdd" => {
+                let address = args.first().and_then(|v| v.as_str()).unwrap_or("0x0");
+                let watch_id = args.get(2).and_then(|v| v.as_str()).unwrap_or("watch_1");
+                info!("Mock: memory watch added at {} with watchId {}", address, watch_id);
+                serde_json::json!({ "success": true, "watchId": watch_id })
+            },
+            "memoryWatchRemove" => {
+                let watch_id = args.first().and_then(|v| v.as_str()).unwrap_or("unknown");
+                info!("Mock: memory watch removed: {}", watch_id);
+                serde_json::json!({ "success": true })
+            },
+
+            // Java Operations
+            "javaAvailable" => serde_json::json!(false), // Mock as non-Android
+            "javaHookMethod" => serde_json::json!({ "error": "Java runtime not available" }),
+
+            // Native Function Call
+            "callNative" => {
+                let address = args.first().and_then(|v| v.as_str()).unwrap_or("0x0");
+                info!("Mock: native function called at {}", address);
+                serde_json::json!(0) // Return 0 as mock result
+            },
+
+            // Utility
+            "ping" => serde_json::json!("pong"),
+            "getHookInfo" => serde_json::json!({
+                "interceptors": [],
+                "memoryWatches": [],
+                "javaHooks": []
+            }),
+
+            // Legacy names (for backward compatibility)
             "readMemory" => serde_json::json!({
                 "address": args.first().cloned().unwrap_or(serde_json::json!("0x0")),
                 "value": 42,
@@ -305,11 +408,7 @@ impl FridaManager {
                     { "address": "0x7fff5678", "value": 100 }
                 ]
             }),
-            "getModuleBase" => serde_json::json!({
-                "name": args.first().and_then(|v| v.as_str()).unwrap_or("unknown"),
-                "base": "0x400000",
-                "size": 0x100000
-            }),
+
             _ => serde_json::json!({
                 "mock": true,
                 "method": method,

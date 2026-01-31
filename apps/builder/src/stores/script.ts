@@ -35,6 +35,8 @@ export type ScriptNodeType =
   | "event_detach" // When detached from process
   | "event_hotkey" // When hotkey is pressed
   | "event_interval" // Periodic execution (timer)
+  | "event_hook" // When a native/Java hook is triggered
+  | "event_memory_watch" // When watched memory is accessed
   // Constants (Literal Values)
   | "const_string" // String literal input
   | "const_number" // Number literal input
@@ -56,6 +58,8 @@ export type ScriptNodeType =
   | "memory_freeze" // Freeze value at address
   | "memory_alloc" // Allocate memory
   | "memory_protect" // Change memory protection
+  | "memory_watch" // Watch memory for access (triggers event_memory_watch)
+  | "memory_unwatch" // Remove memory watch
   // Pointer Operations
   | "pointer_add" // Add offset to pointer
   | "pointer_read" // Read from pointer (with type)
@@ -107,6 +111,13 @@ export type ScriptNodeType =
   // Output
   | "log" // Log to console
   | "notify" // Show notification
+  // Device Management (Frida Device Manager)
+  | "device_enumerate" // List available devices (local, usb, remote)
+  | "device_select" // Select a device by id or type
+  | "device_get_current" // Get currently selected device info
+  // Process/Application Enumeration
+  | "process_enumerate" // List running processes on selected device
+  | "application_enumerate" // List installed applications on device (mobile)
   // Process Control
   | "process_attach" // Attach to process (PID, name, or identifier)
   | "process_detach" // Detach from current process
@@ -228,6 +239,8 @@ export function getNodeContext(nodeType: ScriptNodeType): NodeContext {
     "memory_freeze",
     "memory_alloc",
     "memory_protect",
+    "memory_watch",
+    "memory_unwatch",
     // Pointer operations (executed in target for memory access)
     "pointer_add",
     "pointer_read",
@@ -403,6 +416,43 @@ export const nodeTemplates: NodeTemplate[] = [
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
       { name: "tick", type: "value", valueType: "int32", direction: "output" }, // Tick count
+    ],
+  },
+  {
+    type: "event_hook",
+    label: "On Hook",
+    category: "Events",
+    description: "Triggered when a native or Java function hook fires",
+    defaultConfig: {
+      hookId: "", // Hook identifier
+      phase: "enter", // "enter" or "leave"
+    },
+    inputs: [],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "hookId", type: "value", valueType: "string", direction: "output" },
+      { name: "args", type: "value", valueType: "any", direction: "output" }, // Array of arguments (enter only)
+      { name: "retval", type: "value", valueType: "any", direction: "output" }, // Return value (leave only)
+      { name: "address", type: "value", valueType: "pointer", direction: "output" },
+      { name: "threadId", type: "value", valueType: "int32", direction: "output" },
+    ],
+  },
+  {
+    type: "event_memory_watch",
+    label: "On Memory Access",
+    category: "Events",
+    description: "Triggered when watched memory is read/written/executed",
+    defaultConfig: {
+      watchId: "", // Watch identifier
+    },
+    inputs: [],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "watchId", type: "value", valueType: "string", direction: "output" },
+      { name: "address", type: "value", valueType: "pointer", direction: "output" },
+      { name: "operation", type: "value", valueType: "string", direction: "output" }, // "read", "write", "execute"
+      { name: "from", type: "value", valueType: "pointer", direction: "output" }, // Instruction that accessed
+      { name: "threadId", type: "value", valueType: "int32", direction: "output" },
     ],
   },
   // ============================================
@@ -656,6 +706,57 @@ export const nodeTemplates: NodeTemplate[] = [
         direction: "input",
       },
       { name: "size", type: "value", valueType: "uint32", direction: "input" },
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      {
+        name: "success",
+        type: "value",
+        valueType: "boolean",
+        direction: "output",
+      },
+    ],
+  },
+  {
+    type: "memory_watch",
+    label: "Watch Memory",
+    category: "Memory",
+    description: "Watch memory region for read/write/execute access",
+    defaultConfig: { read: true, write: true, execute: false },
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      {
+        name: "address",
+        type: "value",
+        valueType: "pointer",
+        direction: "input",
+      },
+      { name: "size", type: "value", valueType: "uint32", direction: "input" },
+    ],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      {
+        name: "watchId",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      },
+    ],
+  },
+  {
+    type: "memory_unwatch",
+    label: "Unwatch Memory",
+    category: "Memory",
+    description: "Remove memory watch by ID",
+    defaultConfig: {},
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      {
+        name: "watchId",
+        type: "value",
+        valueType: "string",
+        direction: "input",
+      },
     ],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
@@ -1282,15 +1383,18 @@ export const nodeTemplates: NodeTemplate[] = [
   },
 
   // Interceptor (Frida-native hooking)
+  // Registers a hook and returns hookId. Use event_hook to handle callbacks.
   {
     type: "interceptor_attach",
     label: "Interceptor Attach",
     category: "Interceptor",
-    description: "Attach to function with Interceptor.attach()",
+    description: "Attach to native function. Use 'On Hook' event to handle callbacks.",
     defaultConfig: {
-      onEnter: true,
-      onLeave: true,
-      argCount: 0,
+      hookId: "", // Unique hook identifier (auto-generated if empty)
+      onEnter: true, // Enable onEnter callback
+      onLeave: true, // Enable onLeave callback
+      captureArgs: 4, // Number of args to capture (0-10)
+      captureRetval: true, // Capture return value on leave
     },
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
@@ -1303,9 +1407,8 @@ export const nodeTemplates: NodeTemplate[] = [
     ],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
-      { name: "onEnter", type: "flow", direction: "output" },
-      { name: "onLeave", type: "flow", direction: "output" },
-      { name: "context", type: "value", valueType: "any", direction: "output" },
+      { name: "hookId", type: "value", valueType: "string", direction: "output" }, // Use this in event_hook
+      { name: "success", type: "value", valueType: "boolean", direction: "output" },
     ],
   },
   {
@@ -1457,13 +1560,104 @@ export const nodeTemplates: NodeTemplate[] = [
   },
 
   // ============================================
+  // Device Management - Frida Device enumeration and selection
+  // ============================================
+  {
+    type: "device_enumerate",
+    label: "Enumerate Devices",
+    category: "Device",
+    description:
+      "List all available Frida devices (local, USB, remote). Returns array of device info objects.",
+    defaultConfig: {},
+    inputs: [{ name: "exec", type: "flow", direction: "input" }],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "devices", type: "value", valueType: "any", direction: "output" }, // Array of {id, name, type}
+      { name: "count", type: "value", valueType: "int32", direction: "output" },
+    ],
+  },
+  {
+    type: "device_select",
+    label: "Select Device",
+    category: "Device",
+    description:
+      "Select a device by ID or type (local, usb, remote). All subsequent process operations will use this device.",
+    defaultConfig: {
+      selectionMode: "type", // "id" | "type"
+      deviceType: "local", // "local" | "usb" | "remote"
+    },
+    inputs: [
+      { name: "exec", type: "flow", direction: "input" },
+      { name: "deviceId", type: "value", valueType: "string", direction: "input" }, // Used when selectionMode is "id"
+    ],
+    outputs: [
+      { name: "success", type: "flow", direction: "output" },
+      { name: "failure", type: "flow", direction: "output" },
+      { name: "device", type: "value", valueType: "any", direction: "output" }, // Selected device info
+      { name: "error", type: "value", valueType: "string", direction: "output" },
+    ],
+  },
+  {
+    type: "device_get_current",
+    label: "Get Current Device",
+    category: "Device",
+    description:
+      "Get information about the currently selected device. Returns null if no device is selected.",
+    defaultConfig: {},
+    inputs: [],
+    outputs: [
+      { name: "device", type: "value", valueType: "any", direction: "output" }, // {id, name, type} or null
+      { name: "hasDevice", type: "value", valueType: "boolean", direction: "output" },
+    ],
+  },
+
+  // ============================================
+  // Process/Application Enumeration
+  // ============================================
+  {
+    type: "process_enumerate",
+    label: "Enumerate Processes",
+    category: "Device",
+    description:
+      "List all running processes on the selected device. Returns array of process info objects.",
+    defaultConfig: {
+      scope: "minimal", // "minimal" | "full" - minimal is faster, full includes more details
+    },
+    inputs: [{ name: "exec", type: "flow", direction: "input" }],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "processes", type: "value", valueType: "any", direction: "output" }, // Array of {pid, name, ...}
+      { name: "count", type: "value", valueType: "int32", direction: "output" },
+    ],
+  },
+  {
+    type: "application_enumerate",
+    label: "Enumerate Applications",
+    category: "Device",
+    description:
+      "List all installed applications on the device (primarily for mobile devices). Returns array of app info objects.",
+    defaultConfig: {
+      scope: "minimal", // "minimal" | "full"
+      includeRunning: true, // Include currently running apps
+      includeInstalled: true, // Include all installed apps
+    },
+    inputs: [{ name: "exec", type: "flow", direction: "input" }],
+    outputs: [
+      { name: "exec", type: "flow", direction: "output" },
+      { name: "applications", type: "value", valueType: "any", direction: "output" }, // Array of {identifier, name, pid?, ...}
+      { name: "count", type: "value", valueType: "int32", direction: "output" },
+    ],
+  },
+
+  // ============================================
   // Process Control - Attach/Detach actions
   // ============================================
   {
     type: "process_attach",
     label: "Attach to Process",
     category: "Process",
-    description: "Attach to a process by PID, name, or bundle identifier",
+    description:
+      "Attach to a process on the currently selected device. Use 'Select Device' first to choose the target device.",
     defaultConfig: {
       attachMode: "pid", // "pid" | "name" | "identifier"
     },
@@ -1476,6 +1670,13 @@ export const nodeTemplates: NodeTemplate[] = [
       { name: "failure", type: "flow", direction: "output" },
       {
         name: "sessionId",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      },
+      { name: "pid", type: "value", valueType: "int32", direction: "output" },
+      {
+        name: "processName",
         type: "value",
         valueType: "string",
         direction: "output",
@@ -1501,8 +1702,10 @@ export const nodeTemplates: NodeTemplate[] = [
     label: "Spawn & Attach",
     category: "Process",
     description:
-      "Spawn an application and attach to it (for apps not running yet)",
-    defaultConfig: {},
+      "Spawn an application on the selected device and attach to it. Use 'Select Device' first. Ideal for apps not yet running.",
+    defaultConfig: {
+      resumeAfterSpawn: true, // Whether to resume the app after spawning
+    },
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
       {

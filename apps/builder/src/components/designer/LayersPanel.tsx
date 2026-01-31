@@ -48,6 +48,7 @@ const ComponentIconMap: Record<ComponentType, Component<{ class?: string }>> = {
   scroll: IconScroll,
   divider: IconDivider,
   card: IconCard,
+  container: IconBox,
 };
 
 // Layer item component (recursive for hierarchy)

@@ -244,7 +244,8 @@ export type ComponentType =
   | "page"
   | "scroll"
   | "divider"
-  | "card";
+  | "card"
+  | "container";
 
 // Legacy types kept for backward compatibility with old project files
 export interface ActionBinding {

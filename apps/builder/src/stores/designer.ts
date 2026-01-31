@@ -17,7 +17,8 @@ export type ComponentType =
   | "page" // Page container with tabs
   | "scroll" // Scrollable container
   | "divider" // Visual separator
-  | "card"; // Card container with optional header
+  | "card" // Card container with optional header
+  | "container"; // Generic container
 
 // Layout direction for stack
 export type LayoutDirection = "horizontal" | "vertical";
@@ -904,6 +905,7 @@ function getDefaultLabel(type: ComponentType): string {
     scroll: "Scroll",
     divider: "",
     card: "Card",
+    container: "Container",
   };
   return labels[type];
 }

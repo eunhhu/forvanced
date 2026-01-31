@@ -296,3 +296,126 @@ export async function simulateFridaMessage(
     payload,
   });
 }
+
+// ============================================
+// Script Executor Commands
+// ============================================
+
+export interface ScriptData {
+  id: string;
+  name: string;
+  description?: string;
+  variables: VariableData[];
+  nodes: NodeData[];
+  connections: ConnectionData[];
+}
+
+export interface VariableData {
+  id: string;
+  name: string;
+  valueType: string;
+  defaultValue: unknown;
+}
+
+export interface NodeData {
+  id: string;
+  nodeType: string;
+  label: string;
+  x: number;
+  y: number;
+  config: Record<string, unknown>;
+  inputs: PortData[];
+  outputs: PortData[];
+}
+
+export interface PortData {
+  id: string;
+  name: string;
+  portType: string;
+  valueType?: string;
+  direction: string;
+}
+
+export interface ConnectionData {
+  id: string;
+  fromNodeId: string;
+  fromPortId: string;
+  toNodeId: string;
+  toPortId: string;
+}
+
+export interface ExecutionResult {
+  success: boolean;
+  variables: Record<string, unknown>;
+  logs: string[];
+  error?: string;
+}
+
+/**
+ * Execute a visual script from the Rust backend.
+ * Host nodes run in Rust, target nodes are sent to Frida via RPC.
+ */
+export async function executeScript(
+  script: ScriptData,
+  eventNodeId: string,
+  eventValue: unknown = null,
+  componentId?: string,
+): Promise<ExecutionResult> {
+  return invoke<ExecutionResult>("execute_script", {
+    script,
+    eventNodeId,
+    eventValue,
+    componentId,
+  });
+}
+
+/**
+ * Set the Frida session for target node execution.
+ * Must be called after attaching to a process and injecting a Frida agent script.
+ */
+export async function setExecutorSession(
+  sessionId: string,
+  scriptId: string,
+): Promise<void> {
+  return invoke<void>("set_executor_session", { sessionId, scriptId });
+}
+
+/**
+ * Clear the executor session.
+ */
+export async function clearExecutorSession(): Promise<void> {
+  return invoke<void>("clear_executor_session");
+}
+
+/**
+ * Set a UI component value (syncs frontend state to backend).
+ */
+export async function setUiValue(
+  componentId: string,
+  value: unknown,
+): Promise<void> {
+  return invoke<void>("set_ui_value", { componentId, value });
+}
+
+/**
+ * Get a UI component value from the backend.
+ */
+export async function getUiValue(componentId: string): Promise<unknown> {
+  return invoke<unknown>("get_ui_value", { componentId });
+}
+
+/**
+ * Get all UI component values from the backend.
+ */
+export async function getAllUiValues(): Promise<Record<string, unknown>> {
+  return invoke<Record<string, unknown>>("get_all_ui_values");
+}
+
+/**
+ * Batch set multiple UI component values.
+ */
+export async function setUiValuesBatch(
+  values: Record<string, unknown>,
+): Promise<void> {
+  return invoke<void>("set_ui_values_batch", { values });
+}
