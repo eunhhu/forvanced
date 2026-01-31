@@ -10,7 +10,9 @@ interface UIPreviewProps {
 
 export const UIPreview: Component<UIPreviewProps> = (props) => {
   const [isFullscreen, setIsFullscreen] = createSignal(false);
-  const [componentValues, setComponentValues] = createSignal<Map<string, unknown>>(new Map());
+  const [componentValues, setComponentValues] = createSignal<
+    Map<string, unknown>
+  >(new Map());
 
   const components = () => designerStore.components();
   const project = () => projectStore.currentProject();
@@ -24,7 +26,7 @@ export const UIPreview: Component<UIPreviewProps> = (props) => {
   const rootComponents = createMemo(() =>
     components()
       .filter((c) => !c.parentId)
-      .sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0))
+      .sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0)),
   );
 
   // Get children of a component
@@ -63,7 +65,10 @@ export const UIPreview: Component<UIPreviewProps> = (props) => {
           break;
         case "page":
           // Initialize page with first tab as active
-          const pageTabs = (comp.props?.tabs ?? []) as Array<{id: string; label: string}>;
+          const pageTabs = (comp.props?.tabs ?? []) as Array<{
+            id: string;
+            label: string;
+          }>;
           if (pageTabs.length > 0) {
             values.set(comp.id, pageTabs[0].id);
           }
@@ -89,7 +94,9 @@ export const UIPreview: Component<UIPreviewProps> = (props) => {
           class={`bg-background-secondary rounded-lg shadow-2xl flex flex-col overflow-hidden ${
             isFullscreen() ? "w-full h-full m-4" : "max-w-[90vw] max-h-[90vh]"
           }`}
-          style={!isFullscreen() ? { width: `${canvasWidth() + 48}px` } : undefined}
+          style={
+            !isFullscreen() ? { width: `${canvasWidth() + 48}px` } : undefined
+          }
         >
           {/* Header */}
           <div class="flex items-center justify-between px-4 py-2 border-b border-border bg-surface">
@@ -262,7 +269,10 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
             style={{
               "font-size": `${(comp().props?.fontSize as number) ?? baseFontSize}px`,
               "font-weight": comp().props?.bold ? "bold" : "normal",
-              "text-align": ((comp().props?.align as string) ?? "left") as "left" | "center" | "right",
+              "text-align": ((comp().props?.align as string) ?? "left") as
+                | "left"
+                | "center"
+                | "right",
               color: comp().props?.color as string | undefined,
             }}
           >
@@ -277,7 +287,10 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
             style={{
               "font-size": `${baseFontSize}px`,
               width: getWidth(),
-              height: comp().heightMode === "fixed" ? `${comp().height}px` : undefined,
+              height:
+                comp().heightMode === "fixed"
+                  ? `${comp().height}px`
+                  : undefined,
               "min-height": "36px",
             }}
             onClick={() => {
@@ -292,7 +305,12 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
         const isOn = () => (props.getValue(comp().id) as boolean) ?? false;
         return (
           <div class="flex items-center justify-between">
-            <span class="text-foreground" style={{ "font-size": `${baseFontSize}px` }}>{comp().label}</span>
+            <span
+              class="text-foreground"
+              style={{ "font-size": `${baseFontSize}px` }}
+            >
+              {comp().label}
+            </span>
             <button
               class={`w-12 h-6 rounded-full transition-colors relative ${
                 isOn() ? "bg-accent" : "bg-background-tertiary"
@@ -310,12 +328,17 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
 
       case "slider":
         const sliderValue = () =>
-          (props.getValue(comp().id) as number) ?? (comp().props?.min as number) ?? 0;
+          (props.getValue(comp().id) as number) ??
+          (comp().props?.min as number) ??
+          0;
         const min = () => (comp().props?.min as number) ?? 0;
         const max = () => (comp().props?.max as number) ?? 100;
         return (
           <div class="space-y-1">
-            <div class="flex items-center justify-between" style={{ "font-size": `${baseFontSize}px` }}>
+            <div
+              class="flex items-center justify-between"
+              style={{ "font-size": `${baseFontSize}px` }}
+            >
               <span class="text-foreground">{comp().label}</span>
               <span class="text-foreground-muted">{sliderValue()}</span>
             </div>
@@ -337,7 +360,12 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
         const inputValue = () => (props.getValue(comp().id) as string) ?? "";
         return (
           <div class="space-y-1">
-            <label class="text-foreground" style={{ "font-size": `${baseFontSize}px` }}>{comp().label}</label>
+            <label
+              class="text-foreground"
+              style={{ "font-size": `${baseFontSize}px` }}
+            >
+              {comp().label}
+            </label>
             <input
               type="text"
               class="w-full px-3 py-2 bg-background border border-border rounded focus:outline-none focus:border-accent"
@@ -354,7 +382,12 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
         const options = () => (comp().props?.options ?? []) as string[];
         return (
           <div class="space-y-1">
-            <label class="text-foreground" style={{ "font-size": `${baseFontSize}px` }}>{comp().label}</label>
+            <label
+              class="text-foreground"
+              style={{ "font-size": `${baseFontSize}px` }}
+            >
+              {comp().label}
+            </label>
             <select
               class="w-full px-3 py-2 bg-background border border-border rounded focus:outline-none focus:border-accent"
               style={{ "font-size": `${baseFontSize}px` }}
@@ -380,10 +413,18 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
           <div
             class="p-3 rounded-md border flex flex-col"
             style={{
-              "background-color": (comp().props?.backgroundColor as string) ?? "transparent",
-              "border-color": (comp().props?.borderColor as string) ?? "var(--border)",
-              height: comp().heightMode === "fill" ? "100%" : (comp().heightMode === "fixed" ? `${comp().height}px` : "auto"),
-              "min-height": comp().heightMode === "hug" ? `${comp().height}px` : undefined,
+              "background-color":
+                (comp().props?.backgroundColor as string) ?? "transparent",
+              "border-color":
+                (comp().props?.borderColor as string) ?? "var(--border)",
+              height:
+                comp().heightMode === "fill"
+                  ? "100%"
+                  : comp().heightMode === "fixed"
+                    ? `${comp().height}px`
+                    : "auto",
+              "min-height":
+                comp().heightMode === "hug" ? `${comp().height}px` : undefined,
             }}
           >
             <Show when={comp().label}>
@@ -394,7 +435,10 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
                 {comp().label}
               </div>
             </Show>
-            <div class="flex flex-col flex-1" style={{ gap: `${containerGap()}px` }}>
+            <div
+              class="flex flex-col flex-1"
+              style={{ gap: `${containerGap()}px` }}
+            >
               <For each={children()}>
                 {(child) => (
                   <PreviewComponent
@@ -417,13 +461,24 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
           <div
             class="border border-border rounded-lg overflow-hidden flex flex-col"
             style={{
-              height: comp().heightMode === "fill" ? "100%" : (comp().heightMode === "fixed" ? `${comp().height}px` : "auto"),
-              "min-height": comp().heightMode === "hug" ? `${comp().height}px` : undefined,
+              height:
+                comp().heightMode === "fill"
+                  ? "100%"
+                  : comp().heightMode === "fixed"
+                    ? `${comp().height}px`
+                    : "auto",
+              "min-height":
+                comp().heightMode === "hug" ? `${comp().height}px` : undefined,
             }}
           >
             <Show when={comp().label}>
               <div class="h-8 px-3 border-b border-border flex items-center bg-surface shrink-0">
-                <span class="font-medium text-foreground" style={{ "font-size": `${baseFontSize}px` }}>{comp().label}</span>
+                <span
+                  class="font-medium text-foreground"
+                  style={{ "font-size": `${baseFontSize}px` }}
+                >
+                  {comp().label}
+                </span>
               </div>
             </Show>
             <div
@@ -447,7 +502,8 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
         );
 
       case "stack":
-        const direction = () => (comp().props?.direction as string) ?? "vertical";
+        const direction = () =>
+          (comp().props?.direction as string) ?? "vertical";
         const stackGap = () => (comp().props?.gap as number) ?? props.gap;
         const stackPadding = () => (comp().props?.padding as number) ?? 0;
         return (
@@ -459,8 +515,14 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
               "align-items": (comp().props?.align as string) ?? "stretch",
               "justify-content": (comp().props?.justify as string) ?? "start",
               padding: `${stackPadding()}px`,
-              height: comp().heightMode === "fill" ? "100%" : (comp().heightMode === "fixed" ? `${comp().height}px` : "auto"),
-              "min-height": comp().heightMode === "hug" ? `${comp().height}px` : undefined,
+              height:
+                comp().heightMode === "fill"
+                  ? "100%"
+                  : comp().heightMode === "fixed"
+                    ? `${comp().height}px`
+                    : "auto",
+              "min-height":
+                comp().heightMode === "hug" ? `${comp().height}px` : undefined,
             }}
           >
             <For each={children()}>
@@ -479,17 +541,19 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
         );
 
       case "page":
-        const tabs = () => (comp().props?.tabs as Array<{id: string; label: string}>) ?? [];
+        const tabs = () =>
+          (comp().props?.tabs as Array<{ id: string; label: string }>) ?? [];
         const activeTabId = () => {
           const savedValue = props.getValue(comp().id) as string | undefined;
           if (savedValue) return savedValue;
           return tabs()[0]?.id ?? "";
         };
-        const activeTabIndex = () => tabs().findIndex(t => t.id === activeTabId());
+        const activeTabIndex = () =>
+          tabs().findIndex((t) => t.id === activeTabId());
         const pageChildren = () => {
           const atId = activeTabId();
           const atIdx = activeTabIndex();
-          return children().filter(c => {
+          return children().filter((c) => {
             const childTabId = c.props?.tabId as string | undefined;
             // Show children:
             // 1. If child has matching tabId
@@ -504,7 +568,10 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
         return (
           <div
             class="flex flex-col border border-border rounded-lg overflow-hidden bg-surface"
-            style={{ height: comp().heightMode === "fill" ? "100%" : `${comp().height}px` }}
+            style={{
+              height:
+                comp().heightMode === "fill" ? "100%" : `${comp().height}px`,
+            }}
           >
             {/* Tab bar */}
             <div class="flex border-b border-border bg-background-secondary shrink-0">
@@ -532,14 +599,17 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
                 padding: `${pagePadding()}px`,
               }}
             >
-              <Show when={pageChildren().length > 0} fallback={
-                <div
-                  class="flex-1 flex items-center justify-center text-foreground-muted"
-                  style={{ "font-size": `${secondaryFontSize}px` }}
-                >
-                  No components in this tab
-                </div>
-              }>
+              <Show
+                when={pageChildren().length > 0}
+                fallback={
+                  <div
+                    class="flex-1 flex items-center justify-center text-foreground-muted"
+                    style={{ "font-size": `${secondaryFontSize}px` }}
+                  >
+                    No components in this tab
+                  </div>
+                }
+              >
                 <For each={pageChildren()}>
                   {(child) => (
                     <PreviewComponent
@@ -558,21 +628,26 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
         );
 
       case "scroll":
-        const scrollDir = () => (comp().props?.direction as string) ?? "vertical";
+        const scrollDir = () =>
+          (comp().props?.direction as string) ?? "vertical";
         const scrollGap = () => (comp().props?.gap as number) ?? props.gap;
         const scrollPadding = () => (comp().props?.padding as number) ?? 8;
         return (
           <div
             class="overflow-auto border border-border rounded-lg bg-surface"
             style={{
-              height: comp().heightMode === "fill" ? "100%" : `${comp().height}px`,
-              "max-height": comp().props?.maxHeight ? `${comp().props.maxHeight}px` : undefined,
+              height:
+                comp().heightMode === "fill" ? "100%" : `${comp().height}px`,
+              "max-height": comp().props?.maxHeight
+                ? `${comp().props.maxHeight}px`
+                : undefined,
             }}
           >
             <div
               class="flex"
               style={{
-                "flex-direction": scrollDir() === "horizontal" ? "row" : "column",
+                "flex-direction":
+                  scrollDir() === "horizontal" ? "row" : "column",
                 gap: `${scrollGap()}px`,
                 padding: `${scrollPadding()}px`,
               }}
@@ -601,16 +676,32 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
           <div
             class="rounded-lg border overflow-hidden flex flex-col"
             style={{
-              "background-color": (comp().props?.backgroundColor as string) ?? "var(--surface)",
-              "border-color": (comp().props?.borderColor as string) ?? "var(--border)",
-              height: comp().heightMode === "fill" ? "100%" : (comp().heightMode === "fixed" ? `${comp().height}px` : "auto"),
-              "min-height": comp().heightMode === "hug" ? `${comp().height}px` : undefined,
-              "box-shadow": cardElevation() > 0 ? `0 ${cardElevation() * 2}px ${cardElevation() * 8}px rgba(0,0,0,0.15)` : "none",
+              "background-color":
+                (comp().props?.backgroundColor as string) ?? "var(--surface)",
+              "border-color":
+                (comp().props?.borderColor as string) ?? "var(--border)",
+              height:
+                comp().heightMode === "fill"
+                  ? "100%"
+                  : comp().heightMode === "fixed"
+                    ? `${comp().height}px`
+                    : "auto",
+              "min-height":
+                comp().heightMode === "hug" ? `${comp().height}px` : undefined,
+              "box-shadow":
+                cardElevation() > 0
+                  ? `0 ${cardElevation() * 2}px ${cardElevation() * 8}px rgba(0,0,0,0.15)`
+                  : "none",
             }}
           >
             <Show when={comp().props?.showHeader !== false}>
               <div class="px-4 py-2 border-b border-border bg-background/50 shrink-0">
-                <span class="font-medium" style={{ "font-size": `${baseFontSize}px` }}>{(comp().props?.title as string) ?? comp().label ?? "Card"}</span>
+                <span
+                  class="font-medium"
+                  style={{ "font-size": `${baseFontSize}px` }}
+                >
+                  {(comp().props?.title as string) ?? comp().label ?? "Card"}
+                </span>
               </div>
             </Show>
             <div
@@ -647,7 +738,10 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
 
   // For most components, we let them handle their own sizing
   // For container types that manage their own layout, we return directly
-  const isLayoutContainer = () => ["page", "stack", "scroll", "card", "group", "container"].includes(comp().type);
+  const isLayoutContainer = () =>
+    ["page", "stack", "scroll", "card", "group", "container"].includes(
+      comp().type,
+    );
 
   if (isLayoutContainer()) {
     return (
@@ -657,8 +751,10 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
           height: getHeight(),
           "flex-grow": getFlexGrow(),
           "flex-shrink": getFlexShrink(),
-          "min-width": comp().widthMode === "hug" ? `${comp().width}px` : undefined,
-          "min-height": comp().heightMode === "hug" ? `${comp().height}px` : undefined,
+          "min-width":
+            comp().widthMode === "hug" ? `${comp().width}px` : undefined,
+          "min-height":
+            comp().heightMode === "hug" ? `${comp().height}px` : undefined,
         }}
       >
         {renderComponent()}

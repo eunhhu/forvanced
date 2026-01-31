@@ -36,14 +36,17 @@ const ATTACH_MODE_LABELS: Record<AttachMode, string> = {
 
 export const ProcessList: Component = () => {
   const [searchQuery, setSearchQuery] = createSignal("");
-  const [attachingTarget, setAttachingTarget] = createSignal<string | number | null>(null);
+  const [attachingTarget, setAttachingTarget] = createSignal<
+    string | number | null
+  >(null);
   const [changingDevice, setChangingDevice] = createSignal(false);
   const [activeTab, setActiveTab] = createSignal<ViewTab>("processes");
 
   const processes = () => targetStore.processes() ?? [];
   const applications = () => targetStore.applications() ?? [];
   const devices = () => targetStore.devices() ?? [];
-  const isLoading = () => targetStore.processes.loading || targetStore.applications.loading;
+  const isLoading = () =>
+    targetStore.processes.loading || targetStore.applications.loading;
   const currentDevice = () => targetStore.currentDeviceId();
   const attachMode = () => targetStore.attachMode();
   const supportsApps = () => targetStore.supportsApplications();
@@ -108,7 +111,10 @@ export const ProcessList: Component = () => {
   };
 
   // Handle attach for application (identifier-based)
-  const handleAttachApplication = async (app: ApplicationInfo, spawn: boolean = false) => {
+  const handleAttachApplication = async (
+    app: ApplicationInfo,
+    spawn: boolean = false,
+  ) => {
     setAttachingTarget(app.identifier);
     try {
       if (spawn || !app.pid) {
@@ -132,8 +138,10 @@ export const ProcessList: Component = () => {
   };
 
   const isProcessAttached = (process: ProcessInfo) => {
-    return targetStore.attachedPid() === process.pid ||
-           targetStore.attachedTarget() === process.name;
+    return (
+      targetStore.attachedPid() === process.pid ||
+      targetStore.attachedTarget() === process.name
+    );
   };
 
   const isAppAttached = (app: ApplicationInfo) => {
@@ -144,14 +152,22 @@ export const ProcessList: Component = () => {
     <div class="flex flex-col h-full" role="region" aria-label="Process list">
       {/* Device Selection */}
       <div class="flex items-center gap-2 p-4 border-b border-border bg-background-secondary">
-        <span id="device-label" class="text-sm text-foreground-secondary">Device:</span>
+        <span id="device-label" class="text-sm text-foreground-secondary">
+          Device:
+        </span>
         <Show
           when={devices().length > 0}
           fallback={
-            <span class="text-sm text-foreground-muted" role="status">Loading devices...</span>
+            <span class="text-sm text-foreground-muted" role="status">
+              Loading devices...
+            </span>
           }
         >
-          <div class="flex gap-1 flex-wrap" role="radiogroup" aria-labelledby="device-label">
+          <div
+            class="flex gap-1 flex-wrap"
+            role="radiogroup"
+            aria-labelledby="device-label"
+          >
             <For each={devices()}>
               {(device) => {
                 const Icon = getDeviceIcon(device.device_type);
@@ -188,13 +204,22 @@ export const ProcessList: Component = () => {
           <IconRefresh class="w-3 h-3" aria-hidden="true" />
         </button>
         <Show when={changingDevice()}>
-          <span class="text-xs text-foreground-muted" role="status" aria-live="polite">Switching...</span>
+          <span
+            class="text-xs text-foreground-muted"
+            role="status"
+            aria-live="polite"
+          >
+            Switching...
+          </span>
         </Show>
       </div>
 
       {/* Tab Selection - Show only when USB device supports applications */}
       <Show when={supportsApps()}>
-        <div class="flex border-b border-border bg-background-secondary" role="tablist">
+        <div
+          class="flex border-b border-border bg-background-secondary"
+          role="tablist"
+        >
           <button
             type="button"
             role="tab"
@@ -231,7 +256,7 @@ export const ProcessList: Component = () => {
         <div class="flex items-center gap-2 px-4 py-2 border-b border-border bg-background-tertiary">
           <span class="text-xs text-foreground-secondary">Attach by:</span>
           <div class="flex gap-1" role="radiogroup" aria-label="Attach mode">
-            <For each={(["pid", "name"] as AttachMode[])}>
+            <For each={["pid", "name"] as AttachMode[]}>
               {(mode) => (
                 <button
                   type="button"
@@ -255,14 +280,25 @@ export const ProcessList: Component = () => {
       {/* Search Header */}
       <div class="flex items-center gap-2 p-4 border-b border-border">
         <div class="relative flex-1">
-          <IconSearch class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted" aria-hidden="true" />
+          <IconSearch
+            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted"
+            aria-hidden="true"
+          />
           <input
             type="search"
-            placeholder={activeTab() === "processes" ? "Search processes..." : "Search applications..."}
+            placeholder={
+              activeTab() === "processes"
+                ? "Search processes..."
+                : "Search applications..."
+            }
             class="input pl-9"
             value={searchQuery()}
             onInput={(e) => setSearchQuery(e.currentTarget.value)}
-            aria-label={activeTab() === "processes" ? "Search processes by name or PID" : "Search applications by name or identifier"}
+            aria-label={
+              activeTab() === "processes"
+                ? "Search processes by name or PID"
+                : "Search applications by name or identifier"
+            }
             aria-describedby="item-count"
           />
         </div>
@@ -273,7 +309,10 @@ export const ProcessList: Component = () => {
           disabled={isLoading() || !currentDevice()}
           aria-label="Refresh list"
         >
-          <IconRefresh class={`w-4 h-4 ${isLoading() ? "animate-spin" : ""}`} aria-hidden="true" />
+          <IconRefresh
+            class={`w-4 h-4 ${isLoading() ? "animate-spin" : ""}`}
+            aria-hidden="true"
+          />
           <span>Refresh</span>
         </button>
       </div>
@@ -298,7 +337,11 @@ export const ProcessList: Component = () => {
           >
             {/* Processes Panel */}
             <Show when={activeTab() === "processes"}>
-              <div id="processes-panel" role="tabpanel" aria-labelledby="processes-tab">
+              <div
+                id="processes-panel"
+                role="tabpanel"
+                aria-labelledby="processes-tab"
+              >
                 <Show
                   when={filteredProcesses().length > 0}
                   fallback={
@@ -310,9 +353,15 @@ export const ProcessList: Component = () => {
                   <table class="w-full" role="grid" aria-label="Process list">
                     <thead class="sticky top-0 bg-background-secondary">
                       <tr class="text-left text-sm text-foreground-secondary">
-                        <th scope="col" class="px-4 py-2 font-medium">PID</th>
-                        <th scope="col" class="px-4 py-2 font-medium">Name</th>
-                        <th scope="col" class="px-4 py-2 font-medium w-24">Action</th>
+                        <th scope="col" class="px-4 py-2 font-medium">
+                          PID
+                        </th>
+                        <th scope="col" class="px-4 py-2 font-medium">
+                          Name
+                        </th>
+                        <th scope="col" class="px-4 py-2 font-medium w-24">
+                          Action
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -338,7 +387,11 @@ export const ProcessList: Component = () => {
 
             {/* Applications Panel */}
             <Show when={activeTab() === "applications"}>
-              <div id="applications-panel" role="tabpanel" aria-labelledby="applications-tab">
+              <div
+                id="applications-panel"
+                role="tabpanel"
+                aria-labelledby="applications-tab"
+              >
                 <Show
                   when={filteredApplications().length > 0}
                   fallback={
@@ -347,12 +400,22 @@ export const ProcessList: Component = () => {
                     </div>
                   }
                 >
-                  <table class="w-full" role="grid" aria-label="Application list">
+                  <table
+                    class="w-full"
+                    role="grid"
+                    aria-label="Application list"
+                  >
                     <thead class="sticky top-0 bg-background-secondary">
                       <tr class="text-left text-sm text-foreground-secondary">
-                        <th scope="col" class="px-4 py-2 font-medium">Name</th>
-                        <th scope="col" class="px-4 py-2 font-medium">Identifier</th>
-                        <th scope="col" class="px-4 py-2 font-medium w-32">Action</th>
+                        <th scope="col" class="px-4 py-2 font-medium">
+                          Name
+                        </th>
+                        <th scope="col" class="px-4 py-2 font-medium">
+                          Identifier
+                        </th>
+                        <th scope="col" class="px-4 py-2 font-medium w-32">
+                          Action
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -423,7 +486,9 @@ const ProcessRow: Component<ProcessRowProps> = (props) => {
         <Show
           when={!props.isAttached}
           fallback={
-            <span class="text-xs text-success font-medium" role="status">Attached</span>
+            <span class="text-xs text-success font-medium" role="status">
+              Attached
+            </span>
           }
         >
           <button
@@ -478,7 +543,9 @@ const ApplicationRow: Component<ApplicationRowProps> = (props) => {
         <Show
           when={!props.isAttached}
           fallback={
-            <span class="text-xs text-success font-medium" role="status">Attached</span>
+            <span class="text-xs text-success font-medium" role="status">
+              Attached
+            </span>
           }
         >
           <div class="flex gap-1">

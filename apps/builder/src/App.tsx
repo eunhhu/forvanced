@@ -148,7 +148,9 @@ const App: Component = () => {
             designerStore.deleteSelectedComponents();
           }
         },
-        enabled: () => uiStore.activeTab() === "designer" && designerStore.selectedIds().size > 0,
+        enabled: () =>
+          uiStore.activeTab() === "designer" &&
+          designerStore.selectedIds().size > 0,
       },
       // Designer - Select all components
       {
@@ -157,7 +159,10 @@ const App: Component = () => {
         description: "Select all components",
         category: "designer",
         action: () => {
-          const allIds = designerStore.components().filter((c) => !c.parentId).map((c) => c.id);
+          const allIds = designerStore
+            .components()
+            .filter((c) => !c.parentId)
+            .map((c) => c.id);
           designerStore.selectMultiple(allIds);
         },
         enabled: () => uiStore.activeTab() === "designer",
@@ -182,7 +187,8 @@ const App: Component = () => {
         },
         enabled: () =>
           uiStore.activeTab() === "scripts" &&
-          (scriptStore.selectedNodeIds().size > 0 || !!scriptStore.selectedConnectionId()),
+          (scriptStore.selectedNodeIds().size > 0 ||
+            !!scriptStore.selectedConnectionId()),
       },
       // Script - Select all nodes
       {

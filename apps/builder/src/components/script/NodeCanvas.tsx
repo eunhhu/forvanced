@@ -153,7 +153,9 @@ interface SelectionBox {
 }
 
 // Check if Mac for keyboard shortcuts
-const isMac = typeof navigator !== "undefined" && navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+const isMac =
+  typeof navigator !== "undefined" &&
+  navigator.platform.toUpperCase().indexOf("MAC") >= 0;
 
 export const NodeCanvas: Component = () => {
   let canvasRef: HTMLDivElement | undefined;
@@ -163,7 +165,9 @@ export const NodeCanvas: Component = () => {
   const [scale, setScale] = createSignal(1);
 
   // Selection box state (for drag selection)
-  const [selectionBox, setSelectionBox] = createSignal<SelectionBox | null>(null);
+  const [selectionBox, setSelectionBox] = createSignal<SelectionBox | null>(
+    null,
+  );
   const [isSelecting, setIsSelecting] = createSignal(false);
 
   // Connection dragging state
@@ -261,9 +265,7 @@ export const NodeCanvas: Component = () => {
       const x = (e.clientX - rect.left - offset().x) / scale();
       const y = (e.clientY - rect.top - offset().y) / scale();
 
-      setSelectionBox((prev) =>
-        prev ? { ...prev, endX: x, endY: y } : null,
-      );
+      setSelectionBox((prev) => (prev ? { ...prev, endX: x, endY: y } : null));
     }
 
     // Update connection drag position
@@ -297,7 +299,11 @@ export const NodeCanvas: Component = () => {
           const selectedIds = script.nodes
             .filter((node) => {
               const nodeRight = node.x + nodeWidth;
-              const nodeBottom = node.y + 60 + node.inputs.length * 24 + node.outputs.length * 24;
+              const nodeBottom =
+                node.y +
+                60 +
+                node.inputs.length * 24 +
+                node.outputs.length * 24;
               return (
                 node.x < maxX &&
                 nodeRight > minX &&
@@ -502,7 +508,9 @@ export const NodeCanvas: Component = () => {
             />
           </Show>
           <Show when={scriptStore.selectedNodeIds().size > 1}>
-            <span class="text-xs text-accent">{scriptStore.selectedNodeIds().size} nodes selected</span>
+            <span class="text-xs text-accent">
+              {scriptStore.selectedNodeIds().size} nodes selected
+            </span>
           </Show>
         </div>
         <div class="flex items-center gap-2 text-xs text-foreground-muted">
@@ -631,7 +639,9 @@ export const NodeCanvas: Component = () => {
                 node={node}
                 isSelected={scriptStore.isNodeSelected(node.id)}
                 isPrimarySelected={scriptStore.selectedNodeId() === node.id}
-                onSelect={(addToSelection) => scriptStore.selectNode(node.id, addToSelection)}
+                onSelect={(addToSelection) =>
+                  scriptStore.selectNode(node.id, addToSelection)
+                }
                 onPortMouseDown={handlePortMouseDown}
                 onPortMouseUp={handlePortMouseUp}
                 getPortPosition={getPortPosition}
@@ -700,7 +710,10 @@ export const NodeCanvas: Component = () => {
 
         {/* Help text */}
         <div class="absolute bottom-2 left-2 text-[10px] text-foreground-muted/50 pointer-events-none">
-          <span>Scroll: Pan | {isMac ? "⌘" : "Ctrl"}+Scroll: Zoom | Drag: Box select | Shift+Click: Add to selection</span>
+          <span>
+            Scroll: Pan | {isMac ? "⌘" : "Ctrl"}+Scroll: Zoom | Drag: Box select
+            | Shift+Click: Add to selection
+          </span>
         </div>
       </div>
     </div>

@@ -1059,7 +1059,9 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
             <PropertyRow label="Include Installed">
               <input
                 type="checkbox"
-                checked={(props.node.config.includeInstalled as boolean) ?? true}
+                checked={
+                  (props.node.config.includeInstalled as boolean) ?? true
+                }
                 onChange={(e) =>
                   scriptStore.updateNode(props.node.id, {
                     config: {
@@ -1085,7 +1087,9 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
             <PropertyRow label="Resume After Spawn">
               <input
                 type="checkbox"
-                checked={(props.node.config.resumeAfterSpawn as boolean) ?? true}
+                checked={
+                  (props.node.config.resumeAfterSpawn as boolean) ?? true
+                }
                 onChange={(e) =>
                   scriptStore.updateNode(props.node.id, {
                     config: {
@@ -1737,10 +1741,7 @@ const UIPropsConfig: Component<UIPropsConfigProps> = (props) => {
           { value: "defaultValue", label: "Default Value (string)" },
         ];
       case "dropdown":
-        return [
-          ...commonProps,
-          { value: "options", label: "Options (array)" },
-        ];
+        return [...commonProps, { value: "options", label: "Options (array)" }];
       case "toggle":
         return [
           ...commonProps,

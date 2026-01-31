@@ -28,7 +28,12 @@ import {
   type FridaMessageEvent,
   type ScriptData,
 } from "@/lib/tauri";
-import type { Script, ScriptNode, Connection, ScriptVariable } from "@/stores/script";
+import type {
+  Script,
+  ScriptNode,
+  Connection,
+  ScriptVariable,
+} from "@/stores/script";
 import { FRIDA_AGENT_SCRIPT } from "@/lib/frida-agent";
 
 // ============================================
@@ -45,7 +50,12 @@ interface LogEntry {
 // Forvanced event from Frida agent
 interface ForvancedEvent {
   type: "forvanced_event";
-  eventType: "hook_enter" | "hook_leave" | "memory_access" | "java_hook_enter" | "java_hook_leave";
+  eventType:
+    | "hook_enter"
+    | "hook_leave"
+    | "memory_access"
+    | "java_hook_enter"
+    | "java_hook_leave";
   data: Record<string, unknown>;
   timestamp: number;
 }
@@ -57,7 +67,9 @@ interface ForvancedEvent {
 export const TestPanel: Component = () => {
   // Device/Process State
   const [devices, setDevices] = createSignal<DeviceInfo[]>([]);
-  const [selectedDeviceId, setSelectedDeviceId] = createSignal<string | null>(null);
+  const [selectedDeviceId, setSelectedDeviceId] = createSignal<string | null>(
+    null,
+  );
   const [processes, setProcesses] = createSignal<ProcessInfo[]>([]);
   const [processFilter, setProcessFilter] = createSignal("");
   const [isLoadingDevices, setIsLoadingDevices] = createSignal(false);
@@ -65,18 +77,24 @@ export const TestPanel: Component = () => {
 
   // Session State
   const [sessionId, setSessionId] = createSignal<string | null>(null);
-  const [injectedScriptId, setInjectedScriptId] = createSignal<string | null>(null);
+  const [injectedScriptId, setInjectedScriptId] = createSignal<string | null>(
+    null,
+  );
   const [attachedPid, setAttachedPid] = createSignal<number | null>(null);
   const [attachedName, setAttachedName] = createSignal<string | null>(null);
   const [isExecutorReady, setIsExecutorReady] = createSignal(false);
 
   // Script State
-  const [selectedScriptId, setSelectedScriptId] = createSignal<string | null>(null);
+  const [selectedScriptId, setSelectedScriptId] = createSignal<string | null>(
+    null,
+  );
   const [isRunning, setIsRunning] = createSignal(false);
   const [logs, setLogs] = createSignal<LogEntry[]>([]);
 
   // UI State
-  const [activeSection, setActiveSection] = createSignal<"device" | "script">("device");
+  const [activeSection, setActiveSection] = createSignal<"device" | "script">(
+    "device",
+  );
 
   // Derived state
   const scripts = () => scriptStore.scripts();
@@ -93,8 +111,7 @@ export const TestPanel: Component = () => {
     if (!filter) return processes();
     return processes().filter(
       (p) =>
-        p.name.toLowerCase().includes(filter) ||
-        String(p.pid).includes(filter)
+        p.name.toLowerCase().includes(filter) || String(p.pid).includes(filter),
     );
   });
 
@@ -124,7 +141,8 @@ export const TestPanel: Component = () => {
     if (!selectedScript()) return "No script selected";
     if (eventNodes().length === 0) return "No event nodes in script";
     if (isRunning()) return "Script is running";
-    if (hasTargetNodes() && !isExecutorReady()) return "Attach to process first";
+    if (hasTargetNodes() && !isExecutorReady())
+      return "Attach to process first";
     return null;
   });
 
@@ -206,11 +224,14 @@ export const TestPanel: Component = () => {
       await setExecutorSession(session, scriptId);
       setIsExecutorReady(true);
       addLog("info", "Executor ready");
-
     } catch (error) {
       addLog("error", `Failed to attach: ${error}`);
       if (sessionId()) {
-        try { await detachFromProcess(sessionId()!); } catch { /* ignore */ }
+        try {
+          await detachFromProcess(sessionId()!);
+        } catch {
+          /* ignore */
+        }
       }
       setSessionId(null);
       setAttachedPid(null);
@@ -339,7 +360,7 @@ export const TestPanel: Component = () => {
           scriptData,
           eventNode.id,
           null,
-          undefined
+          undefined,
         );
 
         if (result.success) {
@@ -419,7 +440,10 @@ export const TestPanel: Component = () => {
         break;
 
       case "memory_access":
-        addLog("hook", `Memory ${data.operation}: ${data.address} from ${data.from}`);
+        addLog(
+          "hook",
+          `Memory ${data.operation}: ${data.address} from ${data.from}`,
+        );
         await triggerMemoryWatchEvent(data.watchId as string, data);
         break;
 
@@ -441,7 +465,7 @@ export const TestPanel: Component = () => {
   const triggerHookEvent = async (
     hookId: string,
     phase: "enter" | "leave",
-    data: Record<string, unknown>
+    data: Record<string, unknown>,
   ) => {
     const script = selectedScript();
     if (!script) return;
@@ -451,7 +475,7 @@ export const TestPanel: Component = () => {
       (node) =>
         node.type === "event_hook" &&
         node.config.hookId === hookId &&
-        node.config.phase === phase
+        node.config.phase === phase,
     );
 
     if (hookEventNodes.length === 0) return;
@@ -465,7 +489,7 @@ export const TestPanel: Component = () => {
           scriptData,
           eventNode.id,
           data,
-          undefined
+          undefined,
         );
         if (!result.success) {
           addLog("error", `Hook handler failed: ${result.error}`);
@@ -481,7 +505,7 @@ export const TestPanel: Component = () => {
    */
   const triggerMemoryWatchEvent = async (
     watchId: string,
-    data: Record<string, unknown>
+    data: Record<string, unknown>,
   ) => {
     const script = selectedScript();
     if (!script) return;
@@ -489,8 +513,7 @@ export const TestPanel: Component = () => {
     // Find event nodes that listen to this memory watch
     const watchEventNodes = script.nodes.filter(
       (node) =>
-        node.type === "event_memory_watch" &&
-        node.config.watchId === watchId
+        node.type === "event_memory_watch" && node.config.watchId === watchId,
     );
 
     if (watchEventNodes.length === 0) return;
@@ -504,7 +527,7 @@ export const TestPanel: Component = () => {
           scriptData,
           eventNode.id,
           data,
-          undefined
+          undefined,
         );
         if (!result.success) {
           addLog("error", `Watch handler failed: ${result.error}`);
@@ -567,7 +590,9 @@ export const TestPanel: Component = () => {
         <Show when={activeSection() === "device"}>
           <div class="flex-1 flex flex-col overflow-hidden">
             <div class="p-3 border-b border-border">
-              <label class="block text-xs text-foreground-muted mb-1">Device</label>
+              <label class="block text-xs text-foreground-muted mb-1">
+                Device
+              </label>
               <div class="flex gap-2">
                 <select
                   class="flex-1 px-2 py-1.5 text-sm bg-background border border-border rounded"
@@ -611,11 +636,13 @@ export const TestPanel: Component = () => {
             </Show>
 
             <Show when={sessionId()}>
-              <div class={`px-3 py-1.5 text-xs border-b ${
-                isExecutorReady()
-                  ? "bg-accent/10 text-accent border-accent/20"
-                  : "bg-warning/10 text-warning border-warning/20"
-              }`}>
+              <div
+                class={`px-3 py-1.5 text-xs border-b ${
+                  isExecutorReady()
+                    ? "bg-accent/10 text-accent border-accent/20"
+                    : "bg-warning/10 text-warning border-warning/20"
+                }`}
+              >
                 {isExecutorReady() ? "✓ Executor ready" : "⏳ Initializing..."}
               </div>
             </Show>
@@ -633,7 +660,11 @@ export const TestPanel: Component = () => {
             <div class="flex-1 overflow-y-auto">
               <Show
                 when={!isLoadingProcesses()}
-                fallback={<div class="p-4 text-center text-foreground-muted text-sm">Loading...</div>}
+                fallback={
+                  <div class="p-4 text-center text-foreground-muted text-sm">
+                    Loading...
+                  </div>
+                }
               >
                 <For each={filteredProcesses()}>
                   {(proc) => (
@@ -645,11 +676,17 @@ export const TestPanel: Component = () => {
                       disabled={!!sessionId()}
                     >
                       <div class="flex items-center justify-between">
-                        <span class="text-sm font-medium text-foreground truncate">{proc.name}</span>
-                        <span class="text-xs text-foreground-muted">{proc.pid}</span>
+                        <span class="text-sm font-medium text-foreground truncate">
+                          {proc.name}
+                        </span>
+                        <span class="text-xs text-foreground-muted">
+                          {proc.pid}
+                        </span>
                       </div>
                       <Show when={proc.path}>
-                        <div class="text-[10px] text-foreground-muted truncate">{proc.path}</div>
+                        <div class="text-[10px] text-foreground-muted truncate">
+                          {proc.path}
+                        </div>
                       </Show>
                     </button>
                   )}
@@ -663,11 +700,15 @@ export const TestPanel: Component = () => {
         <Show when={activeSection() === "script"}>
           <div class="flex-1 flex flex-col overflow-hidden">
             <div class="p-3 border-b border-border">
-              <label class="block text-xs text-foreground-muted mb-1">Script</label>
+              <label class="block text-xs text-foreground-muted mb-1">
+                Script
+              </label>
               <select
                 class="w-full px-2 py-1.5 text-sm bg-background border border-border rounded"
                 value={selectedScriptId() ?? ""}
-                onChange={(e) => setSelectedScriptId(e.currentTarget.value || null)}
+                onChange={(e) =>
+                  setSelectedScriptId(e.currentTarget.value || null)
+                }
               >
                 <option value="">-- Select --</option>
                 <For each={scripts()}>
@@ -679,13 +720,21 @@ export const TestPanel: Component = () => {
             <Show when={selectedScript()}>
               <div class="p-3 border-b border-border space-y-2">
                 <div class="flex items-center gap-2 text-xs flex-wrap">
-                  <span class="text-foreground-muted">{selectedScript()?.nodes.length} nodes</span>
-                  <span class="text-foreground-muted">{eventNodes().length} events</span>
+                  <span class="text-foreground-muted">
+                    {selectedScript()?.nodes.length} nodes
+                  </span>
+                  <span class="text-foreground-muted">
+                    {eventNodes().length} events
+                  </span>
                   <Show when={hasTargetNodes()}>
-                    <span class="px-1.5 py-0.5 rounded bg-warning/20 text-warning">Frida</span>
+                    <span class="px-1.5 py-0.5 rounded bg-warning/20 text-warning">
+                      Frida
+                    </span>
                   </Show>
                   <Show when={!hasTargetNodes()}>
-                    <span class="px-1.5 py-0.5 rounded bg-success/20 text-success">Host</span>
+                    <span class="px-1.5 py-0.5 rounded bg-success/20 text-success">
+                      Host
+                    </span>
                   </Show>
                 </div>
 
@@ -730,7 +779,9 @@ export const TestPanel: Component = () => {
               </div>
 
               <Show when={cannotRunReason() && !isRunning()}>
-                <div class="text-[10px] text-foreground-muted text-center">{cannotRunReason()}</div>
+                <div class="text-[10px] text-foreground-muted text-center">
+                  {cannotRunReason()}
+                </div>
               </Show>
             </div>
 
@@ -749,28 +800,35 @@ export const TestPanel: Component = () => {
       <div class="flex-1 flex flex-col">
         <div class="flex items-center justify-between px-4 py-2 border-b border-border">
           <span class="text-sm font-medium">Console</span>
-          <button class="text-xs text-foreground-muted hover:text-foreground" onClick={clearLogs}>
+          <button
+            class="text-xs text-foreground-muted hover:text-foreground"
+            onClick={clearLogs}
+          >
             Clear
           </button>
         </div>
 
         <div class="flex-1 overflow-auto p-3 bg-background font-mono text-xs">
-          <For each={logs()}>
-            {(entry) => <LogLine entry={entry} />}
-          </For>
+          <For each={logs()}>{(entry) => <LogLine entry={entry} />}</For>
           <Show when={logs().length === 0}>
-            <div class="text-foreground-muted text-center py-8">Console output</div>
+            <div class="text-foreground-muted text-center py-8">
+              Console output
+            </div>
           </Show>
         </div>
 
         <div class="px-4 py-2 border-t border-border text-xs text-foreground-muted flex items-center justify-between">
           <div class="flex items-center gap-3">
             <span class="flex items-center gap-1">
-              <div class={`w-2 h-2 rounded-full ${sessionId() ? "bg-success" : "bg-foreground-muted"}`} />
+              <div
+                class={`w-2 h-2 rounded-full ${sessionId() ? "bg-success" : "bg-foreground-muted"}`}
+              />
               {sessionId() ? "Connected" : "Disconnected"}
             </span>
             <span class="flex items-center gap-1">
-              <div class={`w-2 h-2 rounded-full ${isExecutorReady() ? "bg-accent" : "bg-foreground-muted"}`} />
+              <div
+                class={`w-2 h-2 rounded-full ${isExecutorReady() ? "bg-accent" : "bg-foreground-muted"}`}
+              />
               {isExecutorReady() ? "Ready" : "Idle"}
             </span>
           </div>
@@ -821,11 +879,17 @@ const LogLine: Component<LogLineProps> = (props) => {
 
   return (
     <div class="flex items-start gap-2 py-0.5 hover:bg-surface/50">
-      <span class="text-foreground-muted shrink-0">{formatTime(props.entry.timestamp)}</span>
-      <span class={`w-4 text-center shrink-0 ${levelColors[props.entry.level]}`}>
+      <span class="text-foreground-muted shrink-0">
+        {formatTime(props.entry.timestamp)}
+      </span>
+      <span
+        class={`w-4 text-center shrink-0 ${levelColors[props.entry.level]}`}
+      >
         [{levelIcons[props.entry.level]}]
       </span>
-      <span class={`break-all ${levelColors[props.entry.level]}`}>{props.entry.message}</span>
+      <span class={`break-all ${levelColors[props.entry.level]}`}>
+        {props.entry.message}
+      </span>
     </div>
   );
 };

@@ -59,8 +59,8 @@ const LayerItem: Component<{
   settingParentFor?: string[]; // Array of component IDs being reparented
 }> = (props) => {
   // Use multi-selection system
-  const isSelected = createMemo(
-    () => designerStore.isSelected(props.component.id),
+  const isSelected = createMemo(() =>
+    designerStore.isSelected(props.component.id),
   );
   const isPrimarySelected = createMemo(
     () => designerStore.selectedId() === props.component.id,
@@ -83,8 +83,8 @@ const LayerItem: Component<{
   );
 
   // Check if we're setting parent for this component (any in the array)
-  const isSettingParent = createMemo(
-    () => (props.settingParentFor ?? []).includes(props.component.id),
+  const isSettingParent = createMemo(() =>
+    (props.settingParentFor ?? []).includes(props.component.id),
   );
 
   // Can be parent target (not self, not descendant of any setting parent)
@@ -183,7 +183,10 @@ const LayerItem: Component<{
 
         {/* Parent indicator */}
         <Show when={props.component.parentId}>
-          <span class="w-4 h-4 flex items-center justify-center text-text-tertiary" title="Has parent">
+          <span
+            class="w-4 h-4 flex items-center justify-center text-text-tertiary"
+            title="Has parent"
+          >
             <IconCornerDownRight class="w-3 h-3" />
           </span>
         </Show>
@@ -296,7 +299,10 @@ export const LayersPanel: Component = () => {
       // Reparent all selected components
       for (const childId of childIds) {
         // Skip if trying to set self as parent or if target is descendant
-        if (childId !== newParentId && !designerStore.isDescendantOf(newParentId, childId)) {
+        if (
+          childId !== newParentId &&
+          !designerStore.isDescendantOf(newParentId, childId)
+        ) {
           designerStore.reparentComponent(childId, newParentId);
         }
       }
@@ -441,8 +447,8 @@ export const LayersPanel: Component = () => {
                     <span class="text-text-secondary truncate max-w-[100px]">
                       {designerStore
                         .components()
-                        .find((c) => c.id === selectedComponent()?.parentId)?.label ||
-                        "unknown"}
+                        .find((c) => c.id === selectedComponent()?.parentId)
+                        ?.label || "unknown"}
                     </span>
                   </div>
                 </Show>
@@ -451,9 +457,7 @@ export const LayersPanel: Component = () => {
           >
             <div class="flex justify-between">
               <span>Selected:</span>
-              <span class="text-accent">
-                {selectedCount()} components
-              </span>
+              <span class="text-accent">{selectedCount()} components</span>
             </div>
             <div class="text-[10px] text-text-tertiary mt-1">
               Shift+Click to add/remove

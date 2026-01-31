@@ -63,7 +63,9 @@ const categoryColors: Record<string, string> = {
 };
 
 // Script item with inline action buttons
-const ScriptItem: Component<{ script: { id: string; name: string } }> = (props) => {
+const ScriptItem: Component<{ script: { id: string; name: string } }> = (
+  props,
+) => {
   const [isRenaming, setIsRenaming] = createSignal(false);
   const [renameValue, setRenameValue] = createSignal("");
 
@@ -124,8 +126,12 @@ const ScriptItem: Component<{ script: { id: string; name: string } }> = (props) 
         }`}
         onClick={() => scriptStore.setCurrentScriptId(props.script.id)}
       >
-        <span class="flex-1 px-1 py-1 text-xs truncate">{props.script.name}</span>
-        <div class={`flex items-center gap-0.5 ${isSelected() ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+        <span class="flex-1 px-1 py-1 text-xs truncate">
+          {props.script.name}
+        </span>
+        <div
+          class={`flex items-center gap-0.5 ${isSelected() ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+        >
           <button
             class={`p-0.5 rounded ${isSelected() ? "hover:bg-white/20" : "hover:bg-surface-alt"}`}
             onClick={handleStartRename}
@@ -306,9 +312,7 @@ export const NodePalette: Component = () => {
             </button>
           </div>
           <For each={scriptStore.scripts()}>
-            {(script) => (
-              <ScriptItem script={script} />
-            )}
+            {(script) => <ScriptItem script={script} />}
           </For>
           <Show when={scriptStore.scripts().length === 0}>
             <div class="px-2 py-1 text-[10px] text-foreground-muted">

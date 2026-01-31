@@ -17,9 +17,13 @@ import {
 import { ChevronDownIcon, ChevronRightIcon } from "@/components/common/Icons";
 
 // Helper function to get parent's tabs if parent is a Page component
-function getParentPageTabs(component: ReturnType<typeof designerStore.getSelectedComponent>): PageTab[] | null {
+function getParentPageTabs(
+  component: ReturnType<typeof designerStore.getSelectedComponent>,
+): PageTab[] | null {
   if (!component?.parentId) return null;
-  const parent = designerStore.components().find((c) => c.id === component.parentId);
+  const parent = designerStore
+    .components()
+    .find((c) => c.id === component.parentId);
   if (!parent || parent.type !== "page") return null;
   return (parent.props.tabs as PageTab[]) ?? null;
 }
@@ -234,14 +238,28 @@ export const PropertyPanel: Component = () => {
               <Show when={c().type === "dropdown"}>
                 <PropertySection title="Dropdown Settings">
                   <div class="space-y-2">
-                    <div class="text-xs text-foreground-muted mb-1">Options</div>
-                    <For each={(c().props.options as string[]) ?? ["Option 1", "Option 2"]}>
+                    <div class="text-xs text-foreground-muted mb-1">
+                      Options
+                    </div>
+                    <For
+                      each={
+                        (c().props.options as string[]) ?? [
+                          "Option 1",
+                          "Option 2",
+                        ]
+                      }
+                    >
                       {(option, i) => (
                         <div class="flex items-center gap-2">
                           <ArrayItemInput
                             value={option}
                             onChange={(value) => {
-                              const options = [...((c().props.options as string[]) ?? ["Option 1", "Option 2"])];
+                              const options = [
+                                ...((c().props.options as string[]) ?? [
+                                  "Option 1",
+                                  "Option 2",
+                                ]),
+                              ];
                               options[i()] = value;
                               designerStore.updateComponent(c().id, {
                                 props: { ...c().props, options },
@@ -251,9 +269,9 @@ export const PropertyPanel: Component = () => {
                           <button
                             class="w-6 h-6 flex items-center justify-center text-error hover:bg-error/10 rounded"
                             onClick={() => {
-                              const options = [...((c().props.options as string[]) ?? [])].filter(
-                                (_, idx) => idx !== i()
-                              );
+                              const options = [
+                                ...((c().props.options as string[]) ?? []),
+                              ].filter((_, idx) => idx !== i());
                               designerStore.updateComponent(c().id, {
                                 props: { ...c().props, options },
                               });
@@ -268,7 +286,10 @@ export const PropertyPanel: Component = () => {
                       class="w-full px-2 py-1 text-xs bg-accent/10 text-accent rounded hover:bg-accent/20"
                       onClick={() => {
                         const options = [
-                          ...((c().props.options as string[]) ?? ["Option 1", "Option 2"]),
+                          ...((c().props.options as string[]) ?? [
+                            "Option 1",
+                            "Option 2",
+                          ]),
                           `Option ${((c().props.options as string[]) ?? []).length + 1}`,
                         ];
                         designerStore.updateComponent(c().id, {
@@ -300,10 +321,15 @@ export const PropertyPanel: Component = () => {
                   <PropertyRow label="Direction">
                     <select
                       class="w-28 px-2 py-1 text-xs bg-background border border-border rounded"
-                      value={(c().props.direction as LayoutDirection) ?? "vertical"}
+                      value={
+                        (c().props.direction as LayoutDirection) ?? "vertical"
+                      }
                       onChange={(e) =>
                         designerStore.updateComponent(c().id, {
-                          props: { ...c().props, direction: e.currentTarget.value as LayoutDirection },
+                          props: {
+                            ...c().props,
+                            direction: e.currentTarget.value as LayoutDirection,
+                          },
                         })
                       }
                     >
@@ -341,7 +367,10 @@ export const PropertyPanel: Component = () => {
                       value={(c().props.align as Alignment) ?? "stretch"}
                       onChange={(e) =>
                         designerStore.updateComponent(c().id, {
-                          props: { ...c().props, align: e.currentTarget.value as Alignment },
+                          props: {
+                            ...c().props,
+                            align: e.currentTarget.value as Alignment,
+                          },
                         })
                       }
                     >
@@ -357,7 +386,10 @@ export const PropertyPanel: Component = () => {
                       value={(c().props.justify as Alignment) ?? "start"}
                       onChange={(e) =>
                         designerStore.updateComponent(c().id, {
-                          props: { ...c().props, justify: e.currentTarget.value as Alignment },
+                          props: {
+                            ...c().props,
+                            justify: e.currentTarget.value as Alignment,
+                          },
                         })
                       }
                     >
@@ -380,7 +412,9 @@ export const PropertyPanel: Component = () => {
                           <ArrayItemInput
                             value={tab.label}
                             onChange={(value) => {
-                              const tabs = [...((c().props.tabs as PageTab[]) ?? [])];
+                              const tabs = [
+                                ...((c().props.tabs as PageTab[]) ?? []),
+                              ];
                               tabs[i()] = { ...tabs[i()], label: value };
                               designerStore.updateComponent(c().id, {
                                 props: { ...c().props, tabs },
@@ -390,9 +424,9 @@ export const PropertyPanel: Component = () => {
                           <button
                             class="w-6 h-6 flex items-center justify-center text-error hover:bg-error/10 rounded"
                             onClick={() => {
-                              const tabs = [...((c().props.tabs as PageTab[]) ?? [])].filter(
-                                (_, idx) => idx !== i()
-                              );
+                              const tabs = [
+                                ...((c().props.tabs as PageTab[]) ?? []),
+                              ].filter((_, idx) => idx !== i());
                               designerStore.updateComponent(c().id, {
                                 props: { ...c().props, tabs },
                               });
@@ -408,7 +442,10 @@ export const PropertyPanel: Component = () => {
                       onClick={() => {
                         const tabs = [
                           ...((c().props.tabs as PageTab[]) ?? []),
-                          { id: crypto.randomUUID(), label: `Tab ${((c().props.tabs as PageTab[]) ?? []).length + 1}` },
+                          {
+                            id: crypto.randomUUID(),
+                            label: `Tab ${((c().props.tabs as PageTab[]) ?? []).length + 1}`,
+                          },
                         ];
                         designerStore.updateComponent(c().id, {
                           props: { ...c().props, tabs },
@@ -439,10 +476,15 @@ export const PropertyPanel: Component = () => {
                   <PropertyRow label="Direction">
                     <select
                       class="w-28 px-2 py-1 text-xs bg-background border border-border rounded"
-                      value={(c().props.direction as LayoutDirection) ?? "vertical"}
+                      value={
+                        (c().props.direction as LayoutDirection) ?? "vertical"
+                      }
                       onChange={(e) =>
                         designerStore.updateComponent(c().id, {
-                          props: { ...c().props, direction: e.currentTarget.value as LayoutDirection },
+                          props: {
+                            ...c().props,
+                            direction: e.currentTarget.value as LayoutDirection,
+                          },
                         })
                       }
                     >
@@ -473,7 +515,9 @@ export const PropertyPanel: Component = () => {
                         designerStore.updateComponent(c().id, {
                           props: {
                             ...c().props,
-                            showScrollbar: !(c().props.showScrollbar as boolean ?? true),
+                            showScrollbar: !(
+                              (c().props.showScrollbar as boolean) ?? true
+                            ),
                           },
                         })
                       }
@@ -508,10 +552,15 @@ export const PropertyPanel: Component = () => {
                   <PropertyRow label="Direction">
                     <select
                       class="w-28 px-2 py-1 text-xs bg-background border border-border rounded"
-                      value={(c().props.direction as LayoutDirection) ?? "horizontal"}
+                      value={
+                        (c().props.direction as LayoutDirection) ?? "horizontal"
+                      }
                       onChange={(e) =>
                         designerStore.updateComponent(c().id, {
-                          props: { ...c().props, direction: e.currentTarget.value as LayoutDirection },
+                          props: {
+                            ...c().props,
+                            direction: e.currentTarget.value as LayoutDirection,
+                          },
                         })
                       }
                     >
@@ -557,7 +606,9 @@ export const PropertyPanel: Component = () => {
                         designerStore.updateComponent(c().id, {
                           props: {
                             ...c().props,
-                            showHeader: !(c().props.showHeader as boolean ?? true),
+                            showHeader: !(
+                              (c().props.showHeader as boolean) ?? true
+                            ),
                           },
                         })
                       }
@@ -605,17 +656,20 @@ export const PropertyPanel: Component = () => {
                     <PropertyRow label="Show on Tab">
                       <select
                         class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
-                        value={(c().props.tabId as string) ?? tabs()[0]?.id ?? ""}
+                        value={
+                          (c().props.tabId as string) ?? tabs()[0]?.id ?? ""
+                        }
                         onChange={(e) =>
                           designerStore.updateComponent(c().id, {
-                            props: { ...c().props, tabId: e.currentTarget.value },
+                            props: {
+                              ...c().props,
+                              tabId: e.currentTarget.value,
+                            },
                           })
                         }
                       >
                         <For each={tabs()}>
-                          {(tab) => (
-                            <option value={tab.id}>{tab.label}</option>
-                          )}
+                          {(tab) => <option value={tab.id}>{tab.label}</option>}
                         </For>
                       </select>
                     </PropertyRow>
@@ -788,7 +842,10 @@ const ArrayItemInput: Component<ArrayItemInputProps> = (props) => {
   return (
     <input
       type="text"
-      class={props.class ?? "flex-1 px-2 py-1 text-xs bg-background border border-border rounded"}
+      class={
+        props.class ??
+        "flex-1 px-2 py-1 text-xs bg-background border border-border rounded"
+      }
       value={localValue()}
       onFocus={() => setIsFocused(true)}
       onInput={(e) => {

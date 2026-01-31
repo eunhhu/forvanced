@@ -106,7 +106,7 @@ const paletteCategories: PaletteCategory[] = [
 
 export const ComponentPalette: Component = () => {
   const [expandedCategories, setExpandedCategories] = createSignal<Set<string>>(
-    new Set(["Controls", "Layout"])
+    new Set(["Controls", "Layout"]),
   );
 
   const toggleCategory = (name: string) => {
@@ -157,12 +157,24 @@ export const ComponentPalette: Component = () => {
                 <Show
                   when={expandedCategories().has(category.name)}
                   fallback={
-                    <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg
+                      class="w-3 h-3"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
                       <path d="M9 18l6-6-6-6" />
                     </svg>
                   }
                 >
-                  <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg
+                    class="w-3 h-3"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
                     <path d="M6 9l6 6 6-6" />
                   </svg>
                 </Show>

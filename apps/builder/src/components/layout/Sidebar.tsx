@@ -21,8 +21,18 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { id: "project", label: "Project", icon: IconFolder, shortcut: ["Cmd", "1"] },
-  { id: "designer", label: "Designer", icon: IconLayout, shortcut: ["Cmd", "2"] },
-  { id: "scripts", label: "Scripts", icon: IconWorkflow, shortcut: ["Cmd", "3"] },
+  {
+    id: "designer",
+    label: "Designer",
+    icon: IconLayout,
+    shortcut: ["Cmd", "2"],
+  },
+  {
+    id: "scripts",
+    label: "Scripts",
+    icon: IconWorkflow,
+    shortcut: ["Cmd", "3"],
+  },
   { id: "testing", label: "Testing", icon: IconPlay, shortcut: ["Cmd", "4"] },
   { id: "build", label: "Build", icon: IconPackage, shortcut: ["Cmd", "5"] },
 ];
@@ -78,7 +88,11 @@ export const Sidebar: Component<SidebarProps> = (props) => {
       </div>
 
       {/* Navigation */}
-      <nav id="sidebar-nav" class="flex-1 p-2 space-y-1" aria-label="App sections">
+      <nav
+        id="sidebar-nav"
+        class="flex-1 p-2 space-y-1"
+        aria-label="App sections"
+      >
         <ul role="list" class="space-y-1">
           <For each={navItems}>
             {(item) => (
@@ -89,9 +103,19 @@ export const Sidebar: Component<SidebarProps> = (props) => {
                     isCollapsed() ? "justify-center px-0" : ""
                   }`}
                   onClick={() => props.onTabChange(item.id)}
-                  aria-current={props.activeTab === item.id ? "page" : undefined}
-                  aria-label={isCollapsed() ? `${item.label} (${formatHotkey(item.shortcut)})` : undefined}
-                  title={isCollapsed() ? `${item.label} (${formatHotkey(item.shortcut)})` : formatHotkey(item.shortcut)}
+                  aria-current={
+                    props.activeTab === item.id ? "page" : undefined
+                  }
+                  aria-label={
+                    isCollapsed()
+                      ? `${item.label} (${formatHotkey(item.shortcut)})`
+                      : undefined
+                  }
+                  title={
+                    isCollapsed()
+                      ? `${item.label} (${formatHotkey(item.shortcut)})`
+                      : formatHotkey(item.shortcut)
+                  }
                 >
                   <item.icon class="w-4 h-4 flex-shrink-0" aria-hidden="true" />
                   <Show when={!isCollapsed()}>
@@ -113,8 +137,16 @@ export const Sidebar: Component<SidebarProps> = (props) => {
           type="button"
           class={`sidebar-item w-full ${isCollapsed() ? "justify-center px-0" : ""}`}
           onClick={props.onOpenSettings}
-          aria-label={isCollapsed() ? `Settings (${isMac() ? "⌘," : "Ctrl+,"})` : undefined}
-          title={isCollapsed() ? `Settings (${isMac() ? "⌘," : "Ctrl+,"})` : `Settings (${isMac() ? "⌘," : "Ctrl+,"})`}
+          aria-label={
+            isCollapsed()
+              ? `Settings (${isMac() ? "⌘," : "Ctrl+,"})`
+              : undefined
+          }
+          title={
+            isCollapsed()
+              ? `Settings (${isMac() ? "⌘," : "Ctrl+,"})`
+              : `Settings (${isMac() ? "⌘," : "Ctrl+,"})`
+          }
         >
           <IconSettings class="w-4 h-4 flex-shrink-0" aria-hidden="true" />
           <Show when={!isCollapsed()}>

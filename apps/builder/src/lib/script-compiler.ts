@@ -253,9 +253,7 @@ function compileFlowFromNode(
 function compileNode(ctx: CompileContext, node: ScriptNode) {
   // Avoid infinite loops
   if (ctx.visitedNodes.has(node.id)) {
-    ctx.warnings.push(
-      `Potential infinite loop detected at node ${node.label}`,
-    );
+    ctx.warnings.push(`Potential infinite loop detected at node ${node.label}`);
     return;
   }
 
@@ -376,10 +374,7 @@ function getNodeOutputExpressions(
       outputs.set("value", varName ?? "undefined");
       break;
     case "ui_get_value":
-      outputs.set(
-        "value",
-        `getUIValue('${node.config.componentId}')`,
-      );
+      outputs.set("value", `getUIValue('${node.config.componentId}')`);
       outputs.set("componentId", `'${node.config.componentId}'`);
       break;
     case "math":

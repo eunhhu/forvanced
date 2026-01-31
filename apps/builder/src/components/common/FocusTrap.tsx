@@ -19,13 +19,13 @@ export const FocusTrap: Component<FocusTrapProps> = (props) => {
     if (!containerRef) return [];
 
     const focusable = containerRef.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), ' +
-      'textarea:not([disabled]), [tabindex]:not([tabindex="-1"]):not([disabled]), ' +
-      '[contenteditable="true"]'
+      "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), " +
+        'textarea:not([disabled]), [tabindex]:not([tabindex="-1"]):not([disabled]), ' +
+        '[contenteditable="true"]',
     );
 
     return Array.from(focusable).filter(
-      (el) => el.offsetParent !== null // visible elements only
+      (el) => el.offsetParent !== null, // visible elements only
     );
   };
 
@@ -61,7 +61,9 @@ export const FocusTrap: Component<FocusTrapProps> = (props) => {
       // Set initial focus
       setTimeout(() => {
         if (props.initialFocus && containerRef) {
-          const initial = containerRef.querySelector<HTMLElement>(props.initialFocus);
+          const initial = containerRef.querySelector<HTMLElement>(
+            props.initialFocus,
+          );
           if (initial) {
             initial.focus();
             return;

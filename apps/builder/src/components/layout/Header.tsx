@@ -22,7 +22,10 @@ export const Header: Component = () => {
       <div class="flex items-center gap-4 no-drag">
         {/* Project Info */}
         <Show when={projectName()}>
-          <div class="flex items-center gap-2 text-sm" aria-label="Current project">
+          <div
+            class="flex items-center gap-2 text-sm"
+            aria-label="Current project"
+          >
             <IconFolder class="w-4 h-4 text-accent" aria-hidden="true" />
             <span class="font-medium text-foreground">{projectName()}</span>
             <Show when={isDirty()}>
@@ -45,9 +48,7 @@ export const Header: Component = () => {
         </Show>
 
         <Show when={!projectName()}>
-          <div class="text-sm text-foreground-muted">
-            No project loaded
-          </div>
+          <div class="text-sm text-foreground-muted">No project loaded</div>
         </Show>
       </div>
 

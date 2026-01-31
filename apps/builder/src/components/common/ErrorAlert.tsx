@@ -80,7 +80,10 @@ const ErrorItem: Component<ErrorItemProps> = (props) => {
                 class="mt-2 flex items-center gap-1 text-xs text-foreground-muted hover:text-foreground-secondary transition-colors"
                 onClick={() => setExpanded(!expanded())}
               >
-                <Show when={expanded()} fallback={<IconChevronDown class="w-3 h-3" />}>
+                <Show
+                  when={expanded()}
+                  fallback={<IconChevronDown class="w-3 h-3" />}
+                >
                   <IconChevronUp class="w-3 h-3" />
                 </Show>
                 <span>{expanded() ? "Hide details" : "Show details"}</span>

@@ -60,14 +60,26 @@ function getMockResponse<T>(cmd: string, args?: Record<string, unknown>): T {
     enumerate_processes: [
       { pid: 1, name: "launchd" },
       { pid: 100, name: "WindowServer" },
-      { pid: 200, name: "Finder", path: "/System/Library/CoreServices/Finder.app" },
+      {
+        pid: 200,
+        name: "Finder",
+        path: "/System/Library/CoreServices/Finder.app",
+      },
       { pid: 300, name: "Safari", path: "/Applications/Safari.app" },
-      { pid: 400, name: "Terminal", path: "/Applications/Utilities/Terminal.app" },
+      {
+        pid: 400,
+        name: "Terminal",
+        path: "/Applications/Utilities/Terminal.app",
+      },
       { pid: 500, name: "Xcode", path: "/Applications/Xcode.app" },
       { pid: 600, name: "Code", path: "/Applications/Visual Studio Code.app" },
       { pid: 700, name: "Discord", path: "/Applications/Discord.app" },
       { pid: 800, name: "Chrome", path: "/Applications/Google Chrome.app" },
-      { pid: 900, name: "ExampleGame", path: "/Users/user/Games/ExampleGame.app" },
+      {
+        pid: 900,
+        name: "ExampleGame",
+        path: "/Users/user/Games/ExampleGame.app",
+      },
     ],
     enumerate_applications: [
       { identifier: "com.apple.mobilesafari", name: "Safari", pid: 1001 },

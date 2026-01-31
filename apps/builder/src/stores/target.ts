@@ -157,7 +157,10 @@ async function spawn(identifier: string) {
     setSessionId(id);
     setAttachedPid(null);
     setAttachedTarget(identifier);
-    errorStore.showInfo("Spawned", `Successfully spawned and attached to "${identifier}"`);
+    errorStore.showInfo(
+      "Spawned",
+      `Successfully spawned and attached to "${identifier}"`,
+    );
     return id;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

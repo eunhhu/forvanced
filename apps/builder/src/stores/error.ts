@@ -41,12 +41,7 @@ function addError(
     autoDismiss?: boolean;
   } = {},
 ): string {
-  const {
-    severity = "error",
-    details,
-    action,
-    autoDismiss = true,
-  } = options;
+  const { severity = "error", details, action, autoDismiss = true } = options;
 
   const id = generateId();
   const error: AppError = {
@@ -92,11 +87,7 @@ function showError(
   return addError(title, message, { severity: "error", details, action });
 }
 
-function showWarning(
-  title: string,
-  message: string,
-  details?: string,
-): string {
+function showWarning(title: string, message: string, details?: string): string {
   return addError(title, message, { severity: "warning", details });
 }
 

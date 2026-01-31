@@ -46,7 +46,9 @@ export const HotkeysHelp: Component = () => {
     <Show when={isOpen()}>
       <div
         class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-        onClick={(e) => e.target === e.currentTarget && hotkeysStore.closeHelp()}
+        onClick={(e) =>
+          e.target === e.currentTarget && hotkeysStore.closeHelp()
+        }
         role="presentation"
       >
         <div
@@ -116,7 +118,11 @@ export const HotkeysHelp: Component = () => {
           {/* Footer */}
           <div class="p-4 border-t border-border text-center">
             <p class="text-xs text-foreground-muted">
-              Press <kbd class="px-1.5 py-0.5 bg-background rounded border border-border font-mono">?</kbd> anytime to show this help
+              Press{" "}
+              <kbd class="px-1.5 py-0.5 bg-background rounded border border-border font-mono">
+                ?
+              </kbd>{" "}
+              anytime to show this help
             </p>
           </div>
         </div>

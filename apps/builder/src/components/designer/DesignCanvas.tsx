@@ -1,4 +1,12 @@
-import { Component, For, Show, createSignal, createMemo, onMount, onCleanup } from "solid-js";
+import {
+  Component,
+  For,
+  Show,
+  createSignal,
+  createMemo,
+  onMount,
+  onCleanup,
+} from "solid-js";
 import {
   designerStore,
   type UIComponent,
@@ -41,7 +49,9 @@ export const DesignCanvas: Component = () => {
   const [offset, setOffset] = createSignal({ x: 0, y: 0 });
 
   // Selection box state (for drag selection)
-  const [selectionBox, setSelectionBox] = createSignal<SelectionBox | null>(null);
+  const [selectionBox, setSelectionBox] = createSignal<SelectionBox | null>(
+    null,
+  );
   const [isSelecting, setIsSelecting] = createSignal(false);
 
   // Preview modal state
@@ -173,9 +183,7 @@ export const DesignCanvas: Component = () => {
       const x = (e.clientX - rect.left - offset().x) / scale();
       const y = (e.clientY - rect.top - offset().y) / scale();
 
-      setSelectionBox((prev) =>
-        prev ? { ...prev, endX: x, endY: y } : null,
-      );
+      setSelectionBox((prev) => (prev ? { ...prev, endX: x, endY: y } : null));
     }
   };
 
@@ -199,10 +207,7 @@ export const DesignCanvas: Component = () => {
             const compRight = c.x + c.width;
             const compBottom = c.y + c.height;
             return (
-              c.x < maxX &&
-              compRight > minX &&
-              c.y < maxY &&
-              compBottom > minY
+              c.x < maxX && compRight > minX && c.y < maxY && compBottom > minY
             );
           })
           .map((c) => c.id);
@@ -242,7 +247,9 @@ export const DesignCanvas: Component = () => {
         <div class="text-sm text-foreground-muted flex items-center gap-4">
           <span>{designerStore.components().length} components</span>
           <Show when={designerStore.selectedIds().size > 1}>
-            <span class="text-accent">{designerStore.selectedIds().size} selected</span>
+            <span class="text-accent">
+              {designerStore.selectedIds().size} selected
+            </span>
           </Show>
         </div>
         <div class="flex items-center gap-2">
@@ -383,12 +390,18 @@ export const DesignCanvas: Component = () => {
 
         {/* Help text */}
         <div class="absolute bottom-2 left-2 text-[10px] text-foreground-muted/50 pointer-events-none">
-          <span>Scroll: Pan | {isMac ? "⌘" : "Ctrl"}+Scroll: Zoom | Drag: Box select | Shift+Click: Add to selection</span>
+          <span>
+            Scroll: Pan | {isMac ? "⌘" : "Ctrl"}+Scroll: Zoom | Drag: Box select
+            | Shift+Click: Add to selection
+          </span>
         </div>
       </div>
 
       {/* Preview Modal */}
-      <UIPreview isOpen={isPreviewOpen()} onClose={() => setIsPreviewOpen(false)} />
+      <UIPreview
+        isOpen={isPreviewOpen()}
+        onClose={() => setIsPreviewOpen(false)}
+      />
     </div>
   );
 };
@@ -415,10 +428,13 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
 
   // Use multi-selection system
   const isSelected = () => designerStore.isSelected(props.component.id);
-  const isPrimarySelected = () => designerStore.selectedId() === props.component.id;
+  const isPrimarySelected = () =>
+    designerStore.selectedId() === props.component.id;
   const isVisible = () => props.component.visible !== false;
   const isLocked = () => props.component.locked === true;
-  const children = createMemo(() => designerStore.getChildrenForRender(props.component.id));
+  const children = createMemo(() =>
+    designerStore.getChildrenForRender(props.component.id),
+  );
   const hasChildren = createMemo(() => children().length > 0);
 
   // Check if this component is a container type
@@ -538,9 +554,16 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
   }
 
   // Sizing modes - default to "fill" width and "fixed" height for stack layout compatibility
-  const widthMode = () => (props.component.widthMode as SizingMode) ?? (props.inAutoLayout ? "fill" : "fixed");
-  const heightMode = () => (props.component.heightMode as SizingMode) ?? "fixed";
+  const widthMode = () =>
+    (props.component.widthMode as SizingMode) ??
+    (props.inAutoLayout ? "fill" : "fixed");
+  const heightMode = () =>
+    (props.component.heightMode as SizingMode) ?? "fixed";
   const parentDir = () => props.parentDirection ?? "vertical";
+
+  // Check if component type is a container
+  const isLayoutContainer = () =>
+    ["page", "stack", "scroll", "card", "group"].includes(props.component.type);
 
   // For auto-layout children, we use flex-based sizing instead of absolute
   const baseClass = () => {
@@ -560,20 +583,11 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
     // Only use absolute positioning if not in auto-layout
     if (!props.inAutoLayout) {
       classes.push("absolute");
-    } else {
-      classes.push("flex-shrink-0");
-      // In vertical stack: fill height means grow along main axis
-      // In horizontal stack: fill width means grow along main axis
-      if (parentDir() === "vertical") {
-        if (heightMode() === "fill") classes.push("flex-grow");
-      } else {
-        if (widthMode() === "fill") classes.push("flex-grow");
-      }
     }
     return classes.join(" ");
   };
 
-  // Calculate style based on sizing mode
+  // Calculate style based on sizing mode - matching UIPreview logic exactly
   const getComponentStyle = () => {
     if (!props.inAutoLayout) {
       return {
@@ -585,32 +599,67 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
       };
     }
 
-    const style: Record<string, string | undefined> = {};
+    const style: Record<string, string | number | undefined> = {};
+    const dir = parentDir();
 
-    // Width handling for auto-layout
-    if (widthMode() === "fixed") {
+    // Width handling
+    const wMode = widthMode();
+    if (wMode === "fixed") {
       style.width = `${props.component.width}px`;
-    } else if (widthMode() === "hug") {
-      style["min-width"] = `${props.component.width}px`;
+    } else if (wMode === "hug") {
       style.width = "auto";
-    } else if (widthMode() === "fill") {
-      // fill: use 100% width in vertical stack (cross-axis stretch)
-      style.width = "100%";
+      style["min-width"] = `${props.component.width}px`;
+    } else if (wMode === "fill") {
+      // In horizontal stack: fill = flex-grow (don't set width)
+      // In vertical stack: fill = 100% width (cross-axis stretch)
+      if (dir === "horizontal") {
+        style["flex-grow"] = 1;
+      } else {
+        style.width = "100%";
+      }
     }
 
-    // Height handling for auto-layout - always set a height
-    if (heightMode() === "fixed") {
-      style.height = `${props.component.height}px`;
-    } else if (heightMode() === "hug") {
-      style["min-height"] = `${props.component.height}px`;
-    } else if (heightMode() === "fill") {
-      // fill: use flex-grow (handled by class) but need min-height
-      style["min-height"] = `${props.component.height}px`;
+    // Height handling
+    const hMode = heightMode();
+    if (isLayoutContainer()) {
+      // Container components need explicit sizing
+      if (hMode === "fixed") {
+        style.height = `${props.component.height}px`;
+      } else if (hMode === "hug") {
+        style.height = "auto";
+        style["min-height"] = `${props.component.height}px`;
+      } else if (hMode === "fill") {
+        // In vertical stack: fill = flex-grow
+        // In horizontal stack: fill = 100% height (cross-axis stretch)
+        if (dir === "vertical") {
+          style["flex-grow"] = 1;
+          style["min-height"] = `${props.component.height}px`;
+        } else {
+          style.height = "100%";
+        }
+      }
+    } else {
+      // Content components (button, input, etc.) - let content determine height
+      // Only apply explicit height for "fixed" mode on specific components
+      if (
+        hMode === "fixed" &&
+        ["button", "spacer"].includes(props.component.type)
+      ) {
+        style.height = `${props.component.height}px`;
+      } else if (hMode === "hug") {
+        style.height = "auto";
+      }
+      // For fill in content components in vertical stack, use flex-grow
+      if (hMode === "fill" && dir === "vertical") {
+        style["flex-grow"] = 1;
+      }
     }
 
-    // Fallback: always ensure minimum height
-    if (!style.height && !style["min-height"]) {
-      style.height = `${props.component.height}px`;
+    // Flex-shrink: don't shrink fixed elements
+    if (wMode === "fixed" && hMode === "fixed") {
+      style["flex-shrink"] = 0;
+    } else {
+      style["flex-shrink"] = 1;
     }
 
     return style;
@@ -662,14 +711,20 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
       <Show when={isContainer() && hasChildren()}>
         {/* Auto-layout container (Stack, Scroll) */}
         <Show when={isAutoLayoutContainer()}>
-          <AutoLayoutContainer component={props.component} parentOffset={props.parentOffset}>
+          <AutoLayoutContainer
+            component={props.component}
+            parentOffset={props.parentOffset}
+          >
             {children()}
           </AutoLayoutContainer>
         </Show>
 
         {/* Page/Tab container */}
         <Show when={isPageContainer()}>
-          <PageContainer component={props.component} parentOffset={props.parentOffset}>
+          <PageContainer
+            component={props.component}
+            parentOffset={props.parentOffset}
+          >
             {children()}
           </PageContainer>
         </Show>
@@ -690,8 +745,15 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
                 <CanvasComponent
                   component={child}
                   parentOffset={{
-                    x: props.parentOffset.x + props.component.x + getContainerPadding(props.component),
-                    y: props.parentOffset.y + props.component.y + getContainerPadding(props.component) + getContainerHeaderHeight(props.component),
+                    x:
+                      props.parentOffset.x +
+                      props.component.x +
+                      getContainerPadding(props.component),
+                    y:
+                      props.parentOffset.y +
+                      props.component.y +
+                      getContainerPadding(props.component) +
+                      getContainerHeaderHeight(props.component),
                   }}
                   scale={props.scale}
                 />
@@ -767,7 +829,8 @@ interface AutoLayoutContainerProps {
 }
 
 const AutoLayoutContainer: Component<AutoLayoutContainerProps> = (props) => {
-  const direction = () => (props.component.props.direction as LayoutDirection) ?? "vertical";
+  const direction = () =>
+    (props.component.props.direction as LayoutDirection) ?? "vertical";
   const gap = () => (props.component.props.gap as number) ?? 8;
   const padding = () => (props.component.props.padding as number) ?? 12;
   const headerHeight = () => getContainerHeaderHeight(props.component);
@@ -776,38 +839,54 @@ const AutoLayoutContainer: Component<AutoLayoutContainerProps> = (props) => {
 
   // For scroll containers, enable overflow
   const isScroll = () => props.component.type === "scroll";
-  const showScrollbar = () => (props.component.props.showScrollbar as boolean) ?? true;
+  const showScrollbar = () =>
+    (props.component.props.showScrollbar as boolean) ?? true;
 
   // Build Tailwind classes for alignment
   const getAlignClass = () => {
     switch (align()) {
-      case "start": return "items-start";
-      case "center": return "items-center";
-      case "end": return "items-end";
-      case "stretch": return "items-stretch";
-      default: return "items-stretch";
+      case "start":
+        return "items-start";
+      case "center":
+        return "items-center";
+      case "end":
+        return "items-end";
+      case "stretch":
+        return "items-stretch";
+      default:
+        return "items-stretch";
     }
   };
 
   const getJustifyClass = () => {
     switch (justify()) {
-      case "start": return "justify-start";
-      case "center": return "justify-center";
-      case "end": return "justify-end";
-      case "space-between": return "justify-between";
-      default: return "justify-start";
+      case "start":
+        return "justify-start";
+      case "center":
+        return "justify-center";
+      case "end":
+        return "justify-end";
+      case "space-between":
+        return "justify-between";
+      default:
+        return "justify-start";
     }
   };
 
   const containerClass = () => {
     const classes = [
-      "absolute", "inset-0", "pointer-events-auto", "flex",
+      "absolute",
+      "inset-0",
+      "pointer-events-auto",
+      "flex",
       direction() === "vertical" ? "flex-col" : "flex-row",
       getAlignClass(),
       getJustifyClass(),
     ];
     if (isScroll()) {
-      classes.push(showScrollbar() ? "overflow-auto" : "overflow-auto scrollbar-hide");
+      classes.push(
+        showScrollbar() ? "overflow-auto" : "overflow-auto scrollbar-hide",
+      );
     } else {
       classes.push("overflow-hidden");
     }
@@ -831,7 +910,11 @@ const AutoLayoutContainer: Component<AutoLayoutContainerProps> = (props) => {
             component={child}
             parentOffset={{
               x: props.parentOffset.x + props.component.x + padding(),
-              y: props.parentOffset.y + props.component.y + padding() + headerHeight(),
+              y:
+                props.parentOffset.y +
+                props.component.y +
+                padding() +
+                headerHeight(),
             }}
             inAutoLayout={true}
             parentDirection={direction()}
@@ -855,7 +938,8 @@ interface PageContainerProps {
 
 const PageContainer: Component<PageContainerProps> = (props) => {
   const tabs = () => (props.component.props.tabs as PageTab[]) ?? [];
-  const activeTabIndex = () => (props.component.props.activeTabIndex as number) ?? 0;
+  const activeTabIndex = () =>
+    (props.component.props.activeTabIndex as number) ?? 0;
   const activeTab = () => tabs()[activeTabIndex()];
   const padding = () => (props.component.props.padding as number) ?? 8;
   const gap = () => (props.component.props.gap as number) ?? 8;
@@ -869,7 +953,9 @@ const PageContainer: Component<PageContainerProps> = (props) => {
     return props.children.filter((child) => {
       const childTabId = child.props.tabId as string | undefined;
       // If child has no tabId, show on first tab by default
-      return childTabId === activeTabId || (!childTabId && activeTabIndex() === 0);
+      return (
+        childTabId === activeTabId || (!childTabId && activeTabIndex() === 0)
+      );
     });
   };
 
@@ -922,7 +1008,11 @@ const PageContainer: Component<PageContainerProps> = (props) => {
               component={child}
               parentOffset={{
                 x: props.parentOffset.x + props.component.x + padding(),
-                y: props.parentOffset.y + props.component.y + padding() + headerHeight(),
+                y:
+                  props.parentOffset.y +
+                  props.component.y +
+                  padding() +
+                  headerHeight(),
               }}
               inAutoLayout={true}
               activeTabId={activeTab()?.id}
@@ -976,29 +1066,61 @@ interface ComponentPreviewProps {
   component: UIComponent;
 }
 
+// ComponentPreview - matches UIPreview rendering style exactly
+// Uses same structure as PreviewComponent in UIPreview.tsx
 const ComponentPreview: Component<ComponentPreviewProps> = (props) => {
   const c = props.component;
 
   switch (c.type) {
-    case "button":
+    case "label": {
+      const fontSize = (c.props.fontSize as number) ?? 14;
+      const align = ((c.props.align as string) ?? "left") as
+        | "left"
+        | "center"
+        | "right";
+      const color = c.props.color as string | undefined;
+      const bold = c.props.bold as boolean | undefined;
       return (
-        <div class="w-full h-full px-4 py-2 bg-accent text-white rounded text-sm font-medium flex items-center justify-center pointer-events-none">
+        <div
+          class="text-foreground pointer-events-none"
+          style={{
+            "font-size": `${fontSize}px`,
+            "font-weight": bold ? "bold" : "normal",
+            "text-align": align,
+            color: color,
+          }}
+        >
           {c.label}
         </div>
+      );
+    }
+
+    case "button":
+      return (
+        <button
+          class="w-full px-4 py-2 bg-accent text-white rounded-md font-medium text-center pointer-events-none"
+          style={{ "font-size": "14px", "min-height": "36px" }}
+        >
+          {c.label}
+        </button>
       );
 
     case "toggle": {
       const isOn = (c.props.defaultValue as boolean) ?? false;
       return (
-        <div class="w-full h-full flex items-center gap-3 pointer-events-none">
+        <div class="flex items-center justify-between pointer-events-none">
+          <span class="text-sm text-foreground">{c.label}</span>
           <div
-            class={`relative w-10 h-5 rounded-full transition-colors ${isOn ? "bg-accent" : "bg-background-secondary"}`}
+            class={`w-12 h-6 rounded-full transition-colors relative ${
+              isOn ? "bg-accent" : "bg-background-tertiary"
+            }`}
           >
             <div
-              class={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${isOn ? "translate-x-5" : "translate-x-0.5"}`}
+              class={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                isOn ? "translate-x-6" : "translate-x-1"
+              }`}
             />
           </div>
-          <span class="text-sm">{c.label}</span>
         </div>
       );
     }
@@ -1012,9 +1134,9 @@ const ComponentPreview: Component<ComponentPreviewProps> = (props) => {
         Math.max(0, ((defaultVal - min) / (max - min)) * 100),
       );
       return (
-        <div class="w-full h-full flex flex-col justify-center gap-1 pointer-events-none">
-          <div class="flex justify-between text-xs">
-            <span>{c.label}</span>
+        <div class="space-y-1 pointer-events-none">
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-foreground">{c.label}</span>
             <span class="text-foreground-muted">{defaultVal}</span>
           </div>
           <div class="relative h-2 bg-background-secondary rounded-full">
@@ -1035,14 +1157,17 @@ const ComponentPreview: Component<ComponentPreviewProps> = (props) => {
       const defaultInputVal = (c.props.defaultValue as string) ?? "";
       const placeholder = (c.props.placeholder as string) ?? "Enter value...";
       return (
-        <div class="w-full h-full px-3 bg-background border border-border rounded text-sm flex items-center pointer-events-none">
-          <span
-            class={
-              defaultInputVal ? "text-foreground" : "text-foreground-muted"
-            }
-          >
-            {defaultInputVal || placeholder}
-          </span>
+        <div class="space-y-1 pointer-events-none">
+          <label class="text-sm text-foreground">{c.label}</label>
+          <div class="w-full px-3 py-2 bg-background border border-border rounded text-sm">
+            <span
+              class={
+                defaultInputVal ? "text-foreground" : "text-foreground-muted"
+              }
+            >
+              {defaultInputVal || placeholder}
+            </span>
+          </div>
         </div>
       );
     }
@@ -1052,107 +1177,105 @@ const ComponentPreview: Component<ComponentPreviewProps> = (props) => {
       const defaultIndex = (c.props.defaultIndex as number) ?? 0;
       const selectedOption = options[defaultIndex] ?? options[0] ?? "Select...";
       return (
-        <div class="w-full h-full flex items-center justify-between px-3 bg-background border border-border rounded text-sm pointer-events-none">
-          <span class="truncate">{selectedOption}</span>
-          <svg
-            class="w-4 h-4 flex-shrink-0 ml-2"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M6 9l6 6 6-6" />
-          </svg>
+        <div class="space-y-1 pointer-events-none">
+          <label class="text-sm text-foreground">{c.label}</label>
+          <div class="w-full flex items-center justify-between px-3 py-2 bg-background border border-border rounded text-sm">
+            <span class="truncate">{selectedOption}</span>
+            <svg
+              class="w-4 h-4 flex-shrink-0 ml-2"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </div>
         </div>
       );
     }
 
-    case "label":
+    case "divider": {
+      const thickness = (c.props.thickness as number) ?? 1;
       return (
-        <div class="w-full h-full flex items-center text-sm">{c.label}</div>
+        <hr
+          class="border-border my-1 pointer-events-none"
+          style={{ "border-width": `${thickness}px` }}
+        />
+      );
+    }
+
+    case "spacer":
+      return (
+        <div
+          class="pointer-events-none"
+          style={{ height: `${c.props?.height ?? 16}px` }}
+        />
       );
 
     case "group":
       return (
-        <div class="w-full h-full border border-border rounded-lg">
-          <div class="h-7 border-b border-border px-3 flex items-center text-xs font-medium bg-surface rounded-t-lg">
-            {c.label}
-          </div>
+        <div class="w-full h-full border border-border rounded-lg overflow-hidden flex flex-col pointer-events-none">
+          <Show when={c.label}>
+            <div class="h-8 px-3 border-b border-border flex items-center bg-surface shrink-0">
+              <span class="font-medium text-sm text-foreground">{c.label}</span>
+            </div>
+          </Show>
         </div>
       );
 
-    case "spacer":
-      return (
-        <div class="w-full h-full border border-dashed border-border rounded opacity-50" />
-      );
-
     case "stack": {
-      // Stack preview is just a background - actual layout is handled by AutoLayoutContainer
+      // Stack background - actual children handled by AutoLayoutContainer
       return (
-        <div class="w-full h-full border-2 border-dashed border-accent/30 rounded-lg bg-accent/5 pointer-events-none" />
+        <div class="w-full h-full border-2 border-dashed border-accent/20 rounded-lg bg-accent/5 pointer-events-none" />
       );
     }
 
     case "page": {
-      // Page preview is just a background - actual tabs are rendered by PageContainer
+      // Page background - actual tabs handled by PageContainer
       return (
         <div class="w-full h-full border border-border rounded-lg bg-surface overflow-hidden pointer-events-none" />
       );
     }
 
     case "scroll": {
-      // Scroll preview is just a background - actual layout is handled by AutoLayoutContainer
+      // Scroll background - actual children handled by AutoLayoutContainer
       return (
         <div class="w-full h-full border border-border rounded-lg bg-surface pointer-events-none" />
       );
     }
 
-    case "divider": {
-      const direction = (c.props.direction as LayoutDirection) ?? "horizontal";
-      const thickness = (c.props.thickness as number) ?? 1;
-      return (
-        <div class="w-full h-full flex items-center justify-center">
-          <div
-            class="bg-border"
-            style={{
-              width: direction === "horizontal" ? "100%" : `${thickness}px`,
-              height: direction === "horizontal" ? `${thickness}px` : "100%",
-            }}
-          />
-        </div>
-      );
-    }
-
     case "card": {
-      const title = (c.props.title as string) ?? "Card";
       const showHeader = (c.props.showHeader as boolean) ?? true;
-      const padding = (c.props.padding as number) ?? 16;
-      const elevation = (c.props.elevation as number) ?? 1;
+      const cardElevation = (c.props.elevation as number) ?? 1;
       return (
         <div
-          class="w-full h-full rounded-lg bg-surface border border-border overflow-hidden flex flex-col"
+          class="w-full h-full rounded-lg border overflow-hidden flex flex-col pointer-events-none"
           style={{
-            "box-shadow": elevation > 0 ? `0 ${elevation * 2}px ${elevation * 8}px rgba(0,0,0,0.15)` : "none",
+            "background-color": "var(--surface)",
+            "border-color": "var(--border)",
+            "box-shadow":
+              cardElevation > 0
+                ? `0 ${cardElevation * 2}px ${cardElevation * 8}px rgba(0,0,0,0.15)`
+                : "none",
           }}
         >
           <Show when={showHeader}>
-            <div class="h-10 border-b border-border px-4 flex items-center">
-              <span class="text-sm font-medium">{title}</span>
+            <div class="px-4 py-2 border-b border-border bg-background/50 shrink-0">
+              <span class="font-medium text-sm">
+                {(c.props?.title as string) ?? c.label ?? "Card"}
+              </span>
             </div>
           </Show>
-          <div
-            class="flex-1 flex items-center justify-center text-xs text-foreground-muted"
-            style={{ padding: `${padding}px` }}
-          >
-            Card content area
-          </div>
         </div>
       );
     }
 
     default:
       return (
-        <div class="w-full h-full bg-surface border border-border rounded" />
+        <div class="p-2 bg-error/10 text-error text-xs rounded pointer-events-none">
+          Unknown: {c.type}
+        </div>
       );
   }
 };

@@ -24,7 +24,12 @@ export type ComponentType =
 export type LayoutDirection = "horizontal" | "vertical";
 
 // Alignment options
-export type Alignment = "start" | "center" | "end" | "stretch" | "space-between";
+export type Alignment =
+  | "start"
+  | "center"
+  | "end"
+  | "stretch"
+  | "space-between";
 
 // Sizing mode for responsive components
 export type SizingMode = "fixed" | "fill" | "hug";
@@ -372,7 +377,9 @@ function createDesignerStore() {
   function moveComponent(id: string, x: number, y: number) {
     // Direct state update without scheduling sync (for performance during drag)
     setComponents((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, x: Math.max(0, x), y: Math.max(0, y) } : c)),
+      prev.map((c) =>
+        c.id === id ? { ...c, x: Math.max(0, x), y: Math.max(0, y) } : c,
+      ),
     );
   }
 
@@ -476,7 +483,9 @@ function createDesignerStore() {
     const component = components().find((c) => c.id === componentId);
     if (!component) return [];
     if (component.parentId) {
-      return getChildren(component.parentId).filter((c) => c.id !== componentId);
+      return getChildren(component.parentId).filter(
+        (c) => c.id !== componentId,
+      );
     } else {
       return getRootComponents().filter((c) => c.id !== componentId);
     }

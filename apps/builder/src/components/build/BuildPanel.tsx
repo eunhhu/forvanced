@@ -393,7 +393,6 @@ export const BuildPanel: Component = () => {
                       </div>
                     </div>
                   </div>
-
                 </div>
               </Show>
             </div>

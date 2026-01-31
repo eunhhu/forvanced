@@ -112,7 +112,10 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
         >
           {/* Header */}
           <div class="flex items-center justify-between p-4 border-b border-border">
-            <h2 id="settings-title" class="text-lg font-semibold flex items-center gap-2">
+            <h2
+              id="settings-title"
+              class="text-lg font-semibold flex items-center gap-2"
+            >
               <IconSettings class="w-5 h-5" aria-hidden="true" />
               Settings
             </h2>
@@ -129,7 +132,10 @@ export const SettingsModal: Component<SettingsModalProps> = (props) => {
           {/* Content */}
           <div class="flex flex-1 overflow-hidden">
             {/* Sidebar */}
-            <nav class="w-48 border-r border-border p-2 space-y-1" aria-label="Settings sections">
+            <nav
+              class="w-48 border-r border-border p-2 space-y-1"
+              aria-label="Settings sections"
+            >
               <ul role="tablist" aria-orientation="vertical" class="space-y-1">
                 <For each={sections}>
                   {(section) => (
@@ -336,18 +342,25 @@ interface SettingItemProps {
 }
 
 const SettingItem: Component<SettingItemProps> = (props) => {
-  const labelId = () => `setting-${props.label.toLowerCase().replace(/\s+/g, "-")}`;
+  const labelId = () =>
+    `setting-${props.label.toLowerCase().replace(/\s+/g, "-")}`;
   const descId = () => `${labelId()}-desc`;
 
   return (
     <div class="flex items-start justify-between gap-4">
       <div class="flex-1">
-        <div id={labelId()} class="text-sm font-medium">{props.label}</div>
+        <div id={labelId()} class="text-sm font-medium">
+          {props.label}
+        </div>
         <div id={descId()} class="text-xs text-foreground-muted mt-0.5">
           {props.description}
         </div>
       </div>
-      <div class="flex-shrink-0" aria-labelledby={labelId()} aria-describedby={descId()}>
+      <div
+        class="flex-shrink-0"
+        aria-labelledby={labelId()}
+        aria-describedby={descId()}
+      >
         {props.children}
       </div>
     </div>

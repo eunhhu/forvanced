@@ -430,11 +430,26 @@ export const nodeTemplates: NodeTemplate[] = [
     inputs: [],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
-      { name: "hookId", type: "value", valueType: "string", direction: "output" },
+      {
+        name: "hookId",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      },
       { name: "args", type: "value", valueType: "any", direction: "output" }, // Array of arguments (enter only)
       { name: "retval", type: "value", valueType: "any", direction: "output" }, // Return value (leave only)
-      { name: "address", type: "value", valueType: "pointer", direction: "output" },
-      { name: "threadId", type: "value", valueType: "int32", direction: "output" },
+      {
+        name: "address",
+        type: "value",
+        valueType: "pointer",
+        direction: "output",
+      },
+      {
+        name: "threadId",
+        type: "value",
+        valueType: "int32",
+        direction: "output",
+      },
     ],
   },
   {
@@ -448,11 +463,36 @@ export const nodeTemplates: NodeTemplate[] = [
     inputs: [],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
-      { name: "watchId", type: "value", valueType: "string", direction: "output" },
-      { name: "address", type: "value", valueType: "pointer", direction: "output" },
-      { name: "operation", type: "value", valueType: "string", direction: "output" }, // "read", "write", "execute"
-      { name: "from", type: "value", valueType: "pointer", direction: "output" }, // Instruction that accessed
-      { name: "threadId", type: "value", valueType: "int32", direction: "output" },
+      {
+        name: "watchId",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      },
+      {
+        name: "address",
+        type: "value",
+        valueType: "pointer",
+        direction: "output",
+      },
+      {
+        name: "operation",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      }, // "read", "write", "execute"
+      {
+        name: "from",
+        type: "value",
+        valueType: "pointer",
+        direction: "output",
+      }, // Instruction that accessed
+      {
+        name: "threadId",
+        type: "value",
+        valueType: "int32",
+        direction: "output",
+      },
     ],
   },
   // ============================================
@@ -1388,7 +1428,8 @@ export const nodeTemplates: NodeTemplate[] = [
     type: "interceptor_attach",
     label: "Interceptor Attach",
     category: "Interceptor",
-    description: "Attach to native function. Use 'On Hook' event to handle callbacks.",
+    description:
+      "Attach to native function. Use 'On Hook' event to handle callbacks.",
     defaultConfig: {
       hookId: "", // Unique hook identifier (auto-generated if empty)
       onEnter: true, // Enable onEnter callback
@@ -1407,8 +1448,18 @@ export const nodeTemplates: NodeTemplate[] = [
     ],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
-      { name: "hookId", type: "value", valueType: "string", direction: "output" }, // Use this in event_hook
-      { name: "success", type: "value", valueType: "boolean", direction: "output" },
+      {
+        name: "hookId",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      }, // Use this in event_hook
+      {
+        name: "success",
+        type: "value",
+        valueType: "boolean",
+        direction: "output",
+      },
     ],
   },
   {
@@ -1588,13 +1639,23 @@ export const nodeTemplates: NodeTemplate[] = [
     },
     inputs: [
       { name: "exec", type: "flow", direction: "input" },
-      { name: "deviceId", type: "value", valueType: "string", direction: "input" }, // Used when selectionMode is "id"
+      {
+        name: "deviceId",
+        type: "value",
+        valueType: "string",
+        direction: "input",
+      }, // Used when selectionMode is "id"
     ],
     outputs: [
       { name: "success", type: "flow", direction: "output" },
       { name: "failure", type: "flow", direction: "output" },
       { name: "device", type: "value", valueType: "any", direction: "output" }, // Selected device info
-      { name: "error", type: "value", valueType: "string", direction: "output" },
+      {
+        name: "error",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      },
     ],
   },
   {
@@ -1607,7 +1668,12 @@ export const nodeTemplates: NodeTemplate[] = [
     inputs: [],
     outputs: [
       { name: "device", type: "value", valueType: "any", direction: "output" }, // {id, name, type} or null
-      { name: "hasDevice", type: "value", valueType: "boolean", direction: "output" },
+      {
+        name: "hasDevice",
+        type: "value",
+        valueType: "boolean",
+        direction: "output",
+      },
     ],
   },
 
@@ -1626,7 +1692,12 @@ export const nodeTemplates: NodeTemplate[] = [
     inputs: [{ name: "exec", type: "flow", direction: "input" }],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
-      { name: "processes", type: "value", valueType: "any", direction: "output" }, // Array of {pid, name, ...}
+      {
+        name: "processes",
+        type: "value",
+        valueType: "any",
+        direction: "output",
+      }, // Array of {pid, name, ...}
       { name: "count", type: "value", valueType: "int32", direction: "output" },
     ],
   },
@@ -1644,7 +1715,12 @@ export const nodeTemplates: NodeTemplate[] = [
     inputs: [{ name: "exec", type: "flow", direction: "input" }],
     outputs: [
       { name: "exec", type: "flow", direction: "output" },
-      { name: "applications", type: "value", valueType: "any", direction: "output" }, // Array of {identifier, name, pid?, ...}
+      {
+        name: "applications",
+        type: "value",
+        valueType: "any",
+        direction: "output",
+      }, // Array of {identifier, name, pid?, ...}
       { name: "count", type: "value", valueType: "int32", direction: "output" },
     ],
   },
@@ -1681,7 +1757,12 @@ export const nodeTemplates: NodeTemplate[] = [
         valueType: "string",
         direction: "output",
       },
-      { name: "error", type: "value", valueType: "string", direction: "output" },
+      {
+        name: "error",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      },
     ],
   },
   {
@@ -1694,7 +1775,12 @@ export const nodeTemplates: NodeTemplate[] = [
     outputs: [
       { name: "success", type: "flow", direction: "output" },
       { name: "failure", type: "flow", direction: "output" },
-      { name: "error", type: "value", valueType: "string", direction: "output" },
+      {
+        name: "error",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      },
     ],
   },
   {
@@ -1725,7 +1811,12 @@ export const nodeTemplates: NodeTemplate[] = [
         direction: "output",
       },
       { name: "pid", type: "value", valueType: "int32", direction: "output" },
-      { name: "error", type: "value", valueType: "string", direction: "output" },
+      {
+        name: "error",
+        type: "value",
+        valueType: "string",
+        direction: "output",
+      },
     ],
   },
   {
@@ -1867,7 +1958,9 @@ function createScriptStore() {
   );
   const [selectedNodeId, setSelectedNodeId] = createSignal<string | null>(null);
   // Multi-selection support for nodes
-  const [selectedNodeIds, setSelectedNodeIds] = createSignal<Set<string>>(new Set());
+  const [selectedNodeIds, setSelectedNodeIds] = createSignal<Set<string>>(
+    new Set(),
+  );
   const [selectedConnectionId, setSelectedConnectionId] = createSignal<
     string | null
   >(null);
@@ -2027,7 +2120,7 @@ function createScriptStore() {
   // Rename script
   function renameScript(id: string, newName: string) {
     setScripts((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, name: newName } : s))
+      prev.map((s) => (s.id === id ? { ...s, name: newName } : s)),
     );
     // Notify project store of script change
     notifyScriptChange();
@@ -2082,7 +2175,10 @@ function createScriptStore() {
       name: `${script.name} (Copy)`,
       nodes: newNodes,
       connections: newConnections,
-      variables: script.variables.map((v) => ({ ...v, id: crypto.randomUUID() })),
+      variables: script.variables.map((v) => ({
+        ...v,
+        id: crypto.randomUUID(),
+      })),
     };
 
     setScripts((prev) => [...prev, newScript]);

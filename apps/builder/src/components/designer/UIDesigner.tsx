@@ -1,6 +1,19 @@
-import { Component, createEffect, createSignal, createMemo, on, untrack } from "solid-js";
+import {
+  Component,
+  createEffect,
+  createSignal,
+  createMemo,
+  on,
+  untrack,
+} from "solid-js";
 import { ComponentPalette } from "./ComponentPalette";
-import { DesignCanvas, setCanvasWidth, setCanvasHeight, setCanvasPadding, setCanvasGap } from "./DesignCanvas";
+import {
+  DesignCanvas,
+  setCanvasWidth,
+  setCanvasHeight,
+  setCanvasPadding,
+  setCanvasGap,
+} from "./DesignCanvas";
 import { PropertyPanel } from "./PropertyPanel";
 import { LayersPanel } from "./LayersPanel";
 import { designerStore } from "@/stores/designer";
@@ -15,11 +28,19 @@ export const UIDesigner: Component = () => {
   // Extract only the values we care about to minimize reactivity
   const projectId = createMemo(() => projectStore.currentProject()?.id);
   // Use || instead of ?? to handle 0 values as well (0 would be invalid canvas size)
-  const projectUiWidth = createMemo(() => projectStore.currentProject()?.ui?.width || 400);
-  const projectUiHeight = createMemo(() => projectStore.currentProject()?.ui?.height || 500);
+  const projectUiWidth = createMemo(
+    () => projectStore.currentProject()?.ui?.width || 400,
+  );
+  const projectUiHeight = createMemo(
+    () => projectStore.currentProject()?.ui?.height || 500,
+  );
   // Padding and gap can be 0, so use ?? instead of ||
-  const projectUiPadding = createMemo(() => projectStore.currentProject()?.ui?.padding ?? 12);
-  const projectUiGap = createMemo(() => projectStore.currentProject()?.ui?.gap ?? 8);
+  const projectUiPadding = createMemo(
+    () => projectStore.currentProject()?.ui?.padding ?? 12,
+  );
+  const projectUiGap = createMemo(
+    () => projectStore.currentProject()?.ui?.gap ?? 8,
+  );
 
   // Load from project when project ID changes
   createEffect(
