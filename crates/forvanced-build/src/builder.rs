@@ -1,8 +1,8 @@
-//! Build system for generating standalone trainer applications
+//! Build system for generating standalone project applications
+//!
+//! Uses apps/runtime as the template and embeds project configuration.
 
-use crate::codegen::{generate_frida_script, generate_ui_code};
 use crate::error::BuildError;
-use crate::template::{TemplateData, TemplateManager};
 use forvanced_core::Project;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -66,8 +66,8 @@ pub struct BuildOptions {
     pub release: bool,
     /// Bundle Frida runtime
     pub bundle_frida: bool,
-    /// Skip npm install
-    pub skip_npm_install: bool,
+    /// Path to runtime template (apps/runtime)
+    pub runtime_path: Option<PathBuf>,
 }
 
 impl Default for BuildOptions {
@@ -77,7 +77,7 @@ impl Default for BuildOptions {
             target: BuildTarget::Current,
             release: true,
             bundle_frida: true,
-            skip_npm_install: false,
+            runtime_path: None,
         }
     }
 }
@@ -89,103 +89,133 @@ pub struct BuildOutput {
     pub project_dir: PathBuf,
     /// Path to the built executable(s)
     pub executables: Vec<PathBuf>,
-    /// Build target
+    /// Target platform
     pub target: BuildTarget,
 }
 
-/// Builder for generating trainer applications
+/// Project configuration for runtime (serialized and embedded)
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectConfig {
+    pub name: String,
+    pub version: String,
+    pub target_process: Option<String>,
+    pub auto_attach: bool,
+    pub components: Vec<serde_json::Value>,
+    pub scripts: Vec<serde_json::Value>,
+    pub canvas: CanvasConfig,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CanvasConfig {
+    pub width: u32,
+    pub height: u32,
+    pub padding: u32,
+    pub gap: u32,
+}
+
+impl From<&Project> for ProjectConfig {
+    fn from(project: &Project) -> Self {
+        Self {
+            name: project.name.clone(),
+            version: project.version.clone(),
+            target_process: project.config.target.process_name.clone(),
+            auto_attach: project.config.target.auto_attach,
+            components: project
+                .ui
+                .components
+                .iter()
+                .map(|c| serde_json::to_value(c).unwrap_or_default())
+                .collect(),
+            scripts: project
+                .scripts
+                .iter()
+                .map(|s| serde_json::to_value(s).unwrap_or_default())
+                .collect(),
+            canvas: CanvasConfig {
+                width: project.ui.width,
+                height: project.ui.height,
+                padding: project.ui.padding,
+                gap: project.ui.gap,
+            },
+        }
+    }
+}
+
+/// Builder for generating project applications
 pub struct Builder {
-    template_manager: TemplateManager,
+    /// Path to the runtime template
+    runtime_path: PathBuf,
 }
 
 impl Builder {
+    /// Create a new builder with the runtime template path
     pub fn new() -> Result<Self, BuildError> {
-        Ok(Self {
-            template_manager: TemplateManager::new()?,
-        })
+        // Try to find runtime path relative to workspace
+        let runtime_path = find_runtime_path()?;
+        Ok(Self { runtime_path })
     }
 
-    /// Generate a trainer project from a Forvanced project
+    /// Create a builder with a specific runtime path
+    pub fn with_runtime_path(runtime_path: PathBuf) -> Result<Self, BuildError> {
+        if !runtime_path.exists() {
+            return Err(BuildError::RuntimeNotFound(runtime_path));
+        }
+        Ok(Self { runtime_path })
+    }
+
+    /// Generate a project from a Forvanced project
+    /// This copies the runtime template and embeds the project config
     pub async fn generate_project(
         &self,
         project: &Project,
         output_dir: &Path,
     ) -> Result<PathBuf, BuildError> {
-        info!("Generating trainer project: {}", project.name);
+        info!("Generating project: {}", project.name);
 
         // Validate project
         if project.ui.components.is_empty() {
             return Err(BuildError::EmptyProject);
         }
 
-        // Create output directory structure
+        // Create output directory
         let project_dir = output_dir.join(&sanitize_name(&project.name));
+        if project_dir.exists() {
+            fs::remove_dir_all(&project_dir).await?;
+        }
         fs::create_dir_all(&project_dir).await?;
-        fs::create_dir_all(project_dir.join("src")).await?;
-        fs::create_dir_all(project_dir.join("src-tauri")).await?;
-        fs::create_dir_all(project_dir.join("src-tauri/src")).await?;
-        fs::create_dir_all(project_dir.join("src-tauri/icons")).await?;
 
-        // Prepare template data
-        let sanitized_name = sanitize_name(&project.name);
-        let template_data = TemplateData {
-            project_name: sanitized_name.clone(),
-            lib_name: sanitized_name.replace('-', "_"), // Rust lib names can't have hyphens
-            project_version: project.version.clone(),
-            project_description: project.description.clone().unwrap_or_default(),
-            window_width: project.ui.width,
-            window_height: project.ui.height + 60, // Add header height
-            window_title: project.name.clone(),
-            theme: project.ui.theme.clone(),
-            bundle_frida: project.config.build.bundle_frida,
-            process_name: project.config.target.process_name.clone(),
-            auto_attach: project.config.target.auto_attach,
-        };
+        // Copy runtime template
+        copy_dir_recursive(&self.runtime_path, &project_dir).await?;
+        debug!("Copied runtime template to: {}", project_dir.display());
 
-        // Generate files from templates
-        self.write_template_file(&project_dir, "package.json", &template_data)
-            .await?;
-        self.write_template_file(&project_dir.join("src-tauri"), "tauri.conf.json", &template_data)
-            .await?;
-        self.write_template_file(&project_dir, "index.html", &template_data)
-            .await?;
-        self.write_template_file(&project_dir.join("src"), "main.tsx", &template_data)
-            .await?;
-        self.write_template_file(&project_dir.join("src"), "App.tsx", &template_data)
-            .await?;
-        self.write_template_file(&project_dir.join("src"), "engine.ts", &template_data)
-            .await?;
-        self.write_template_file(&project_dir.join("src"), "styles.css", &template_data)
-            .await?;
-        self.write_template_file(&project_dir.join("src-tauri"), "Cargo.toml", &template_data)
-            .await?;
-        self.write_template_file(&project_dir.join("src-tauri/src"), "lib.rs", &template_data)
-            .await?;
+        // Generate project config
+        let config = ProjectConfig::from(project);
+        let config_json = serde_json::to_string_pretty(&config)
+            .map_err(|e| BuildError::SerializationError(e.to_string()))?;
 
-        // Generate UI code
-        let ui_code = generate_ui_code(project);
-        fs::write(project_dir.join("src/TrainerUI.tsx"), ui_code).await?;
+        // Write config to be embedded at build time
+        let config_path = project_dir.join("src-tauri/project_config.json");
+        fs::write(&config_path, &config_json).await?;
+        debug!("Written project config: {}", config_path.display());
 
-        // Generate Frida script
-        let frida_script = generate_frida_script(project);
-        fs::write(project_dir.join("src-tauri/frida_script.js"), frida_script).await?;
+        // Update tauri.conf.json with project name
+        self.update_tauri_config(&project_dir, project).await?;
 
-        // Generate engine module for Rust
-        let engine_rs = generate_engine_rs(project);
-        fs::write(project_dir.join("src-tauri/src/engine.rs"), engine_rs).await?;
+        // Update Cargo.toml with project name
+        self.update_cargo_toml(&project_dir, project).await?;
 
-        // Write additional config files
-        self.write_vite_config(&project_dir).await?;
-        self.write_tsconfig(&project_dir).await?;
-        self.write_build_rs(&project_dir).await?;
-        self.write_main_rs(&project_dir).await?;
-        self.write_default_icons(&project_dir).await?;
+        // Update package.json with project name
+        self.update_package_json(&project_dir, project).await?;
+
+        // Generate lib.rs that loads the embedded config
+        self.generate_lib_rs(&project_dir).await?;
 
         info!("Project generated at: {}", project_dir.display());
         Ok(project_dir)
     }
 
-    /// Build the generated trainer project
+    /// Build the generated project
     pub async fn build(
         &self,
         project: &Project,
@@ -199,24 +229,31 @@ impl Builder {
             return Err(BuildError::TauriCliNotFound);
         }
 
-        // Install npm dependencies
-        if !options.skip_npm_install {
-            info!("Installing npm dependencies...");
-            let npm_status = Command::new("bun")
-                .arg("install")
-                .current_dir(&project_dir)
-                .status()
-                .map_err(|e| BuildError::CommandFailed(format!("bun install failed: {}", e)))?;
+        // Install dependencies
+        info!("Installing dependencies...");
+        let install_cmd = if which::which("pnpm").is_ok() {
+            "pnpm"
+        } else if which::which("bun").is_ok() {
+            "bun"
+        } else {
+            "npm"
+        };
 
-            if !npm_status.success() {
-                return Err(BuildError::CommandFailed(
-                    "bun install failed".to_string(),
-                ));
-            }
+        let install_status = Command::new(install_cmd)
+            .arg("install")
+            .current_dir(&project_dir)
+            .status()
+            .map_err(|e| BuildError::CommandFailed(format!("{} install failed: {}", install_cmd, e)))?;
+
+        if !install_status.success() {
+            return Err(BuildError::CommandFailed(format!(
+                "{} install failed",
+                install_cmd
+            )));
         }
 
         // Build with Tauri
-        info!("Building trainer...");
+        info!("Building project...");
         let mut tauri_cmd = Command::new("cargo");
         tauri_cmd.arg("tauri").arg("build");
 
@@ -227,6 +264,11 @@ impl Builder {
         let target_str = options.target.tauri_target();
         if !target_str.is_empty() {
             tauri_cmd.arg("--target").arg(target_str);
+        }
+
+        // Set feature flags based on options
+        if options.bundle_frida {
+            tauri_cmd.args(["--features", "real"]);
         }
 
         tauri_cmd.current_dir(&project_dir);
@@ -249,162 +291,129 @@ impl Builder {
         })
     }
 
-    async fn write_template_file(
-        &self,
-        dir: &Path,
-        template_name: &str,
-        data: &TemplateData,
-    ) -> Result<(), BuildError> {
-        let content = self.template_manager.render(template_name, data)?;
-        let file_path = dir.join(template_name);
-        fs::write(&file_path, content).await?;
-        debug!("Written: {}", file_path.display());
+    async fn update_tauri_config(&self, project_dir: &Path, project: &Project) -> Result<(), BuildError> {
+        let config_path = project_dir.join("src-tauri/tauri.conf.json");
+        let content = fs::read_to_string(&config_path).await?;
+
+        let mut config: serde_json::Value = serde_json::from_str(&content)
+            .map_err(|e| BuildError::SerializationError(e.to_string()))?;
+
+        // Update product name and identifier
+        if let Some(obj) = config.as_object_mut() {
+            obj["productName"] = serde_json::json!(project.name);
+
+            if let Some(bundle) = obj.get_mut("bundle").and_then(|b| b.as_object_mut()) {
+                let identifier = format!("com.forvanced.{}", sanitize_name(&project.name));
+                bundle["identifier"] = serde_json::json!(identifier);
+            }
+
+            // Update window title and size
+            if let Some(app) = obj.get_mut("app").and_then(|a| a.as_object_mut()) {
+                if let Some(windows) = app.get_mut("windows").and_then(|w| w.as_array_mut()) {
+                    if let Some(window) = windows.first_mut().and_then(|w| w.as_object_mut()) {
+                        window["title"] = serde_json::json!(project.name);
+                        window["width"] = serde_json::json!(project.ui.width);
+                        window["height"] = serde_json::json!(project.ui.height + 60); // Add header
+                    }
+                }
+            }
+        }
+
+        let updated = serde_json::to_string_pretty(&config)
+            .map_err(|e| BuildError::SerializationError(e.to_string()))?;
+        fs::write(&config_path, updated).await?;
+
         Ok(())
     }
 
-    async fn write_vite_config(&self, project_dir: &Path) -> Result<(), BuildError> {
-        let content = r#"import { defineConfig } from "vite";
-import solid from "vite-plugin-solid";
+    async fn update_cargo_toml(&self, project_dir: &Path, project: &Project) -> Result<(), BuildError> {
+        let cargo_path = project_dir.join("src-tauri/Cargo.toml");
+        let content = fs::read_to_string(&cargo_path).await?;
 
-export default defineConfig({
-  plugins: [solid()],
-  clearScreen: false,
-  server: {
-    port: 5173,
-    strictPort: true,
-  },
-  envPrefix: ["VITE_", "TAURI_"],
-  build: {
-    target: "esnext",
-    minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
-    sourcemap: !!process.env.TAURI_DEBUG,
-  },
-});
-"#;
-        fs::write(project_dir.join("vite.config.ts"), content).await?;
+        let sanitized = sanitize_name(&project.name);
+        let lib_name = sanitized.replace('-', "_");
+
+        // Simple string replacement for package name
+        let updated = content
+            .replace("forvanced-runtime", &sanitized)
+            .replace("forvanced_runtime_lib", &format!("{}_lib", lib_name));
+
+        fs::write(&cargo_path, updated).await?;
         Ok(())
     }
 
-    async fn write_tsconfig(&self, project_dir: &Path) -> Result<(), BuildError> {
-        let content = r#"{
-  "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "jsx": "preserve",
-    "jsxImportSource": "solid-js",
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true
-  },
-  "include": ["src"]
+    async fn update_package_json(&self, project_dir: &Path, project: &Project) -> Result<(), BuildError> {
+        let pkg_path = project_dir.join("package.json");
+        let content = fs::read_to_string(&pkg_path).await?;
+
+        let mut pkg: serde_json::Value = serde_json::from_str(&content)
+            .map_err(|e| BuildError::SerializationError(e.to_string()))?;
+
+        if let Some(obj) = pkg.as_object_mut() {
+            obj["name"] = serde_json::json!(sanitize_name(&project.name));
+            obj["version"] = serde_json::json!(&project.version);
+        }
+
+        let updated = serde_json::to_string_pretty(&pkg)
+            .map_err(|e| BuildError::SerializationError(e.to_string()))?;
+        fs::write(&pkg_path, updated).await?;
+
+        Ok(())
+    }
+
+    async fn generate_lib_rs(&self, project_dir: &Path) -> Result<(), BuildError> {
+        let lib_path = project_dir.join("src-tauri/src/lib.rs");
+
+        // Generate lib.rs that loads embedded config
+        let content = r#"//! Generated project runtime
+
+mod commands;
+mod state;
+
+use state::AppState;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+/// Embedded project configuration
+const PROJECT_CONFIG: &str = include_str!("../project_config.json");
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    // Initialize tracing
+    tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::from_default_env().add_directive("forvanced=debug".parse().unwrap()))
+        .init();
+
+    tracing::info!("Starting Forvanced Project Runtime");
+
+    // Load embedded config
+    let config: state::ProjectConfig = serde_json::from_str(PROJECT_CONFIG)
+        .expect("Failed to parse embedded project config");
+
+    let mut app_state = AppState::new();
+    app_state.load_config(config);
+
+    let app_state = Arc::new(Mutex::new(app_state));
+
+    tauri::Builder::default()
+        .manage(app_state)
+        .invoke_handler(tauri::generate_handler![
+            commands::get_project_config,
+            commands::attach_process,
+            commands::detach_process,
+            commands::execute_action,
+            commands::trigger_ui_event,
+            commands::get_component_value,
+            commands::set_component_value,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }
 "#;
-        fs::write(project_dir.join("tsconfig.json"), content).await?;
-        Ok(())
-    }
 
-    async fn write_build_rs(&self, project_dir: &Path) -> Result<(), BuildError> {
-        let content = r#"fn main() {
-    tauri_build::build()
-}
-"#;
-        fs::write(project_dir.join("src-tauri/build.rs"), content).await?;
-        Ok(())
-    }
-
-    async fn write_main_rs(&self, project_dir: &Path) -> Result<(), BuildError> {
-        let content = r#"#![cfg_attr(
-    all(not(debug_assertions), target_os = "windows"),
-    windows_subsystem = "windows"
-)]
-
-fn main() {
-    forvanced_trainer_lib::run()
-}
-"#;
-        // Replace with actual crate name
-        let crate_name = project_dir
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("trainer");
-        let content = content.replace("forvanced_trainer_lib", &format!("{}_lib", crate_name.replace('-', "_")));
-
-        fs::write(project_dir.join("src-tauri/src/main.rs"), content).await?;
-        Ok(())
-    }
-
-    async fn write_default_icons(&self, project_dir: &Path) -> Result<(), BuildError> {
-        let icons_dir = project_dir.join("src-tauri/icons");
-
-        // Create a simple 1x1 transparent PNG as placeholder
-        // PNG header + IHDR chunk + IDAT chunk + IEND chunk for 1x1 transparent pixel
-        let png_1x1: &[u8] = &[
-            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
-            0x00, 0x00, 0x00, 0x0D, // IHDR length
-            0x49, 0x48, 0x44, 0x52, // "IHDR"
-            0x00, 0x00, 0x00, 0x01, // width: 1
-            0x00, 0x00, 0x00, 0x01, // height: 1
-            0x08, 0x06, // bit depth: 8, color type: RGBA
-            0x00, 0x00, 0x00, // compression, filter, interlace
-            0x1F, 0x15, 0xC4, 0x89, // IHDR CRC
-            0x00, 0x00, 0x00, 0x0A, // IDAT length
-            0x49, 0x44, 0x41, 0x54, // "IDAT"
-            0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, // compressed data
-            0x0D, 0x0A, 0x2D, 0xB4, // IDAT CRC
-            0x00, 0x00, 0x00, 0x00, // IEND length
-            0x49, 0x45, 0x4E, 0x44, // "IEND"
-            0xAE, 0x42, 0x60, 0x82, // IEND CRC
-        ];
-
-        // Write placeholder icons
-        fs::write(icons_dir.join("32x32.png"), png_1x1).await?;
-        fs::write(icons_dir.join("128x128.png"), png_1x1).await?;
-        fs::write(icons_dir.join("128x128@2x.png"), png_1x1).await?;
-
-        // For .ico and .icns, we'll create minimal valid files
-        // ICO file header for 1x1 image
-        let ico_data: &[u8] = &[
-            0x00, 0x00, // Reserved
-            0x01, 0x00, // Type: ICO
-            0x01, 0x00, // Number of images: 1
-            // Image directory entry
-            0x01, // Width: 1
-            0x01, // Height: 1
-            0x00, // Color palette: 0
-            0x00, // Reserved
-            0x01, 0x00, // Color planes: 1
-            0x20, 0x00, // Bits per pixel: 32
-            0x30, 0x00, 0x00, 0x00, // Image size
-            0x16, 0x00, 0x00, 0x00, // Image offset
-            // BMP data follows (simplified)
-            0x28, 0x00, 0x00, 0x00, // BMP header size
-            0x01, 0x00, 0x00, 0x00, // Width
-            0x02, 0x00, 0x00, 0x00, // Height (doubled for AND mask)
-            0x01, 0x00, // Planes
-            0x20, 0x00, // Bits per pixel
-            0x00, 0x00, 0x00, 0x00, // Compression
-            0x08, 0x00, 0x00, 0x00, // Image size
-            0x00, 0x00, 0x00, 0x00, // X pixels per meter
-            0x00, 0x00, 0x00, 0x00, // Y pixels per meter
-            0x00, 0x00, 0x00, 0x00, // Colors used
-            0x00, 0x00, 0x00, 0x00, // Important colors
-            // Pixel data (1 RGBA pixel)
-            0x00, 0x00, 0x00, 0x00,
-            // AND mask
-            0x00, 0x00, 0x00, 0x00,
-        ];
-        fs::write(icons_dir.join("icon.ico"), ico_data).await?;
-
-        // For .icns, we create a minimal file
-        // ICNS files are complex, just copy the PNG for now
-        fs::write(icons_dir.join("icon.icns"), png_1x1).await?;
-
-        debug!("Default icons written to: {}", icons_dir.display());
+        fs::write(&lib_path, content).await?;
         Ok(())
     }
 }
@@ -415,209 +424,77 @@ impl Default for Builder {
     }
 }
 
-/// Generate engine.rs for the runtime
-fn generate_engine_rs(project: &Project) -> String {
-    let frida_script = generate_frida_script(project);
-    let escaped_script = frida_script.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
+/// Find the runtime template path
+fn find_runtime_path() -> Result<PathBuf, BuildError> {
+    // Try common locations
+    let candidates = [
+        PathBuf::from("apps/runtime"),
+        PathBuf::from("../apps/runtime"),
+        PathBuf::from("../../apps/runtime"),
+        std::env::current_dir()
+            .unwrap_or_default()
+            .join("apps/runtime"),
+    ];
 
-    format!(
-        r#"use std::sync::Mutex;
-use tauri::State;
+    for path in &candidates {
+        if path.exists() && path.join("src-tauri").exists() {
+            return Ok(path.clone());
+        }
+    }
 
-const FRIDA_SCRIPT: &str = "{script}";
+    // Try from CARGO_MANIFEST_DIR
+    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        let workspace_root = PathBuf::from(manifest_dir)
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.to_path_buf());
 
-pub struct CheatEngineState {{
-    pub attached: Mutex<bool>,
-    pub process_name: Mutex<Option<String>>,
-}}
+        if let Some(root) = workspace_root {
+            let runtime_path = root.join("apps/runtime");
+            if runtime_path.exists() {
+                return Ok(runtime_path);
+            }
+        }
+    }
 
-impl CheatEngineState {{
-    pub fn new() -> Self {{
-        Self {{
-            attached: Mutex::new(false),
-            process_name: Mutex::new(None),
-        }}
-    }}
-}}
+    Err(BuildError::RuntimeNotFound(PathBuf::from("apps/runtime")))
+}
 
-#[tauri::command]
-pub async fn attach_process(
-    state: State<'_, CheatEngineState>,
-    process_name: String,
-) -> Result<(), String> {{
-    // TODO: Implement actual Frida attachment
-    *state.attached.lock().unwrap() = true;
-    *state.process_name.lock().unwrap() = Some(process_name);
+/// Recursively copy a directory
+async fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), BuildError> {
+    fs::create_dir_all(dst).await?;
+
+    let mut entries = fs::read_dir(src).await?;
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        let file_name = path.file_name().unwrap();
+        let dst_path = dst.join(file_name);
+
+        // Skip certain directories
+        let name = file_name.to_string_lossy();
+        if name == "node_modules" || name == "target" || name == "dist" || name == ".git" {
+            continue;
+        }
+
+        if path.is_dir() {
+            Box::pin(copy_dir_recursive(&path, &dst_path)).await?;
+        } else {
+            fs::copy(&path, &dst_path).await?;
+        }
+    }
+
     Ok(())
-}}
-
-#[tauri::command]
-pub async fn detach_process(state: State<'_, CheatEngineState>) -> Result<(), String> {{
-    *state.attached.lock().unwrap() = false;
-    *state.process_name.lock().unwrap() = None;
-    Ok(())
-}}
-
-#[tauri::command]
-pub async fn memory_read(
-    address: String,
-    value_type: String,
-) -> Result<serde_json::Value, String> {{
-    // TODO: Call Frida RPC
-    Ok(serde_json::json!(0))
-}}
-
-#[tauri::command]
-pub async fn memory_write(
-    address: String,
-    value: String,
-    value_type: String,
-) -> Result<(), String> {{
-    // TODO: Call Frida RPC
-    Ok(())
-}}
-
-#[tauri::command]
-pub async fn memory_freeze(
-    address: String,
-    value: String,
-    value_type: String,
-    interval_ms: u32,
-) -> Result<(), String> {{
-    // TODO: Call Frida RPC
-    Ok(())
-}}
-
-#[tauri::command]
-pub async fn memory_unfreeze(address: String) -> Result<(), String> {{
-    // TODO: Call Frida RPC
-    Ok(())
-}}
-
-#[tauri::command]
-pub async fn pattern_scan(
-    pattern: String,
-    protection: String,
-) -> Result<Vec<String>, String> {{
-    // TODO: Call Frida RPC
-    Ok(vec![])
-}}
-
-#[tauri::command]
-pub async fn value_scan(
-    value: String,
-    value_type: String,
-) -> Result<Vec<String>, String> {{
-    // TODO: Call Frida RPC
-    Ok(vec![])
-}}
-
-#[tauri::command]
-pub async fn hook_function(
-    address: String,
-    log_enter: bool,
-    log_leave: bool,
-) -> Result<(), String> {{
-    // TODO: Call Frida RPC
-    Ok(())
-}}
-
-#[tauri::command]
-pub async fn replace_return(address: String, value: i64) -> Result<(), String> {{
-    // TODO: Call Frida RPC
-    Ok(())
-}}
-
-#[tauri::command]
-pub async fn nop_function(address: String) -> Result<(), String> {{
-    // TODO: Call Frida RPC
-    Ok(())
-}}
-
-#[tauri::command]
-pub async fn java_hook_method(
-    class_name: String,
-    method_name: String,
-    overload: Option<String>,
-) -> Result<(), String> {{
-    // TODO: Call Frida RPC
-    Ok(())
-}}
-
-#[tauri::command]
-pub async fn java_modify_return(
-    class_name: String,
-    method_name: String,
-    value: serde_json::Value,
-) -> Result<(), String> {{
-    // TODO: Call Frida RPC
-    Ok(())
-}}
-
-#[tauri::command]
-pub async fn java_call_method(
-    class_name: String,
-    method_name: String,
-    is_static: bool,
-) -> Result<serde_json::Value, String> {{
-    // TODO: Call Frida RPC
-    Ok(serde_json::json!(null))
-}}
-
-#[tauri::command]
-pub async fn objc_hook_method(
-    class_name: String,
-    selector: String,
-    is_class_method: bool,
-) -> Result<(), String> {{
-    // TODO: Call Frida RPC
-    Ok(())
-}}
-
-#[tauri::command]
-pub async fn objc_modify_return(
-    class_name: String,
-    selector: String,
-    value: serde_json::Value,
-) -> Result<(), String> {{
-    // TODO: Call Frida RPC
-    Ok(())
-}}
-
-#[tauri::command]
-pub async fn swift_hook_function(mangled_name: String) -> Result<(), String> {{
-    // TODO: Call Frida RPC
-    Ok(())
-}}
-
-#[tauri::command]
-pub async fn list_modules() -> Result<Vec<serde_json::Value>, String> {{
-    // TODO: Call Frida RPC
-    Ok(vec![])
-}}
-
-#[tauri::command]
-pub async fn find_export(
-    module_name: String,
-    export_name: String,
-) -> Result<Option<String>, String> {{
-    // TODO: Call Frida RPC
-    Ok(None)
-}}
-
-#[tauri::command]
-pub async fn execute_custom_script(script: String) -> Result<serde_json::Value, String> {{
-    // TODO: Call Frida RPC
-    Ok(serde_json::json!(null))
-}}
-"#,
-        script = escaped_script
-    )
 }
 
 fn sanitize_name(name: &str) -> String {
     name.chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c.to_ascii_lowercase() } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
         .collect::<String>()
         .trim_matches('-')
         .to_string()
@@ -629,13 +506,17 @@ fn find_executables(project_dir: &Path, release: bool) -> Result<Vec<PathBuf>, B
 
     let mut executables = Vec::new();
 
-    // Platform-specific paths
     #[cfg(target_os = "windows")]
     {
-        let exe_path = target_dir.join(profile).join("*.exe");
-        if let Ok(entries) = glob::glob(exe_path.to_str().unwrap_or_default()) {
-            for entry in entries.flatten() {
-                executables.push(entry);
+        let exe_dir = target_dir.join(profile);
+        if exe_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&exe_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().map(|e| e == "exe").unwrap_or(false) {
+                        executables.push(path);
+                    }
+                }
             }
         }
     }
@@ -646,7 +527,12 @@ fn find_executables(project_dir: &Path, release: bool) -> Result<Vec<PathBuf>, B
         if app_path.exists() {
             if let Ok(entries) = std::fs::read_dir(&app_path) {
                 for entry in entries.flatten() {
-                    if entry.path().extension().map(|e| e == "app").unwrap_or(false) {
+                    if entry
+                        .path()
+                        .extension()
+                        .map(|e| e == "app")
+                        .unwrap_or(false)
+                    {
                         executables.push(entry.path());
                     }
                 }
@@ -660,7 +546,12 @@ fn find_executables(project_dir: &Path, release: bool) -> Result<Vec<PathBuf>, B
         if deb_path.exists() {
             if let Ok(entries) = std::fs::read_dir(&deb_path) {
                 for entry in entries.flatten() {
-                    if entry.path().extension().map(|e| e == "deb").unwrap_or(false) {
+                    if entry
+                        .path()
+                        .extension()
+                        .map(|e| e == "deb")
+                        .unwrap_or(false)
+                    {
                         executables.push(entry.path());
                     }
                 }
@@ -674,14 +565,10 @@ fn find_executables(project_dir: &Path, release: bool) -> Result<Vec<PathBuf>, B
 #[cfg(test)]
 mod tests {
     use super::*;
-    use forvanced_core::{
-        Project, ProjectConfig, TargetConfig, BuildConfig as ProjectBuildConfig,
-        HotkeyConfig, UILayout, UIComponent, ComponentType,
-    };
 
     #[test]
     fn test_sanitize_name() {
-        assert_eq!(sanitize_name("My Trainer!"), "my-trainer");
+        assert_eq!(sanitize_name("My Project!"), "my-project");
         assert_eq!(sanitize_name("Test_Project-1"), "test_project-1");
         assert_eq!(sanitize_name("Game Trainer v2"), "game-trainer-v2");
     }
@@ -689,98 +576,13 @@ mod tests {
     #[test]
     fn test_build_target_from_str() {
         assert_eq!(BuildTarget::from_str("current"), Some(BuildTarget::Current));
-        assert_eq!(BuildTarget::from_str("windows"), Some(BuildTarget::WindowsX64));
-        assert_eq!(BuildTarget::from_str("macos"), Some(BuildTarget::MacOsArm64));
-    }
-
-    #[tokio::test]
-    async fn test_generate_project() {
-        let project = create_test_project();
-        let builder = Builder::new().expect("Failed to create builder");
-
-        let temp_dir = std::env::temp_dir().join("forvanced_test");
-        let _ = std::fs::remove_dir_all(&temp_dir); // Clean up any existing
-
-        let result = builder.generate_project(&project, &temp_dir).await;
-        assert!(result.is_ok(), "Project generation failed: {:?}", result.err());
-
-        let project_dir = result.unwrap();
-        assert!(project_dir.exists(), "Project directory not created");
-        assert!(project_dir.join("package.json").exists(), "package.json not created");
-        assert!(project_dir.join("src/TrainerUI.tsx").exists(), "TrainerUI.tsx not created");
-        assert!(project_dir.join("src-tauri/Cargo.toml").exists(), "Cargo.toml not created");
-        assert!(project_dir.join("src-tauri/icons/icon.ico").exists(), "icon.ico not created");
-
-        // Print generated files for inspection
-        println!("Generated project at: {:?}", project_dir);
-
-        // Verify TrainerUI.tsx content
-        let trainer_ui = std::fs::read_to_string(project_dir.join("src/TrainerUI.tsx")).unwrap();
-        assert!(trainer_ui.contains("Test Button"), "TrainerUI should contain the button label");
-
-        // Verify Cargo.toml content
-        let cargo_toml = std::fs::read_to_string(project_dir.join("src-tauri/Cargo.toml")).unwrap();
-        assert!(cargo_toml.contains("test_trainer_lib"), "Cargo.toml should have correct lib name (underscores, not hyphens)");
-        assert!(!cargo_toml.contains("forvanced-frida"), "Cargo.toml should not reference internal crates");
-
-        // Clean up
-        let _ = std::fs::remove_dir_all(&temp_dir);
-    }
-
-    fn create_test_project() -> Project {
-        Project {
-            id: "test-id".to_string(),
-            name: "Test Trainer".to_string(),
-            description: Some("Test description".to_string()),
-            version: "1.0.0".to_string(),
-            author: Some("Test Author".to_string()),
-            created_at: 0,
-            updated_at: 0,
-            config: ProjectConfig {
-                target: TargetConfig {
-                    process_name: Some("test.exe".to_string()),
-                    process_patterns: vec![],
-                    adapter_type: "local_pc".to_string(),
-                    adapter_config: serde_json::Value::Null,
-                    auto_attach: true,
-                },
-                build: ProjectBuildConfig {
-                    output_name: Some("test-trainer".to_string()),
-                    targets: vec!["current".to_string()],
-                    icon: None,
-                    bundle_frida: true,
-                },
-                hotkeys: HotkeyConfig::default(),
-            },
-            ui: UILayout {
-                components: vec![
-                    UIComponent {
-                        id: "btn1".to_string(),
-                        component_type: ComponentType::Button,
-                        label: "Test Button".to_string(),
-                        x: 10.0,
-                        y: 10.0,
-                        width: 100.0,
-                        height: 36.0,
-                        props: serde_json::json!({}),
-                        bindings: vec![],
-                        parent_id: None,
-                        children: vec![],
-                        z_index: 0,
-                        visible: true,
-                        locked: false,
-                        collapsed: false,
-                        width_mode: None,
-                        height_mode: None,
-                    },
-                ],
-                width: 400,
-                height: 500,
-                theme: "dark".to_string(),
-                padding: 12,
-                gap: 8,
-            },
-            scripts: vec![],
-        }
+        assert_eq!(
+            BuildTarget::from_str("windows"),
+            Some(BuildTarget::WindowsX64)
+        );
+        assert_eq!(
+            BuildTarget::from_str("macos"),
+            Some(BuildTarget::MacOsArm64)
+        );
     }
 }

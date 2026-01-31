@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -17,6 +18,9 @@ pub enum BuildError {
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
 
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+
     #[error("Build command failed: {0}")]
     CommandFailed(String),
 
@@ -25,6 +29,9 @@ pub enum BuildError {
 
     #[error("Build target not supported: {0}")]
     UnsupportedTarget(String),
+
+    #[error("Runtime template not found at: {0}")]
+    RuntimeNotFound(PathBuf),
 
     #[error("Build cancelled")]
     Cancelled,

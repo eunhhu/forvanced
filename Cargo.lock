@@ -930,6 +930,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "forvanced-runtime"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "forvanced-core",
+ "forvanced-executor",
+ "forvanced-frida",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "frida"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

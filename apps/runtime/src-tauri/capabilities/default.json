@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capability for Forvanced Trainer Runtime",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}

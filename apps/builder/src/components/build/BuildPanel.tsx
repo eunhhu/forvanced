@@ -35,26 +35,26 @@ function getMockBuildResponse<T>(
   args?: Record<string, unknown>,
 ): T {
   const mocks: Record<string, unknown> = {
-    build_trainer: {
-      project_dir: "/mock/output/trainer",
-      executables: ["/mock/output/trainer/trainer.exe"],
+    build_project: {
+      project_dir: "/mock/output/project",
+      executables: ["/mock/output/project/trainer.exe"],
       target: (args?.config as Record<string, unknown>)?.target || "current",
     },
-    generate_trainer_project: "/mock/output/generated-project",
+    generate_project: "/mock/output/generated-project",
     preview_generated_code: {
       ui_code: `// Generated UI Code (TSX)
 import { Component } from "solid-js";
 
-export const TrainerUI: Component = () => {
+export const ProjectUI: Component = () => {
   return (
     <div class="trainer-container">
-      <h1>My Trainer</h1>
+      <h1>My Project</h1>
       {/* Components would be rendered here */}
     </div>
   );
 };`,
       frida_script: `// Generated Frida Script
-console.log("[*] Trainer attached!");
+console.log("[*] Project attached!");
 
 // Memory operations would be generated here
 // Based on component bindings
@@ -126,7 +126,7 @@ export const BuildPanel: Component = () => {
         bundle_frida: bundleFrida(),
       };
 
-      const result = await invoke<BuildResult>("build_trainer", { config });
+      const result = await invoke<BuildResult>("build_project", { config });
       setBuildResult(result);
     } catch (e) {
       setBuildError(e instanceof Error ? e.message : String(e));
@@ -145,7 +145,7 @@ export const BuildPanel: Component = () => {
     setBuildError(null);
 
     try {
-      const projectDir = await invoke<string>("generate_trainer_project", {
+      const projectDir = await invoke<string>("generate_project", {
         outputDir: outputDir(),
       });
       setBuildResult({
@@ -201,7 +201,7 @@ export const BuildPanel: Component = () => {
           <div class="flex items-center justify-center h-full text-foreground-muted">
             <div class="text-center">
               <h2 class="text-lg font-medium text-foreground mb-2">Build</h2>
-              <p>Load a project to build your trainer</p>
+              <p>Load a project to build your project</p>
             </div>
           </div>
         }
@@ -210,7 +210,7 @@ export const BuildPanel: Component = () => {
           <>
             {/* Build Settings */}
             <div class="p-4 border-b border-border">
-              <h2 class="text-lg font-semibold mb-4">Build Trainer</h2>
+              <h2 class="text-lg font-semibold mb-4">Build Project</h2>
 
               <div class="space-y-4">
                 {/* Target Platform */}
@@ -299,7 +299,7 @@ export const BuildPanel: Component = () => {
                 disabled={isBuilding()}
               >
                 <PlayIcon class="w-5 h-5" />
-                {isBuilding() ? "Building..." : "Build Trainer"}
+                {isBuilding() ? "Building..." : "Build Project"}
               </button>
 
               <div class="flex gap-2">

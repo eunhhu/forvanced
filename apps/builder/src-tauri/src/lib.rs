@@ -70,8 +70,8 @@ pub fn run() {
             commands::get_recent_projects,
             commands::remove_recent_project,
             // Build commands
-            commands::generate_trainer_project,
-            commands::build_trainer,
+            commands::generate_project,
+            commands::build_project,
             commands::get_build_targets,
             commands::preview_generated_code,
             // Executor commands

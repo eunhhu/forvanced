@@ -22,11 +22,11 @@ pub struct BuildResult {
 }
 
 #[tauri::command]
-pub async fn generate_trainer_project(
+pub async fn generate_project(
     state: State<'_, AppState>,
     output_dir: String,
 ) -> Result<String, String> {
-    info!("generate_trainer_project called, output: {}", output_dir);
+    info!("generate_project called, output: {}", output_dir);
 
     let project_guard = state.current_project.read().await;
     let project = project_guard
@@ -43,11 +43,11 @@ pub async fn generate_trainer_project(
 }
 
 #[tauri::command]
-pub async fn build_trainer(
+pub async fn build_project(
     state: State<'_, AppState>,
     config: BuildConfig,
 ) -> Result<BuildResult, String> {
-    info!("build_trainer called with config: {:?}", config);
+    info!("build_project called with config: {:?}", config);
 
     let project_guard = state.current_project.read().await;
     let project = project_guard
@@ -62,7 +62,7 @@ pub async fn build_trainer(
         target,
         release: config.release,
         bundle_frida: config.bundle_frida,
-        skip_npm_install: false,
+        runtime_path: None,
     };
 
     let builder = Builder::new().map_err(|e| e.to_string())?;

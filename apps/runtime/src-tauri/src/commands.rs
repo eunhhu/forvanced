@@ -1,0 +1,308 @@
+//! Tauri commands for runtime
+
+use crate::state::{AppState, ProjectConfig};
+use async_trait::async_trait;
+use forvanced_executor::{rpc::generate_target_script, RpcCaller};
+use forvanced_frida::FridaError;
+use std::sync::Arc;
+use tauri::State;
+use tokio::sync::Mutex;
+
+/// RPC caller implementation that uses FridaManager
+struct FridaRpcCaller {
+    frida_manager: Arc<forvanced_frida::FridaManager>,
+    session_id: String,
+    script_id: String,
+}
+
+#[async_trait]
+impl RpcCaller for FridaRpcCaller {
+    async fn call(
+        &self,
+        method: &str,
+        args: Vec<serde_json::Value>,
+    ) -> Result<serde_json::Value, String> {
+        self.frida_manager
+            .call_rpc(&self.session_id, &self.script_id, method, args)
+            .await
+            .map_err(|e| e.to_string())
+    }
+}
+
+/// Get the trainer configuration
+/// This is embedded at build time or loaded from a config file
+#[tauri::command]
+pub async fn get_project_config(
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<ProjectConfig, String> {
+    let state = state.lock().await;
+
+    // For now, return a demo config
+    // In production, this would be embedded at build time
+    if let Some(config) = &state.config {
+        Ok(config.clone())
+    } else {
+        // Return demo config for development
+        Ok(get_demo_config())
+    }
+}
+
+/// Attach to a process
+#[tauri::command]
+pub async fn attach_process(
+    state: State<'_, Arc<Mutex<AppState>>>,
+    process_name: String,
+) -> Result<String, String> {
+    let mut state = state.lock().await;
+
+    // List devices and find local
+    let devices = state.frida_manager.enumerate_devices()
+        .map_err(|e: FridaError| e.to_string())?;
+
+    let local_device = devices.iter()
+        .find(|d| d.device_type == forvanced_frida::FridaDeviceType::Local)
+        .ok_or("No local device found")?;
+
+    // List processes
+    let processes = state.frida_manager.enumerate_processes_on_device(&local_device.id)
+        .map_err(|e: FridaError| e.to_string())?;
+
+    // Find target process
+    let target = processes.iter()
+        .find(|p| p.name.to_lowercase().contains(&process_name.to_lowercase()))
+        .ok_or(format!("Process '{}' not found", process_name))?;
+
+    // Attach
+    let session_id = state.frida_manager.attach_on_device(&local_device.id, target.pid).await
+        .map_err(|e: FridaError| e.to_string())?;
+
+    state.session_id = Some(session_id.clone());
+
+    // Inject the target RPC handler script
+    let target_script = generate_target_script();
+    let script_id = state.frida_manager
+        .inject_script(&session_id, &target_script)
+        .await
+        .map_err(|e: FridaError| e.to_string())?;
+
+    state.script_id = Some(script_id.clone());
+
+    // Set up RPC caller for executor
+    let rpc_caller = Arc::new(FridaRpcCaller {
+        frida_manager: Arc::clone(&state.frida_manager),
+        session_id: session_id.clone(),
+        script_id: script_id.clone(),
+    });
+    state.executor.set_rpc_caller(rpc_caller).await;
+    state.executor.set_session(session_id.clone()).await;
+
+    Ok(session_id)
+}
+
+/// Detach from current process
+#[tauri::command]
+pub async fn detach_process(
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), String> {
+    let mut state = state.lock().await;
+
+    // Clear executor session
+    state.executor.clear_session().await;
+
+    // Unload script if exists
+    if let (Some(session_id), Some(script_id)) = (&state.session_id, &state.script_id) {
+        let _ = state.frida_manager.unload_script(session_id, script_id).await;
+    }
+
+    // Detach from process
+    if let Some(session_id) = state.session_id.take() {
+        state.frida_manager.detach(&session_id).await
+            .map_err(|e: FridaError| e.to_string())?;
+    }
+
+    state.script_id = None;
+
+    Ok(())
+}
+
+/// Execute an action (direct RPC call to target)
+#[tauri::command]
+pub async fn execute_action(
+    state: State<'_, Arc<Mutex<AppState>>>,
+    action_type: String,
+    params: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let state = state.lock().await;
+
+    let session_id = state.session_id.as_ref()
+        .ok_or("Not attached to any process")?;
+
+    let script_id = state.script_id.as_ref()
+        .ok_or("No script injected")?;
+
+    // Build RPC request for executeTargetNode
+    let request = serde_json::json!({
+        "id": 1,
+        "node_type": action_type,
+        "config": params.get("config").cloned().unwrap_or(serde_json::json!({})),
+        "inputs": params.get("inputs").cloned().unwrap_or(serde_json::json!({})),
+    });
+
+    state.frida_manager
+        .call_rpc(session_id, script_id, "executeTargetNode", vec![request])
+        .await
+        .map_err(|e: FridaError| e.to_string())
+}
+
+/// Trigger a UI event (e.g., button click, toggle change)
+/// This will find and execute any scripts bound to the component
+#[tauri::command]
+pub async fn trigger_ui_event(
+    state: State<'_, Arc<Mutex<AppState>>>,
+    component_id: String,
+    event_type: String,
+    value: serde_json::Value,
+) -> Result<(), String> {
+    let state = state.lock().await;
+
+    // Sync component value
+    state.sync_component_value(&component_id, value.clone()).await;
+
+    // Find scripts that listen to this component's events
+    if let Some(config) = &state.config {
+        for script in &config.scripts {
+            // Look for event_ui nodes that match this component
+            for node in &script.nodes {
+                if node.node_type == "event_ui" {
+                    let node_component_id = node.config.get("componentId")
+                        .and_then(|v| v.as_str());
+                    let node_event_type = node.config.get("eventType")
+                        .and_then(|v| v.as_str());
+
+                    if node_component_id == Some(&component_id)
+                        && node_event_type == Some(&event_type)
+                    {
+                        // Convert script to executor format and execute
+                        // For now, log it - full execution needs Script conversion
+                        tracing::info!(
+                            "Would trigger script '{}' node '{}' for component '{}' event '{}'",
+                            script.name,
+                            node.id,
+                            component_id,
+                            event_type
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Get a component's current value
+#[tauri::command]
+pub async fn get_component_value(
+    state: State<'_, Arc<Mutex<AppState>>>,
+    component_id: String,
+) -> Result<serde_json::Value, String> {
+    let state = state.lock().await;
+    let values = state.component_values.read().await;
+
+    Ok(values.get(&component_id).cloned().unwrap_or(serde_json::Value::Null))
+}
+
+/// Set a component's value
+#[tauri::command]
+pub async fn set_component_value(
+    state: State<'_, Arc<Mutex<AppState>>>,
+    component_id: String,
+    value: serde_json::Value,
+) -> Result<(), String> {
+    let state = state.lock().await;
+    let mut values = state.component_values.write().await;
+
+    values.insert(component_id, value);
+    Ok(())
+}
+
+/// Demo configuration for development
+fn get_demo_config() -> ProjectConfig {
+    ProjectConfig {
+        name: "Demo Project".to_string(),
+        target_process: None,
+        canvas: crate::state::CanvasSettings {
+            width: 400,
+            height: 500,
+            padding: 12,
+            gap: 8,
+        },
+        components: vec![
+            crate::state::UIComponent {
+                id: "label1".to_string(),
+                component_type: "label".to_string(),
+                label: "Demo Project".to_string(),
+                x: 0,
+                y: 0,
+                width: 376,
+                height: 32,
+                props: serde_json::json!({ "fontSize": 18, "bold": true, "align": "center" }),
+                parent_id: None,
+                children: None,
+                z_index: 1,
+                visible: Some(true),
+                width_mode: Some("fill".to_string()),
+                height_mode: Some("fixed".to_string()),
+            },
+            crate::state::UIComponent {
+                id: "toggle1".to_string(),
+                component_type: "toggle".to_string(),
+                label: "God Mode".to_string(),
+                x: 0,
+                y: 0,
+                width: 376,
+                height: 36,
+                props: serde_json::json!({ "defaultValue": false }),
+                parent_id: None,
+                children: None,
+                z_index: 2,
+                visible: Some(true),
+                width_mode: Some("fill".to_string()),
+                height_mode: Some("fixed".to_string()),
+            },
+            crate::state::UIComponent {
+                id: "slider1".to_string(),
+                component_type: "slider".to_string(),
+                label: "Health".to_string(),
+                x: 0,
+                y: 0,
+                width: 376,
+                height: 48,
+                props: serde_json::json!({ "min": 0, "max": 100, "defaultValue": 100 }),
+                parent_id: None,
+                children: None,
+                z_index: 3,
+                visible: Some(true),
+                width_mode: Some("fill".to_string()),
+                height_mode: Some("fixed".to_string()),
+            },
+            crate::state::UIComponent {
+                id: "button1".to_string(),
+                component_type: "button".to_string(),
+                label: "Add Money".to_string(),
+                x: 0,
+                y: 0,
+                width: 376,
+                height: 36,
+                props: serde_json::json!({}),
+                parent_id: None,
+                children: None,
+                z_index: 4,
+                visible: Some(true),
+                width_mode: Some("fill".to_string()),
+                height_mode: Some("fixed".to_string()),
+            },
+        ],
+        scripts: vec![],
+    }
+}
