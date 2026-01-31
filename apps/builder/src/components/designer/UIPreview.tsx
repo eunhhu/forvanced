@@ -61,6 +61,13 @@ export const UIPreview: Component<UIPreviewProps> = (props) => {
           const dropdownOpts = (comp.props?.options ?? []) as string[];
           values.set(comp.id, dropdownOpts[0] ?? "");
           break;
+        case "page":
+          // Initialize page with first tab as active
+          const pageTabs = (comp.props?.tabs ?? []) as Array<{id: string; label: string}>;
+          if (pageTabs.length > 0) {
+            values.set(comp.id, pageTabs[0].id);
+          }
+          break;
       }
     }
     setComponentValues(values);
@@ -155,6 +162,7 @@ export const UIPreview: Component<UIPreviewProps> = (props) => {
                         getValue={getValue}
                         setValue={setValue}
                         gap={canvasGap()}
+                        parentDirection="vertical"
                       />
                     )}
                   </For>
@@ -189,11 +197,61 @@ interface PreviewComponentProps {
   getValue: (id: string) => unknown;
   setValue: (id: string, value: unknown) => void;
   gap: number;
+  parentDirection?: "horizontal" | "vertical";
 }
 
 const PreviewComponent: Component<PreviewComponentProps> = (props) => {
   const comp = () => props.component;
   const children = () => props.getChildren(comp().id);
+
+  // Calculate width/height based on sizing mode
+  const getWidth = () => {
+    const mode = comp().widthMode ?? "fill"; // default fill for stack layout
+    switch (mode) {
+      case "fixed":
+        return `${comp().width}px`;
+      case "fill":
+        return "100%";
+      case "hug":
+        return "auto";
+      default:
+        return "100%";
+    }
+  };
+
+  const getHeight = () => {
+    const mode = comp().heightMode ?? "fixed";
+    switch (mode) {
+      case "fixed":
+        return `${comp().height}px`;
+      case "fill":
+        return "100%";
+      case "hug":
+        return "auto";
+      default:
+        return undefined;
+    }
+  };
+
+  // Get flex grow based on sizing mode and parent direction
+  const getFlexGrow = () => {
+    const dir = props.parentDirection ?? "vertical";
+    if (dir === "vertical" && comp().heightMode === "fill") return 1;
+    if (dir === "horizontal" && comp().widthMode === "fill") return 1;
+    return 0;
+  };
+
+  const getFlexShrink = () => {
+    const wMode = comp().widthMode ?? "fill";
+    const hMode = comp().heightMode ?? "fixed";
+    // Don't shrink fixed size elements
+    if (wMode === "fixed" && hMode === "fixed") return 0;
+    return 1;
+  };
+
+  // Consistent font size: 14px base, 12px for secondary text
+  const baseFontSize = 14;
+  const secondaryFontSize = 12;
 
   const renderComponent = () => {
     switch (comp().type) {
@@ -202,7 +260,7 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
           <div
             class="text-foreground"
             style={{
-              "font-size": `${comp().props?.fontSize ?? 14}px`,
+              "font-size": `${(comp().props?.fontSize as number) ?? baseFontSize}px`,
               "font-weight": comp().props?.bold ? "bold" : "normal",
               "text-align": ((comp().props?.align as string) ?? "left") as "left" | "center" | "right",
               color: comp().props?.color as string | undefined,
@@ -215,7 +273,13 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
       case "button":
         return (
           <button
-            class="px-4 py-2 bg-accent text-white rounded-md hover:bg-accent/90 active:scale-95 transition-all font-medium"
+            class="px-4 py-2 bg-accent text-white rounded-md hover:bg-accent/90 active:scale-95 transition-all font-medium text-center"
+            style={{
+              "font-size": `${baseFontSize}px`,
+              width: getWidth(),
+              height: comp().heightMode === "fixed" ? `${comp().height}px` : undefined,
+              "min-height": "36px",
+            }}
             onClick={() => {
               console.log(`[Preview] Button clicked: ${comp().label}`);
             }}
@@ -228,7 +292,7 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
         const isOn = () => (props.getValue(comp().id) as boolean) ?? false;
         return (
           <div class="flex items-center justify-between">
-            <span class="text-sm text-foreground">{comp().label}</span>
+            <span class="text-foreground" style={{ "font-size": `${baseFontSize}px` }}>{comp().label}</span>
             <button
               class={`w-12 h-6 rounded-full transition-colors relative ${
                 isOn() ? "bg-accent" : "bg-background-tertiary"
@@ -251,7 +315,7 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
         const max = () => (comp().props?.max as number) ?? 100;
         return (
           <div class="space-y-1">
-            <div class="flex items-center justify-between text-sm">
+            <div class="flex items-center justify-between" style={{ "font-size": `${baseFontSize}px` }}>
               <span class="text-foreground">{comp().label}</span>
               <span class="text-foreground-muted">{sliderValue()}</span>
             </div>
@@ -273,10 +337,11 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
         const inputValue = () => (props.getValue(comp().id) as string) ?? "";
         return (
           <div class="space-y-1">
-            <label class="text-sm text-foreground">{comp().label}</label>
+            <label class="text-foreground" style={{ "font-size": `${baseFontSize}px` }}>{comp().label}</label>
             <input
               type="text"
-              class="w-full px-3 py-2 bg-background border border-border rounded focus:outline-none focus:border-accent text-sm"
+              class="w-full px-3 py-2 bg-background border border-border rounded focus:outline-none focus:border-accent"
+              style={{ "font-size": `${baseFontSize}px` }}
               placeholder={comp().props?.placeholder as string | undefined}
               value={inputValue()}
               onInput={(e) => props.setValue(comp().id, e.currentTarget.value)}
@@ -289,9 +354,10 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
         const options = () => (comp().props?.options ?? []) as string[];
         return (
           <div class="space-y-1">
-            <label class="text-sm text-foreground">{comp().label}</label>
+            <label class="text-foreground" style={{ "font-size": `${baseFontSize}px` }}>{comp().label}</label>
             <select
-              class="w-full px-3 py-2 bg-background border border-border rounded focus:outline-none focus:border-accent text-sm"
+              class="w-full px-3 py-2 bg-background border border-border rounded focus:outline-none focus:border-accent"
+              style={{ "font-size": `${baseFontSize}px` }}
               value={dropdownValue()}
               onChange={(e) => props.setValue(comp().id, e.currentTarget.value)}
             >
@@ -309,20 +375,26 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
         return <div style={{ height: `${comp().props?.height ?? 16}px` }} />;
 
       case "container":
+        const containerGap = () => props.gap;
         return (
           <div
-            class="p-3 rounded-md border"
+            class="p-3 rounded-md border flex flex-col"
             style={{
               "background-color": (comp().props?.backgroundColor as string) ?? "transparent",
               "border-color": (comp().props?.borderColor as string) ?? "var(--border)",
+              height: comp().heightMode === "fill" ? "100%" : (comp().heightMode === "fixed" ? `${comp().height}px` : "auto"),
+              "min-height": comp().heightMode === "hug" ? `${comp().height}px` : undefined,
             }}
           >
             <Show when={comp().label}>
-              <div class="text-xs text-foreground-muted mb-2 font-medium">
+              <div
+                class="text-foreground-muted mb-2 font-medium shrink-0"
+                style={{ "font-size": `${secondaryFontSize}px` }}
+              >
                 {comp().label}
               </div>
             </Show>
-            <div class="flex flex-col" style={{ gap: `${props.gap}px` }}>
+            <div class="flex flex-col flex-1" style={{ gap: `${containerGap()}px` }}>
               <For each={children()}>
                 {(child) => (
                   <PreviewComponent
@@ -330,7 +402,8 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
                     getChildren={props.getChildren}
                     getValue={props.getValue}
                     setValue={props.setValue}
-                    gap={props.gap}
+                    gap={containerGap()}
+                    parentDirection="vertical"
                   />
                 )}
               </For>
@@ -339,14 +412,24 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
         );
 
       case "group":
+        const groupGap = () => props.gap;
         return (
-          <div class="space-y-1">
+          <div
+            class="border border-border rounded-lg overflow-hidden flex flex-col"
+            style={{
+              height: comp().heightMode === "fill" ? "100%" : (comp().heightMode === "fixed" ? `${comp().height}px` : "auto"),
+              "min-height": comp().heightMode === "hug" ? `${comp().height}px` : undefined,
+            }}
+          >
             <Show when={comp().label}>
-              <div class="text-sm font-medium text-foreground mb-1">
-                {comp().label}
+              <div class="h-8 px-3 border-b border-border flex items-center bg-surface shrink-0">
+                <span class="font-medium text-foreground" style={{ "font-size": `${baseFontSize}px` }}>{comp().label}</span>
               </div>
             </Show>
-            <div class="flex flex-col" style={{ gap: `${props.gap}px` }}>
+            <div
+              class="flex flex-col flex-1 overflow-auto p-2"
+              style={{ gap: `${groupGap()}px` }}
+            >
               <For each={children()}>
                 {(child) => (
                   <PreviewComponent
@@ -354,7 +437,8 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
                     getChildren={props.getChildren}
                     getValue={props.getValue}
                     setValue={props.setValue}
-                    gap={props.gap}
+                    gap={groupGap()}
+                    parentDirection="vertical"
                   />
                 )}
               </For>
@@ -365,14 +449,18 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
       case "stack":
         const direction = () => (comp().props?.direction as string) ?? "vertical";
         const stackGap = () => (comp().props?.gap as number) ?? props.gap;
+        const stackPadding = () => (comp().props?.padding as number) ?? 0;
         return (
           <div
-            class="flex"
+            class="flex border-2 border-dashed border-accent/20 rounded-lg"
             style={{
               "flex-direction": direction() === "horizontal" ? "row" : "column",
               gap: `${stackGap()}px`,
               "align-items": (comp().props?.align as string) ?? "stretch",
-              padding: comp().props?.padding ? `${comp().props.padding}px` : undefined,
+              "justify-content": (comp().props?.justify as string) ?? "start",
+              padding: `${stackPadding()}px`,
+              height: comp().heightMode === "fill" ? "100%" : (comp().heightMode === "fixed" ? `${comp().height}px` : "auto"),
+              "min-height": comp().heightMode === "hug" ? `${comp().height}px` : undefined,
             }}
           >
             <For each={children()}>
@@ -383,6 +471,7 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
                   getValue={props.getValue}
                   setValue={props.setValue}
                   gap={stackGap()}
+                  parentDirection={direction() as "horizontal" | "vertical"}
                 />
               )}
             </For>
@@ -391,20 +480,43 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
 
       case "page":
         const tabs = () => (comp().props?.tabs as Array<{id: string; label: string}>) ?? [];
-        const activeTab = () => (props.getValue(comp().id) as string) ?? tabs()[0]?.id;
-        const pageChildren = () => children().filter(c => c.props?.tabId === activeTab());
+        const activeTabId = () => {
+          const savedValue = props.getValue(comp().id) as string | undefined;
+          if (savedValue) return savedValue;
+          return tabs()[0]?.id ?? "";
+        };
+        const activeTabIndex = () => tabs().findIndex(t => t.id === activeTabId());
+        const pageChildren = () => {
+          const atId = activeTabId();
+          const atIdx = activeTabIndex();
+          return children().filter(c => {
+            const childTabId = c.props?.tabId as string | undefined;
+            // Show children:
+            // 1. If child has matching tabId
+            // 2. If child has no tabId and we're on first tab (default behavior)
+            if (childTabId === atId) return true;
+            if (!childTabId && atIdx === 0) return true;
+            return false;
+          });
+        };
+        const pagePadding = () => (comp().props?.padding as number) ?? 8;
+        const pageGap = () => (comp().props?.gap as number) ?? props.gap;
         return (
-          <div class="flex flex-col">
+          <div
+            class="flex flex-col border border-border rounded-lg overflow-hidden bg-surface"
+            style={{ height: comp().heightMode === "fill" ? "100%" : `${comp().height}px` }}
+          >
             {/* Tab bar */}
-            <div class="flex border-b border-border">
+            <div class="flex border-b border-border bg-background-secondary shrink-0">
               <For each={tabs()}>
                 {(tab) => (
                   <button
-                    class={`px-4 py-2 text-sm font-medium transition-colors ${
-                      activeTab() === tab.id
-                        ? "text-accent border-b-2 border-accent"
+                    class={`px-4 py-2 font-medium transition-colors ${
+                      activeTabId() === tab.id
+                        ? "text-accent border-b-2 border-accent bg-surface"
                         : "text-foreground-muted hover:text-foreground"
                     }`}
+                    style={{ "font-size": `${baseFontSize}px` }}
                     onClick={() => props.setValue(comp().id, tab.id)}
                   >
                     {tab.label}
@@ -413,65 +525,56 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
               </For>
             </div>
             {/* Tab content */}
-            <div class="flex flex-col" style={{ gap: `${props.gap}px`, padding: `${props.gap}px 0` }}>
-              <For each={pageChildren()}>
-                {(child) => (
-                  <PreviewComponent
-                    component={child}
-                    getChildren={props.getChildren}
-                    getValue={props.getValue}
-                    setValue={props.setValue}
-                    gap={props.gap}
-                  />
-                )}
-              </For>
+            <div
+              class="flex flex-col flex-1 overflow-auto"
+              style={{
+                gap: `${pageGap()}px`,
+                padding: `${pagePadding()}px`,
+              }}
+            >
+              <Show when={pageChildren().length > 0} fallback={
+                <div
+                  class="flex-1 flex items-center justify-center text-foreground-muted"
+                  style={{ "font-size": `${secondaryFontSize}px` }}
+                >
+                  No components in this tab
+                </div>
+              }>
+                <For each={pageChildren()}>
+                  {(child) => (
+                    <PreviewComponent
+                      component={child}
+                      getChildren={props.getChildren}
+                      getValue={props.getValue}
+                      setValue={props.setValue}
+                      gap={pageGap()}
+                      parentDirection="vertical"
+                    />
+                  )}
+                </For>
+              </Show>
             </div>
           </div>
         );
 
       case "scroll":
+        const scrollDir = () => (comp().props?.direction as string) ?? "vertical";
+        const scrollGap = () => (comp().props?.gap as number) ?? props.gap;
+        const scrollPadding = () => (comp().props?.padding as number) ?? 8;
         return (
           <div
-            class="overflow-auto"
+            class="overflow-auto border border-border rounded-lg bg-surface"
             style={{
-              "max-height": comp().props?.maxHeight ? `${comp().props.maxHeight}px` : "300px",
+              height: comp().heightMode === "fill" ? "100%" : `${comp().height}px`,
+              "max-height": comp().props?.maxHeight ? `${comp().props.maxHeight}px` : undefined,
             }}
           >
-            <div class="flex flex-col" style={{ gap: `${props.gap}px` }}>
-              <For each={children()}>
-                {(child) => (
-                  <PreviewComponent
-                    component={child}
-                    getChildren={props.getChildren}
-                    getValue={props.getValue}
-                    setValue={props.setValue}
-                    gap={props.gap}
-                  />
-                )}
-              </For>
-            </div>
-          </div>
-        );
-
-      case "card":
-        return (
-          <div
-            class="rounded-lg border overflow-hidden"
-            style={{
-              "background-color": (comp().props?.backgroundColor as string) ?? "var(--surface)",
-              "border-color": (comp().props?.borderColor as string) ?? "var(--border)",
-            }}
-          >
-            <Show when={comp().label || comp().props?.showHeader}>
-              <div class="px-4 py-2 border-b border-border bg-background/50">
-                <span class="text-sm font-medium">{comp().label || "Card"}</span>
-              </div>
-            </Show>
             <div
-              class="flex flex-col"
+              class="flex"
               style={{
-                padding: `${comp().props?.padding ?? 12}px`,
-                gap: `${props.gap}px`,
+                "flex-direction": scrollDir() === "horizontal" ? "row" : "column",
+                gap: `${scrollGap()}px`,
+                padding: `${scrollPadding()}px`,
               }}
             >
               <For each={children()}>
@@ -481,7 +584,51 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
                     getChildren={props.getChildren}
                     getValue={props.getValue}
                     setValue={props.setValue}
-                    gap={props.gap}
+                    gap={scrollGap()}
+                    parentDirection={scrollDir() as "horizontal" | "vertical"}
+                  />
+                )}
+              </For>
+            </div>
+          </div>
+        );
+
+      case "card":
+        const cardPadding = () => (comp().props?.padding as number) ?? 16;
+        const cardGap = () => props.gap;
+        const cardElevation = () => (comp().props?.elevation as number) ?? 1;
+        return (
+          <div
+            class="rounded-lg border overflow-hidden flex flex-col"
+            style={{
+              "background-color": (comp().props?.backgroundColor as string) ?? "var(--surface)",
+              "border-color": (comp().props?.borderColor as string) ?? "var(--border)",
+              height: comp().heightMode === "fill" ? "100%" : (comp().heightMode === "fixed" ? `${comp().height}px` : "auto"),
+              "min-height": comp().heightMode === "hug" ? `${comp().height}px` : undefined,
+              "box-shadow": cardElevation() > 0 ? `0 ${cardElevation() * 2}px ${cardElevation() * 8}px rgba(0,0,0,0.15)` : "none",
+            }}
+          >
+            <Show when={comp().props?.showHeader !== false}>
+              <div class="px-4 py-2 border-b border-border bg-background/50 shrink-0">
+                <span class="font-medium" style={{ "font-size": `${baseFontSize}px` }}>{(comp().props?.title as string) ?? comp().label ?? "Card"}</span>
+              </div>
+            </Show>
+            <div
+              class="flex flex-col flex-1 overflow-auto"
+              style={{
+                padding: `${cardPadding()}px`,
+                gap: `${cardGap()}px`,
+              }}
+            >
+              <For each={children()}>
+                {(child) => (
+                  <PreviewComponent
+                    component={child}
+                    getChildren={props.getChildren}
+                    getValue={props.getValue}
+                    setValue={props.setValue}
+                    gap={cardGap()}
+                    parentDirection="vertical"
                   />
                 )}
               </For>
@@ -498,7 +645,38 @@ const PreviewComponent: Component<PreviewComponentProps> = (props) => {
     }
   };
 
-  return <div class="w-full">{renderComponent()}</div>;
+  // For most components, we let them handle their own sizing
+  // For container types that manage their own layout, we return directly
+  const isLayoutContainer = () => ["page", "stack", "scroll", "card", "group", "container"].includes(comp().type);
+
+  if (isLayoutContainer()) {
+    return (
+      <div
+        style={{
+          width: getWidth(),
+          height: getHeight(),
+          "flex-grow": getFlexGrow(),
+          "flex-shrink": getFlexShrink(),
+          "min-width": comp().widthMode === "hug" ? `${comp().width}px` : undefined,
+          "min-height": comp().heightMode === "hug" ? `${comp().height}px` : undefined,
+        }}
+      >
+        {renderComponent()}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        width: getWidth(),
+        "flex-grow": getFlexGrow(),
+        "flex-shrink": getFlexShrink(),
+      }}
+    >
+      {renderComponent()}
+    </div>
+  );
 };
 
 export default UIPreview;
