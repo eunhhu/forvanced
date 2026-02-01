@@ -1,9 +1,14 @@
 //! Tauri commands for runtime
 
-use crate::state::{AppState, ProjectConfig};
+use crate::state::{AppState, ProjectConfig, Script as ConfigScript};
 use async_trait::async_trait;
+use forvanced_executor::script::{
+    Connection, Script as ExecutorScript, ScriptNode as ExecutorScriptNode,
+};
+use forvanced_executor::value::Value;
 use forvanced_executor::{rpc::generate_target_script, RpcCaller};
 use forvanced_frida::FridaError;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
@@ -182,15 +187,45 @@ pub async fn trigger_ui_event(
                     if node_component_id == Some(&component_id)
                         && node_event_type == Some(&event_type)
                     {
-                        // Convert script to executor format and execute
-                        // For now, log it - full execution needs Script conversion
+                        // Convert and execute the script
+                        let executor_script = convert_config_script_to_executor(script);
+                        let event_value = Value::from(value.clone());
+
                         tracing::info!(
-                            "Would trigger script '{}' node '{}' for component '{}' event '{}'",
+                            "Executing script '{}' node '{}' for component '{}' event '{}'",
                             script.name,
                             node.id,
                             component_id,
                             event_type
                         );
+
+                        match state.executor
+                            .execute_from_event(
+                                executor_script,
+                                &node.id,
+                                event_value,
+                                Some(component_id.clone()),
+                            )
+                            .await
+                        {
+                            Ok(result) => {
+                                if result.success {
+                                    tracing::info!("Script '{}' executed successfully", script.name);
+                                    for log in &result.logs {
+                                        tracing::info!("Script log: {}", log);
+                                    }
+                                } else {
+                                    tracing::error!(
+                                        "Script '{}' failed: {:?}",
+                                        script.name,
+                                        result.error
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!("Script execution error: {}", e);
+                            }
+                        }
                     }
                 }
             }
@@ -198,6 +233,56 @@ pub async fn trigger_ui_event(
     }
 
     Ok(())
+}
+
+/// Convert a config Script to executor Script format
+fn convert_config_script_to_executor(script: &ConfigScript) -> ExecutorScript {
+    // The config script has minimal node data - we need to build full nodes
+    // For now, create basic nodes from the config
+    let nodes = script
+        .nodes
+        .iter()
+        .map(|n| {
+            // Extract config as HashMap
+            let config: HashMap<String, serde_json::Value> = n
+                .config
+                .as_object()
+                .map(|obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+                .unwrap_or_default();
+
+            ExecutorScriptNode {
+                id: n.id.clone(),
+                node_type: n.node_type.clone(),
+                label: n.node_type.clone(), // Use node_type as label since config doesn't have it
+                x: 0.0,
+                y: 0.0,
+                config,
+                inputs: vec![], // Will be populated from node registry
+                outputs: vec![],
+            }
+        })
+        .collect();
+
+    let connections = script
+        .connections
+        .iter()
+        .map(|c| Connection {
+            id: c.id.clone(),
+            from_node_id: c.source_node.clone(),
+            from_port_id: c.source_port.clone(),
+            to_node_id: c.target_node.clone(),
+            to_port_id: c.target_port.clone(),
+        })
+        .collect();
+
+    ExecutorScript {
+        id: script.id.clone(),
+        name: script.name.clone(),
+        description: None,
+        variables: vec![],
+        nodes,
+        connections,
+    }
 }
 
 /// Get a component's current value

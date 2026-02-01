@@ -91,6 +91,10 @@ export const TestPanel: Component = () => {
   const [isRunning, setIsRunning] = createSignal(false);
   const [logs, setLogs] = createSignal<LogEntry[]>([]);
 
+  // Interval timer refs
+  let intervalTimers: Map<string, number> = new Map();
+  let tickCounts: Map<string, number> = new Map();
+
   // UI State
   const [activeSection, setActiveSection] = createSignal<"device" | "script">(
     "device",
@@ -353,7 +357,12 @@ export const TestPanel: Component = () => {
       const events = eventNodes();
       const scriptData = convertScript(script);
 
-      for (const eventNode of events) {
+      // Separate interval events from one-time events
+      const intervalEvents = events.filter((e) => e.type === "event_interval");
+      const oneTimeEvents = events.filter((e) => e.type !== "event_interval");
+
+      // Execute one-time events immediately
+      for (const eventNode of oneTimeEvents) {
         addLog("exec", `Trigger: ${eventNode.label}`);
 
         const result = await executeScript(
@@ -373,15 +382,73 @@ export const TestPanel: Component = () => {
         }
       }
 
-      addLog("info", "Execution complete");
+      // Set up interval events with timers
+      for (const eventNode of intervalEvents) {
+        const intervalMs = ((eventNode.config.interval as number) ?? 1000);
+        tickCounts.set(eventNode.id, 0);
+
+        addLog("info", `Starting interval: ${eventNode.label} (${intervalMs}ms)`);
+
+        // Execute immediately for tick 1
+        await executeIntervalTick(scriptData, eventNode, 1);
+
+        // Set up repeating timer
+        const timerId = window.setInterval(async () => {
+          const currentTick = (tickCounts.get(eventNode.id) ?? 0) + 1;
+          tickCounts.set(eventNode.id, currentTick);
+          await executeIntervalTick(scriptData, eventNode, currentTick + 1);
+        }, intervalMs);
+
+        intervalTimers.set(eventNode.id, timerId);
+      }
+
+      // If no interval events, we're done
+      if (intervalEvents.length === 0) {
+        addLog("info", "Execution complete");
+        setIsRunning(false);
+      } else {
+        addLog("info", `${intervalEvents.length} interval(s) running. Click Stop to end.`);
+      }
     } catch (error) {
       addLog("error", `Error: ${error}`);
-    } finally {
-      setIsRunning(false);
+      handleStop();
+    }
+  };
+
+  const executeIntervalTick = async (
+    scriptData: ScriptData,
+    eventNode: ScriptNode,
+    tick: number,
+  ) => {
+    try {
+      const result = await executeScript(
+        scriptData,
+        eventNode.id,
+        tick, // Pass tick count as event value
+        undefined,
+      );
+
+      if (result.success) {
+        for (const log of result.logs) {
+          addLog("debug", `[${eventNode.label}#${tick}] ${log}`);
+        }
+      } else {
+        addLog("error", `✗ ${eventNode.label}#${tick}: ${result.error}`);
+      }
+    } catch (error) {
+      addLog("error", `Interval error: ${error}`);
     }
   };
 
   const handleStop = () => {
+    // Clear all interval timers
+    for (const [nodeId, timerId] of intervalTimers.entries()) {
+      window.clearInterval(timerId);
+      addLog("info", `Stopped interval for node ${nodeId.substring(0, 8)}...`);
+    }
+    intervalTimers.clear();
+    tickCounts.clear();
+
     setIsRunning(false);
     addLog("info", "Stopped");
   };
