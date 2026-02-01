@@ -165,6 +165,8 @@ function getMockResponse<T>(cmd: string, args?: Record<string, unknown>): T {
     get_ui_value: null,
     get_all_ui_values: {},
     set_ui_values_batch: undefined,
+    clear_script_state: undefined,
+    clear_all_script_states: undefined,
   };
 
   return (mocks[cmd] ?? null) as T;
@@ -443,4 +445,18 @@ export async function setUiValuesBatch(
   values: Record<string, unknown>,
 ): Promise<void> {
   return invoke<void>("set_ui_values_batch", { values });
+}
+
+/**
+ * Clear script state (reset variables) for a specific script.
+ */
+export async function clearScriptState(scriptId: string): Promise<void> {
+  return invoke<void>("clear_script_state", { scriptId });
+}
+
+/**
+ * Clear all script states (reset all variables).
+ */
+export async function clearAllScriptStates(): Promise<void> {
+  return invoke<void>("clear_all_script_states");
 }

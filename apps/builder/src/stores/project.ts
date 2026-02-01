@@ -370,6 +370,10 @@ function createProjectStore() {
       // Clear and set scripts in script store
       scriptStore.clearScripts();
       scriptStore.setScriptsFromProject(project.scripts);
+      // Load UI components into designer store (lazy import to avoid circular dependency)
+      import("./designer").then(({ designerStore }) => {
+        designerStore.loadFromProject();
+      });
       return project;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -435,6 +439,10 @@ function createProjectStore() {
       setIsDirty(false);
       // Load scripts into script store
       scriptStore.setScriptsFromProject(project.scripts);
+      // Load UI components into designer store (lazy import to avoid circular dependency)
+      import("./designer").then(({ designerStore }) => {
+        designerStore.loadFromProject();
+      });
       return project;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

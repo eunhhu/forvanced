@@ -397,3 +397,26 @@ pub async fn set_ui_values_batch(
     }
     Ok(())
 }
+
+/// Clear script state (reset variables) for a specific script
+#[tauri::command]
+pub async fn clear_script_state(
+    executor_state: State<'_, ExecutorState>,
+    script_id: String,
+) -> Result<(), String> {
+    info!("clear_script_state called: script_id={}", script_id);
+    let executor = executor_state.executor.read().await;
+    executor.clear_script_state(&script_id).await;
+    Ok(())
+}
+
+/// Clear all script states (reset all variables)
+#[tauri::command]
+pub async fn clear_all_script_states(
+    executor_state: State<'_, ExecutorState>,
+) -> Result<(), String> {
+    info!("clear_all_script_states called");
+    let executor = executor_state.executor.read().await;
+    executor.clear_all_states().await;
+    Ok(())
+}

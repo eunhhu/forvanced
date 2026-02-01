@@ -23,6 +23,7 @@ import {
   setExecutorSession,
   clearExecutorSession,
   setUiValuesBatch,
+  clearAllScriptStates,
   type DeviceInfo,
   type ProcessInfo,
   type FridaMessageEvent,
@@ -384,7 +385,8 @@ export const TestPanel: Component = () => {
 
       // Set up interval events with timers
       for (const eventNode of intervalEvents) {
-        const intervalMs = ((eventNode.config.interval as number) ?? 1000);
+        // Check both 'intervalMs' (default config) and 'interval' (legacy/alternative)
+        const intervalMs = (eventNode.config.intervalMs as number) ?? (eventNode.config.interval as number) ?? 1000;
         tickCounts.set(eventNode.id, 0);
 
         addLog("info", `Starting interval: ${eventNode.label} (${intervalMs}ms)`);
@@ -440,7 +442,7 @@ export const TestPanel: Component = () => {
     }
   };
 
-  const handleStop = () => {
+  const handleStop = async () => {
     // Clear all interval timers
     for (const [nodeId, timerId] of intervalTimers.entries()) {
       window.clearInterval(timerId);
@@ -448,6 +450,14 @@ export const TestPanel: Component = () => {
     }
     intervalTimers.clear();
     tickCounts.clear();
+
+    // Reset all script variable states
+    try {
+      await clearAllScriptStates();
+      addLog("info", "Variable states reset");
+    } catch (error) {
+      addLog("warn", `Failed to reset variables: ${error}`);
+    }
 
     setIsRunning(false);
     addLog("info", "Stopped");
