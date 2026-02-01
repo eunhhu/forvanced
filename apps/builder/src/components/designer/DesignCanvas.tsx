@@ -587,6 +587,52 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
     return classes.join(" ");
   };
 
+  // ============================================
+  // Sizing logic - EXACTLY matching UIPreview
+  // ============================================
+  const getWidth = () => {
+    const mode = widthMode();
+    switch (mode) {
+      case "fixed":
+        return `${props.component.width}px`;
+      case "fill":
+        return "100%";
+      case "hug":
+        return "auto";
+      default:
+        return "100%";
+    }
+  };
+
+  const getHeight = () => {
+    const mode = heightMode();
+    switch (mode) {
+      case "fixed":
+        return `${props.component.height}px`;
+      case "fill":
+        return "100%";
+      case "hug":
+        return "auto";
+      default:
+        return undefined;
+    }
+  };
+
+  const getFlexGrow = () => {
+    const dir = parentDir();
+    if (dir === "vertical" && heightMode() === "fill") return 1;
+    if (dir === "horizontal" && widthMode() === "fill") return 1;
+    return 0;
+  };
+
+  const getFlexShrink = () => {
+    const wMode = widthMode();
+    const hMode = heightMode();
+    // Don't shrink fixed size elements
+    if (wMode === "fixed" && hMode === "fixed") return 0;
+    return 1;
+  };
+
   // Calculate style based on sizing mode - matching UIPreview logic exactly
   const getComponentStyle = () => {
     if (!props.inAutoLayout) {
@@ -599,70 +645,25 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
       };
     }
 
-    const style: Record<string, string | number | undefined> = {};
-    const dir = parentDir();
-
-    // Width handling
-    const wMode = widthMode();
-    if (wMode === "fixed") {
-      style.width = `${props.component.width}px`;
-    } else if (wMode === "hug") {
-      style.width = "auto";
-      style["min-width"] = `${props.component.width}px`;
-    } else if (wMode === "fill") {
-      // In horizontal stack: fill = flex-grow (don't set width)
-      // In vertical stack: fill = 100% width (cross-axis stretch)
-      if (dir === "horizontal") {
-        style["flex-grow"] = 1;
-      } else {
-        style.width = "100%";
-      }
-    }
-
-    // Height handling
-    const hMode = heightMode();
+    // For auto-layout, use same logic as UIPreview
     if (isLayoutContainer()) {
-      // Container components need explicit sizing
-      if (hMode === "fixed") {
-        style.height = `${props.component.height}px`;
-      } else if (hMode === "hug") {
-        style.height = "auto";
-        style["min-height"] = `${props.component.height}px`;
-      } else if (hMode === "fill") {
-        // In vertical stack: fill = flex-grow
-        // In horizontal stack: fill = 100% height (cross-axis stretch)
-        if (dir === "vertical") {
-          style["flex-grow"] = 1;
-          style["min-height"] = `${props.component.height}px`;
-        } else {
-          style.height = "100%";
-        }
-      }
-    } else {
-      // Content components (button, input, etc.) - let content determine height
-      // Only apply explicit height for "fixed" mode on specific components
-      if (
-        hMode === "fixed" &&
-        ["button", "spacer"].includes(props.component.type)
-      ) {
-        style.height = `${props.component.height}px`;
-      } else if (hMode === "hug") {
-        style.height = "auto";
-      }
-      // For fill in content components in vertical stack, use flex-grow
-      if (hMode === "fill" && dir === "vertical") {
-        style["flex-grow"] = 1;
-      }
+      // Container components - full sizing control
+      return {
+        width: getWidth(),
+        height: getHeight(),
+        "flex-grow": getFlexGrow(),
+        "flex-shrink": getFlexShrink(),
+        "min-width": widthMode() === "hug" ? `${props.component.width}px` : undefined,
+        "min-height": heightMode() === "hug" ? `${props.component.height}px` : undefined,
+      };
     }
 
-    // Flex-shrink: don't shrink fixed elements
-    if (wMode === "fixed" && hMode === "fixed") {
-      style["flex-shrink"] = 0;
-    } else {
-      style["flex-shrink"] = 1;
-    }
-
-    return style;
+    // Content components - width controlled, height auto
+    return {
+      width: getWidth(),
+      "flex-grow": getFlexGrow(),
+      "flex-shrink": getFlexShrink(),
+    };
   };
 
   return (
