@@ -13,6 +13,8 @@ import {
   type ValueType,
   type UIEventType,
   nodeTemplates,
+  getPortTypeSchema,
+  formatTypeSchema,
 } from "@/stores/script";
 import { designerStore } from "@/stores/designer";
 import {
@@ -1160,6 +1162,118 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
               If unchecked, app starts paused. Use for early instrumentation.
             </div>
           </Show>
+
+          {/* Port Info Section - Shows input/output types */}
+          <Show when={props.node.inputs.length > 0 || props.node.outputs.length > 0}>
+            <PortInfoSection node={props.node} />
+          </Show>
+        </div>
+      </Show>
+    </div>
+  );
+};
+
+// Port Info Section - Shows detailed type info for inputs and outputs
+interface PortInfoSectionProps {
+  node: ScriptNode;
+}
+
+const PortInfoSection: Component<PortInfoSectionProps> = (props) => {
+  const [isOpen, setIsOpen] = createSignal(false);
+
+  // Get type display for a port
+  const getPortTypeDisplay = (port: { name: string; type: string; valueType?: string }, isOutput: boolean) => {
+    if (port.type === "flow") {
+      return { type: "flow", detail: null };
+    }
+
+    // Try to get schema-based type info for complex types
+    const schema = getPortTypeSchema(props.node.type, port.name, isOutput);
+    if (schema) {
+      return { type: formatTypeSchema(schema), detail: formatTypeSchema(schema, 0, 4) };
+    }
+
+    // Fall back to simple type
+    return { type: port.valueType || "any", detail: null };
+  };
+
+  const hasComplexTypes = createMemo(() => {
+    // Check if any port has complex type info
+    return props.node.outputs.some((p) => {
+      if (p.type === "flow") return false;
+      const schema = getPortTypeSchema(props.node.type, p.name, true);
+      return schema && (schema.kind === "array" || schema.kind === "object");
+    });
+  });
+
+  return (
+    <div class="pt-2 mt-2 border-t border-border/50">
+      <button
+        class="flex items-center gap-1 text-[10px] text-foreground-muted hover:text-foreground transition-colors"
+        onClick={() => setIsOpen(!isOpen())}
+      >
+        <Show when={isOpen()} fallback={<ChevronRightIcon class="w-2.5 h-2.5" />}>
+          <ChevronDownIcon class="w-2.5 h-2.5" />
+        </Show>
+        <span>Port Types</span>
+        <Show when={hasComplexTypes()}>
+          <span class="px-1 py-0.5 bg-violet-500/20 text-violet-400 rounded text-[8px]">
+            Complex
+          </span>
+        </Show>
+      </button>
+
+      <Show when={isOpen()}>
+        <div class="mt-2 space-y-2">
+          {/* Input ports */}
+          <Show when={props.node.inputs.filter(p => p.type !== "flow").length > 0}>
+            <div>
+              <div class="text-[9px] text-foreground-muted font-medium mb-1">Inputs</div>
+              <div class="space-y-1">
+                <For each={props.node.inputs.filter(p => p.type !== "flow")}>
+                  {(port) => {
+                    const typeInfo = getPortTypeDisplay(port, false);
+                    return (
+                      <div class="flex items-start gap-2 text-[9px] py-0.5 px-1.5 bg-background/50 rounded">
+                        <span class="text-blue-400 font-medium min-w-12">{port.name}</span>
+                        <span class="text-foreground-muted flex-1 font-mono text-[8px]">{typeInfo.type}</span>
+                      </div>
+                    );
+                  }}
+                </For>
+              </div>
+            </div>
+          </Show>
+
+          {/* Output ports */}
+          <Show when={props.node.outputs.filter(p => p.type !== "flow").length > 0}>
+            <div>
+              <div class="text-[9px] text-foreground-muted font-medium mb-1">Outputs</div>
+              <div class="space-y-1">
+                <For each={props.node.outputs.filter(p => p.type !== "flow")}>
+                  {(port) => {
+                    const typeInfo = getPortTypeDisplay(port, true);
+                    return (
+                      <div class="text-[9px] py-0.5 px-1.5 bg-background/50 rounded">
+                        <div class="flex items-start gap-2">
+                          <span class="text-green-400 font-medium min-w-12">{port.name}</span>
+                          <span class="text-foreground-muted flex-1 font-mono text-[8px]">{typeInfo.type}</span>
+                        </div>
+                        {/* Show expanded detail for complex types */}
+                        <Show when={typeInfo.detail && typeInfo.type !== typeInfo.detail}>
+                          <div class="mt-1 pl-2 border-l border-border/50">
+                            <pre class="text-[8px] text-foreground-muted/70 whitespace-pre-wrap font-mono">
+                              {typeInfo.detail}
+                            </pre>
+                          </div>
+                        </Show>
+                      </div>
+                    );
+                  }}
+                </For>
+              </div>
+            </div>
+          </Show>
         </div>
       </Show>
     </div>
@@ -1168,11 +1282,44 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
 
 // Connection Properties
 const ConnectionProperties: Component = () => {
+  const currentScript = createMemo(() => scriptStore.getCurrentScript());
+
   const connection = createMemo(() => {
-    const script = scriptStore.getCurrentScript();
+    const script = currentScript();
     const connId = scriptStore.selectedConnectionId();
     if (!script || !connId) return null;
     return script.connections.find((c) => c.id === connId) ?? null;
+  });
+
+  // Get the connected nodes and ports
+  const connectionInfo = createMemo(() => {
+    const conn = connection();
+    const script = currentScript();
+    if (!conn || !script) return null;
+
+    const fromNode = script.nodes.find((n) => n.id === conn.fromNodeId);
+    const toNode = script.nodes.find((n) => n.id === conn.toNodeId);
+    const fromPort = fromNode?.outputs.find((p) => p.id === conn.fromPortId);
+    const toPort = toNode?.inputs.find((p) => p.id === conn.toPortId);
+
+    if (!fromNode || !toNode || !fromPort || !toPort) return null;
+
+    // Get type info
+    const schema = fromPort.type !== "flow"
+      ? getPortTypeSchema(fromNode.type, fromPort.name, true)
+      : null;
+    const typeDisplay = schema
+      ? formatTypeSchema(schema)
+      : fromPort.valueType || "flow";
+
+    return {
+      fromNode,
+      toNode,
+      fromPort,
+      toPort,
+      typeDisplay,
+      schema,
+    };
   });
 
   const handleDelete = () => {
@@ -1193,9 +1340,42 @@ const ConnectionProperties: Component = () => {
           <TrashIcon class="w-3 h-3 text-error" />
         </button>
       </div>
-      <div class="px-3 pb-3">
-        <div class="text-[10px] text-foreground-muted">
-          Click to select, then delete to remove
+      <div class="px-3 pb-3 space-y-2">
+        <Show when={connectionInfo()}>
+          {(info) => (
+            <>
+              {/* From */}
+              <div class="text-[10px]">
+                <span class="text-foreground-muted">From: </span>
+                <span class="text-green-400 font-medium">{info().fromNode.label}</span>
+                <span class="text-foreground-muted"> → </span>
+                <span class="text-foreground">{info().fromPort.name}</span>
+              </div>
+              {/* To */}
+              <div class="text-[10px]">
+                <span class="text-foreground-muted">To: </span>
+                <span class="text-blue-400 font-medium">{info().toNode.label}</span>
+                <span class="text-foreground-muted"> → </span>
+                <span class="text-foreground">{info().toPort.name}</span>
+              </div>
+              {/* Type */}
+              <div class="text-[10px] pt-1 border-t border-border/50">
+                <span class="text-foreground-muted">Type: </span>
+                <span class="font-mono text-[9px] text-violet-400">{info().typeDisplay}</span>
+              </div>
+              {/* Expanded type info for complex types */}
+              <Show when={info().schema && (info().schema!.kind === "array" || info().schema!.kind === "object")}>
+                <div class="p-1.5 bg-background/50 rounded">
+                  <pre class="text-[8px] text-foreground-muted/70 whitespace-pre-wrap font-mono">
+                    {formatTypeSchema(info().schema!, 0, 4)}
+                  </pre>
+                </div>
+              </Show>
+            </>
+          )}
+        </Show>
+        <div class="text-[9px] text-foreground-muted pt-1">
+          Press Delete or Alt+Click to remove
         </div>
       </div>
     </div>

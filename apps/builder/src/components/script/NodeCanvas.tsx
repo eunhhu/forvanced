@@ -13,6 +13,8 @@ import {
   type ScriptNodeType,
   type Port,
   getNodeContext,
+  getPortTypeSchema,
+  formatTypeSchema,
 } from "@/stores/script";
 import { TrashIcon, IconZap, MemoryIcon } from "@/components/common/Icons";
 import { QuickNodeMenu } from "./QuickNodeMenu";
@@ -34,6 +36,8 @@ const portTypeColors: Record<string, { border: string; bg: string }> = {
   uint64: { border: "border-orange-400", bg: "bg-orange-900" },
   float: { border: "border-cyan-400", bg: "bg-cyan-900" },
   double: { border: "border-cyan-400", bg: "bg-cyan-900" },
+  array: { border: "border-violet-400", bg: "bg-violet-900" },
+  object: { border: "border-amber-400", bg: "bg-amber-900" },
   any: { border: "border-purple-400", bg: "bg-purple-900" },
 };
 
@@ -64,6 +68,8 @@ function getConnectionColor(fromPort: Port | undefined): string {
     uint64: "#f97316",
     float: "#06b6d4",
     double: "#06b6d4",
+    array: "#8b5cf6",
+    object: "#f59e0b",
     any: "#a855f7",
   };
   return colorMap[fromPort.valueType || "any"] || "#a855f7";
@@ -718,6 +724,22 @@ export const NodeCanvas: Component = () => {
 
                 const strokeColor = () => getConnectionColor(fromPort());
 
+                // Get type info for connection tooltip
+                const typeInfo = () => {
+                  const node = fromNode();
+                  const port = fromPort();
+                  if (!node || !port || port.type === "flow") return undefined;
+
+                  // Try to get schema-based type info
+                  const schema = getPortTypeSchema(node.type, port.name, true);
+                  if (schema) {
+                    return formatTypeSchema(schema);
+                  }
+
+                  // Fall back to simple type
+                  return port.valueType || "any";
+                };
+
                 return (
                   <Show when={fromNode() && toNode() && fromPort() && toPort()}>
                     <ConnectionLine
@@ -729,6 +751,7 @@ export const NodeCanvas: Component = () => {
                       isSelected={
                         scriptStore.selectedConnectionId() === conn.id
                       }
+                      typeInfo={typeInfo()}
                       onClick={(e) => {
                         if (e.altKey) {
                           scriptStore.deleteConnection(conn.id);
@@ -890,11 +913,14 @@ interface ConnectionLineProps {
   color: string;
   isSelected?: boolean;
   isDashed?: boolean;
+  typeInfo?: string; // Type information to show on hover
   onClick?: (e: MouseEvent) => void;
   onContextMenu?: (e: MouseEvent) => void;
 }
 
 const ConnectionLine: Component<ConnectionLineProps> = (props) => {
+  const [isHovered, setIsHovered] = createSignal(false);
+
   // Create bezier curve path
   const path = () => {
     const dx = Math.abs(props.x2 - props.x1);
@@ -904,6 +930,29 @@ const ConnectionLine: Component<ConnectionLineProps> = (props) => {
             C ${props.x1 + controlOffset} ${props.y1},
               ${props.x2 - controlOffset} ${props.y2},
               ${props.x2} ${props.y2}`;
+  };
+
+  // Midpoint for type label
+  const midpoint = () => {
+    const t = 0.5;
+    const x1 = props.x1;
+    const y1 = props.y1;
+    const x2 = props.x2;
+    const y2 = props.y2;
+    const dx = Math.abs(x2 - x1);
+    const controlOffset = Math.max(50, dx * 0.5);
+
+    // Bezier curve midpoint calculation
+    const cx1 = x1 + controlOffset;
+    const cy1 = y1;
+    const cx2 = x2 - controlOffset;
+    const cy2 = y2;
+
+    const mt = 1 - t;
+    const x = mt * mt * mt * x1 + 3 * mt * mt * t * cx1 + 3 * mt * t * t * cx2 + t * t * t * x2;
+    const y = mt * mt * mt * y1 + 3 * mt * mt * t * cy1 + 3 * mt * t * t * cy2 + t * t * t * y2;
+
+    return { x, y };
   };
 
   return (
@@ -917,13 +966,15 @@ const ConnectionLine: Component<ConnectionLineProps> = (props) => {
         style={{ cursor: "pointer" }}
         onClick={props.onClick}
         onContextMenu={props.onContextMenu}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
       />
       {/* Visible path */}
       <path
         d={path()}
         fill="none"
         stroke={props.color}
-        stroke-width={props.isSelected ? 3 : 2}
+        stroke-width={props.isSelected ? 3 : isHovered() ? 2.5 : 2}
         stroke-dasharray={props.isDashed ? "5,5" : undefined}
         style={{ "pointer-events": "none" }}
       />
@@ -937,6 +988,32 @@ const ConnectionLine: Component<ConnectionLineProps> = (props) => {
           stroke-opacity={0.3}
           style={{ "pointer-events": "none" }}
         />
+      </Show>
+      {/* Type info label on hover */}
+      <Show when={isHovered() && props.typeInfo}>
+        <g>
+          <rect
+            x={midpoint().x - 40}
+            y={midpoint().y - 12}
+            width="80"
+            height="18"
+            rx="4"
+            fill="rgba(0, 0, 0, 0.85)"
+            stroke={props.color}
+            stroke-width="1"
+          />
+          <text
+            x={midpoint().x}
+            y={midpoint().y + 3}
+            text-anchor="middle"
+            fill="white"
+            font-size="9"
+            font-family="monospace"
+            style={{ "pointer-events": "none" }}
+          >
+            {props.typeInfo}
+          </text>
+        </g>
       </Show>
     </g>
   );

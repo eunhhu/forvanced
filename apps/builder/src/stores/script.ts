@@ -149,7 +149,237 @@ export type ValueType =
   | "pointer"
   | "string"
   | "boolean"
+  | "array"
+  | "object"
   | "any";
+
+// ============================================
+// Type Schema System - Describes complex types
+// ============================================
+
+// Primitive type schema
+export interface PrimitiveTypeSchema {
+  kind: "primitive";
+  type: Exclude<ValueType, "array" | "object" | "any">;
+}
+
+// Array type schema
+export interface ArrayTypeSchema {
+  kind: "array";
+  elementType: TypeSchema;
+  length?: number; // Optional fixed length
+}
+
+// Object type schema (struct-like)
+export interface ObjectTypeSchema {
+  kind: "object";
+  properties: Record<string, TypeSchema>;
+  description?: string;
+}
+
+// Union type schema (one of multiple types)
+export interface UnionTypeSchema {
+  kind: "union";
+  types: TypeSchema[];
+}
+
+// Any type schema (unknown type)
+export interface AnyTypeSchema {
+  kind: "any";
+}
+
+// Combined type schema
+export type TypeSchema =
+  | PrimitiveTypeSchema
+  | ArrayTypeSchema
+  | ObjectTypeSchema
+  | UnionTypeSchema
+  | AnyTypeSchema;
+
+// Helper to create type schemas
+export const TypeSchemas = {
+  primitive: (type: PrimitiveTypeSchema["type"]): PrimitiveTypeSchema => ({
+    kind: "primitive",
+    type,
+  }),
+  array: (elementType: TypeSchema, length?: number): ArrayTypeSchema => ({
+    kind: "array",
+    elementType,
+    length,
+  }),
+  object: (properties: Record<string, TypeSchema>, description?: string): ObjectTypeSchema => ({
+    kind: "object",
+    properties,
+    description,
+  }),
+  union: (...types: TypeSchema[]): UnionTypeSchema => ({
+    kind: "union",
+    types,
+  }),
+  any: (): AnyTypeSchema => ({ kind: "any" }),
+
+  // Shorthand for common types
+  string: (): PrimitiveTypeSchema => ({ kind: "primitive", type: "string" }),
+  int32: (): PrimitiveTypeSchema => ({ kind: "primitive", type: "int32" }),
+  uint32: (): PrimitiveTypeSchema => ({ kind: "primitive", type: "uint32" }),
+  int64: (): PrimitiveTypeSchema => ({ kind: "primitive", type: "int64" }),
+  uint64: (): PrimitiveTypeSchema => ({ kind: "primitive", type: "uint64" }),
+  float: (): PrimitiveTypeSchema => ({ kind: "primitive", type: "float" }),
+  double: (): PrimitiveTypeSchema => ({ kind: "primitive", type: "double" }),
+  boolean: (): PrimitiveTypeSchema => ({ kind: "primitive", type: "boolean" }),
+  pointer: (): PrimitiveTypeSchema => ({ kind: "primitive", type: "pointer" }),
+};
+
+// Format type schema to human-readable string
+export function formatTypeSchema(schema: TypeSchema, depth = 0, maxDepth = 3): string {
+  if (depth >= maxDepth) {
+    return "...";
+  }
+
+  switch (schema.kind) {
+    case "primitive":
+      return schema.type;
+    case "array": {
+      const inner = formatTypeSchema(schema.elementType, depth + 1, maxDepth);
+      return schema.length ? `${inner}[${schema.length}]` : `${inner}[]`;
+    }
+    case "object": {
+      const entries = Object.entries(schema.properties);
+      if (entries.length === 0) return "{}";
+      if (entries.length <= 3 && depth < 2) {
+        const props = entries
+          .map(([k, v]) => `${k}: ${formatTypeSchema(v, depth + 1, maxDepth)}`)
+          .join(", ");
+        return `{${props}}`;
+      }
+      const keys = entries.slice(0, 3).map(([k]) => k).join(", ");
+      return entries.length > 3 ? `{${keys}, ...}` : `{${keys}}`;
+    }
+    case "union": {
+      const types = schema.types.map((t) => formatTypeSchema(t, depth + 1, maxDepth));
+      return types.join(" | ");
+    }
+    case "any":
+      return "any";
+  }
+}
+
+// Well-known complex types used by specific nodes
+export const KnownTypeSchemas = {
+  // Process info returned by process_enumerate
+  ProcessInfo: TypeSchemas.object({
+    pid: TypeSchemas.int32(),
+    name: TypeSchemas.string(),
+    path: TypeSchemas.string(),
+  }, "Process information"),
+
+  // Application info returned by application_enumerate
+  AppInfo: TypeSchemas.object({
+    identifier: TypeSchemas.string(),
+    name: TypeSchemas.string(),
+    pid: TypeSchemas.int32(),
+  }, "Application information"),
+
+  // Device info
+  DeviceInfo: TypeSchemas.object({
+    id: TypeSchemas.string(),
+    name: TypeSchemas.string(),
+    type: TypeSchemas.string(),
+    isConnected: TypeSchemas.boolean(),
+  }, "Device information"),
+
+  // Module info from enumerate_modules
+  ModuleInfo: TypeSchemas.object({
+    name: TypeSchemas.string(),
+    base: TypeSchemas.pointer(),
+    size: TypeSchemas.uint64(),
+    path: TypeSchemas.string(),
+  }, "Module information"),
+
+  // Export info from enumerate_exports
+  ExportInfo: TypeSchemas.object({
+    name: TypeSchemas.string(),
+    address: TypeSchemas.pointer(),
+    type: TypeSchemas.string(),
+  }, "Export information"),
+
+  // Memory range info
+  RangeInfo: TypeSchemas.object({
+    base: TypeSchemas.pointer(),
+    size: TypeSchemas.uint64(),
+    protection: TypeSchemas.string(),
+  }, "Memory range information"),
+
+  // Match result from memory_scan
+  ScanMatch: TypeSchemas.object({
+    address: TypeSchemas.pointer(),
+    size: TypeSchemas.uint32(),
+  }, "Memory scan match"),
+};
+
+// Get the output type schema for a node type and port
+export function getPortTypeSchema(nodeType: ScriptNodeType, portName: string, isOutput: boolean): TypeSchema | null {
+  // Output port type schemas
+  if (isOutput) {
+    switch (nodeType) {
+      case "process_enumerate":
+        if (portName === "processes") {
+          return TypeSchemas.array(KnownTypeSchemas.ProcessInfo);
+        }
+        break;
+      case "application_enumerate":
+        if (portName === "apps") {
+          return TypeSchemas.array(KnownTypeSchemas.AppInfo);
+        }
+        break;
+      case "device_enumerate":
+        if (portName === "devices") {
+          return TypeSchemas.array(KnownTypeSchemas.DeviceInfo);
+        }
+        break;
+      case "device_get_current":
+        if (portName === "device") {
+          return KnownTypeSchemas.DeviceInfo;
+        }
+        break;
+      case "enumerate_modules":
+        if (portName === "modules") {
+          return TypeSchemas.array(KnownTypeSchemas.ModuleInfo);
+        }
+        break;
+      case "enumerate_exports":
+        if (portName === "exports") {
+          return TypeSchemas.array(KnownTypeSchemas.ExportInfo);
+        }
+        break;
+      case "memory_scan":
+        if (portName === "matches") {
+          return TypeSchemas.array(KnownTypeSchemas.ScanMatch);
+        }
+        break;
+      case "get_module":
+        if (portName === "module") {
+          return KnownTypeSchemas.ModuleInfo;
+        }
+        break;
+      case "array_create":
+        if (portName === "array") {
+          return TypeSchemas.array(TypeSchemas.any());
+        }
+        break;
+      case "object_keys":
+        if (portName === "keys") {
+          return TypeSchemas.array(TypeSchemas.string());
+        }
+        break;
+      case "for_each":
+        // element type depends on input array
+        break;
+    }
+  }
+
+  return null;
+}
 
 // Node Execution Context
 // - host: Executes in Rust backend (UI operations, flow control, variables)

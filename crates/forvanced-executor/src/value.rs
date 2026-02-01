@@ -130,6 +130,11 @@ impl Value {
 
     /// Convert to string representation
     pub fn to_string_value(&self) -> String {
+        self.to_string_with_depth(0, 3)
+    }
+
+    /// Convert to string representation with depth limit for nested structures
+    fn to_string_with_depth(&self, current_depth: usize, max_depth: usize) -> String {
         match self {
             Value::Null => "null".to_string(),
             Value::Boolean(b) => b.to_string(),
@@ -137,8 +142,49 @@ impl Value {
             Value::Float(f) => f.to_string(),
             Value::String(s) => s.clone(),
             Value::Pointer(p) => format!("0x{:x}", p),
-            Value::Array(_) => "[Array]".to_string(),
-            Value::Object(_) => "[Object]".to_string(),
+            Value::Array(arr) => {
+                if current_depth >= max_depth {
+                    format!("[Array({})]", arr.len())
+                } else if arr.is_empty() {
+                    "[]".to_string()
+                } else if arr.len() <= 5 {
+                    let items: Vec<String> = arr
+                        .iter()
+                        .map(|v| v.to_string_with_depth(current_depth + 1, max_depth))
+                        .collect();
+                    format!("[{}]", items.join(", "))
+                } else {
+                    let items: Vec<String> = arr
+                        .iter()
+                        .take(3)
+                        .map(|v| v.to_string_with_depth(current_depth + 1, max_depth))
+                        .collect();
+                    format!("[{}, ... ({} more)]", items.join(", "), arr.len() - 3)
+                }
+            }
+            Value::Object(obj) => {
+                if current_depth >= max_depth {
+                    format!("{{Object({})}}", obj.len())
+                } else if obj.is_empty() {
+                    "{}".to_string()
+                } else {
+                    let mut pairs: Vec<String> = obj
+                        .iter()
+                        .take(5)
+                        .map(|(k, v)| {
+                            format!(
+                                "{}: {}",
+                                k,
+                                v.to_string_with_depth(current_depth + 1, max_depth)
+                            )
+                        })
+                        .collect();
+                    if obj.len() > 5 {
+                        pairs.push(format!("... ({} more)", obj.len() - 5));
+                    }
+                    format!("{{{}}}", pairs.join(", "))
+                }
+            }
         }
     }
 
