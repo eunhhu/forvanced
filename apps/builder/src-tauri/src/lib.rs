@@ -74,6 +74,8 @@ pub fn run() {
             commands::build_project,
             commands::get_build_targets,
             commands::preview_generated_code,
+            commands::is_build_in_progress,
+            commands::cancel_build,
             // Executor commands
             commands::execute_script,
             commands::set_executor_session,

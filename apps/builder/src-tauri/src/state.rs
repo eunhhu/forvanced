@@ -52,6 +52,10 @@ pub struct AppState {
     pub project_path: Arc<RwLock<Option<PathBuf>>>,
     pub recent_projects: Arc<RwLock<RecentProjectsStore>>,
     pub config_dir: PathBuf,
+    /// Whether a build is currently in progress
+    pub is_building: Arc<RwLock<bool>>,
+    /// Whether the current build should be cancelled
+    pub build_cancelled: Arc<RwLock<bool>>,
 }
 
 impl AppState {
@@ -70,6 +74,8 @@ impl AppState {
             project_path: Arc::new(RwLock::new(None)),
             recent_projects: Arc::new(RwLock::new(recent_projects)),
             config_dir,
+            is_building: Arc::new(RwLock::new(false)),
+            build_cancelled: Arc::new(RwLock::new(false)),
         }
     }
 

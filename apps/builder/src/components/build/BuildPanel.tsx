@@ -5,6 +5,8 @@ import {
   For,
   createEffect,
   untrack,
+  onMount,
+  onCleanup,
 } from "solid-js";
 import { projectStore } from "@/stores/project";
 
@@ -60,14 +62,17 @@ console.log("[*] Project attached!");
 // Based on component bindings
 `,
     },
+    is_build_in_progress: false,
   };
   return (mocks[cmd] ?? null) as T;
 }
+
 import {
   PlayIcon,
   FolderOpenIcon,
   CodeIcon,
   SettingsIcon,
+  IconX,
 } from "@/components/common/Icons";
 
 interface BuildConfig {
@@ -75,6 +80,7 @@ interface BuildConfig {
   target: string;
   release: boolean;
   bundle_frida: boolean;
+  project_path?: string;
 }
 
 interface BuildResult {
@@ -88,6 +94,29 @@ interface PreviewCode {
   frida_script: string;
 }
 
+interface BuildLogEvent {
+  message: string;
+  level: string;
+  timestamp: number;
+}
+
+interface BuildState {
+  is_building: boolean;
+  phase: string;
+  progress: number;
+}
+
+// Phase display names
+const phaseNames: Record<string, string> = {
+  initializing: "Initializing...",
+  generating: "Generating project files...",
+  installing_deps: "Installing dependencies...",
+  building: "Building with Tauri...",
+  finalizing: "Finalizing...",
+  complete: "Build complete!",
+  error: "Build failed",
+};
+
 export const BuildPanel: Component = () => {
   const [buildTarget, setBuildTarget] = createSignal("current");
   const [releaseMode, setReleaseMode] = createSignal(true);
@@ -100,6 +129,13 @@ export const BuildPanel: Component = () => {
   const [previewCode, setPreviewCode] = createSignal<PreviewCode | null>(null);
   const [previewTab, setPreviewTab] = createSignal<"ui" | "frida">("ui");
 
+  // Build log state
+  const [buildLogs, setBuildLogs] = createSignal<BuildLogEvent[]>([]);
+  const [buildPhase, setBuildPhase] = createSignal<string>("");
+  const [buildProgress, setBuildProgress] = createSignal<number>(0);
+  const [showLogs, setShowLogs] = createSignal(false);
+  let logContainerRef: HTMLDivElement | undefined;
+
   const buildTargets = [
     { value: "current", label: "Current Platform" },
     { value: "windows-x64", label: "Windows (x64)" },
@@ -108,15 +144,66 @@ export const BuildPanel: Component = () => {
     { value: "linux-x64", label: "Linux (x64)" },
   ];
 
+  // Subscribe to build events
+  onMount(async () => {
+    if (!isTauri()) return;
+
+    try {
+      const { listen } = await import("@tauri-apps/api/event");
+
+      // Listen for build log events
+      const unlistenLog = await listen<BuildLogEvent>("build-log", (event) => {
+        setBuildLogs((prev) => [...prev, event.payload]);
+        // Auto-scroll to bottom
+        if (logContainerRef) {
+          setTimeout(() => {
+            logContainerRef!.scrollTop = logContainerRef!.scrollHeight;
+          }, 10);
+        }
+      });
+
+      // Listen for build state events
+      const unlistenState = await listen<BuildState>("build-state", (event) => {
+        setIsBuilding(event.payload.is_building);
+        setBuildPhase(event.payload.phase);
+        setBuildProgress(event.payload.progress);
+
+        // Show logs panel when build starts
+        if (event.payload.is_building && !showLogs()) {
+          setShowLogs(true);
+        }
+      });
+
+      onCleanup(() => {
+        unlistenLog();
+        unlistenState();
+      });
+    } catch (e) {
+      console.error("Failed to set up build event listeners:", e);
+    }
+  });
+
   const handleBuild = async () => {
-    if (!projectStore.currentProject()) {
+    const project = projectStore.currentProject();
+    if (!project) {
       setBuildError("No project loaded");
+      return;
+    }
+
+    // Check if project needs to be saved first
+    const projectPath = projectStore.projectPath();
+    if (!projectPath && projectStore.isDirty()) {
+      setBuildError(
+        "Please save the project before building. The output directory path is resolved relative to the project file location."
+      );
       return;
     }
 
     setIsBuilding(true);
     setBuildError(null);
     setBuildResult(null);
+    setBuildLogs([]);
+    setShowLogs(true);
 
     try {
       const config: BuildConfig = {
@@ -124,6 +211,7 @@ export const BuildPanel: Component = () => {
         target: buildTarget(),
         release: releaseMode(),
         bundle_frida: bundleFrida(),
+        project_path: projectPath ?? undefined,
       };
 
       const result = await invoke<BuildResult>("build_project", { config });
@@ -136,17 +224,30 @@ export const BuildPanel: Component = () => {
   };
 
   const handleGenerateOnly = async () => {
-    if (!projectStore.currentProject()) {
+    const project = projectStore.currentProject();
+    if (!project) {
       setBuildError("No project loaded");
+      return;
+    }
+
+    // Check if project needs to be saved first
+    const projectPath = projectStore.projectPath();
+    if (!projectPath && projectStore.isDirty()) {
+      setBuildError(
+        "Please save the project before generating. The output directory path is resolved relative to the project file location."
+      );
       return;
     }
 
     setIsBuilding(true);
     setBuildError(null);
+    setBuildLogs([]);
+    setShowLogs(true);
 
     try {
       const projectDir = await invoke<string>("generate_project", {
         outputDir: outputDir(),
+        projectPath: projectPath ?? undefined,
       });
       setBuildResult({
         project_dir: projectDir,
@@ -193,8 +294,59 @@ export const BuildPanel: Component = () => {
     }
   };
 
+  const handleCancelBuild = async () => {
+    try {
+      await invoke("cancel_build");
+    } catch (e) {
+      console.error("Failed to cancel build:", e);
+    }
+  };
+
+  const getLogColor = (level: string) => {
+    switch (level) {
+      case "error":
+        return "text-red-400";
+      case "warn":
+        return "text-yellow-400";
+      case "debug":
+        return "text-gray-500";
+      default:
+        return "text-foreground-muted";
+    }
+  };
+
   return (
-    <div class="h-full flex flex-col">
+    <div class="h-full flex flex-col relative">
+      {/* Build Lock Overlay */}
+      <Show when={isBuilding()}>
+        <div class="absolute inset-0 bg-black/30 z-40 flex items-center justify-center backdrop-blur-sm">
+          <div class="bg-surface rounded-lg p-6 shadow-xl border border-border max-w-md w-full mx-4">
+            <div class="flex items-center gap-3 mb-4">
+              <div class="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              <div>
+                <h3 class="font-medium">{phaseNames[buildPhase()] || "Building..."}</h3>
+                <p class="text-sm text-foreground-muted">Do not close the app</p>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            <div class="w-full bg-background rounded-full h-2 mb-3">
+              <div
+                class="bg-accent h-2 rounded-full transition-all duration-300"
+                style={{ width: `${buildProgress()}%` }}
+              />
+            </div>
+
+            <button
+              class="w-full py-2 text-sm text-foreground-muted hover:text-error transition-colors"
+              onClick={handleCancelBuild}
+            >
+              Cancel Build
+            </button>
+          </div>
+        </div>
+      </Show>
+
       <Show
         when={projectStore.currentProject()}
         fallback={
@@ -219,9 +371,10 @@ export const BuildPanel: Component = () => {
                     Target Platform
                   </label>
                   <select
-                    class="w-full px-3 py-2 bg-background border border-border rounded focus:outline-none focus:border-accent"
+                    class="w-full px-3 py-2 bg-background border border-border rounded focus:outline-none focus:border-accent disabled:opacity-50"
                     value={buildTarget()}
                     onChange={(e) => setBuildTarget(e.currentTarget.value)}
+                    disabled={isBuilding()}
                   >
                     <For each={buildTargets}>
                       {(target) => (
@@ -235,19 +388,27 @@ export const BuildPanel: Component = () => {
                 <div>
                   <label class="block text-sm text-foreground-muted mb-1">
                     Output Directory
+                    <Show when={!projectStore.projectPath()}>
+                      <span class="text-yellow-500 ml-1">(save project first for relative paths)</span>
+                    </Show>
                   </label>
                   <div class="flex gap-2">
                     <BuildOutputDirInput
                       value={outputDir()}
                       onChange={setOutputDir}
+                      disabled={isBuilding()}
                     />
                     <button
-                      class="px-3 py-2 bg-surface border border-border rounded hover:bg-surface-hover transition-colors"
+                      class="px-3 py-2 bg-surface border border-border rounded hover:bg-surface-hover transition-colors disabled:opacity-50"
                       onClick={handleSelectOutputDir}
+                      disabled={isBuilding()}
                     >
                       <FolderOpenIcon class="w-4 h-4" />
                     </button>
                   </div>
+                  <p class="text-xs text-foreground-muted mt-1">
+                    Relative paths (like ./dist) resolve from project file location
+                  </p>
                 </div>
 
                 {/* Build Options */}
@@ -259,8 +420,9 @@ export const BuildPanel: Component = () => {
                     <button
                       class={`w-10 h-5 rounded-full transition-colors relative ${
                         releaseMode() ? "bg-accent" : "bg-background-secondary"
-                      }`}
+                      } disabled:opacity-50`}
                       onClick={() => setReleaseMode(!releaseMode())}
+                      disabled={isBuilding()}
                     >
                       <div
                         class={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
@@ -277,8 +439,9 @@ export const BuildPanel: Component = () => {
                     <button
                       class={`w-10 h-5 rounded-full transition-colors relative ${
                         bundleFrida() ? "bg-accent" : "bg-background-secondary"
-                      }`}
+                      } disabled:opacity-50`}
                       onClick={() => setBundleFrida(!bundleFrida())}
+                      disabled={isBuilding()}
                     >
                       <div
                         class={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
@@ -320,6 +483,41 @@ export const BuildPanel: Component = () => {
                 </button>
               </div>
             </div>
+
+            {/* Build Log Panel */}
+            <Show when={showLogs()}>
+              <div class="border-b border-border">
+                <div class="flex items-center justify-between px-4 py-2 bg-surface/50">
+                  <span class="text-sm font-medium">Build Log</span>
+                  <button
+                    class="p-1 hover:bg-surface-hover rounded"
+                    onClick={() => setShowLogs(false)}
+                  >
+                    <IconX class="w-4 h-4" />
+                  </button>
+                </div>
+                <div
+                  ref={logContainerRef}
+                  class="h-40 overflow-y-auto bg-background p-2 font-mono text-xs"
+                >
+                  <For each={buildLogs()}>
+                    {(log) => (
+                      <div class={`py-0.5 ${getLogColor(log.level)}`}>
+                        <span class="text-foreground-muted opacity-50 mr-2">
+                          {new Date(log.timestamp).toLocaleTimeString()}
+                        </span>
+                        {log.message}
+                      </div>
+                    )}
+                  </For>
+                  <Show when={buildLogs().length === 0}>
+                    <div class="text-foreground-muted text-center py-4">
+                      Build logs will appear here...
+                    </div>
+                  </Show>
+                </div>
+              </div>
+            </Show>
 
             {/* Build Result */}
             <div class="flex-1 overflow-y-auto p-4">
@@ -365,7 +563,7 @@ export const BuildPanel: Component = () => {
               </Show>
 
               {/* Project Summary */}
-              <Show when={!buildResult() && !buildError()}>
+              <Show when={!buildResult() && !buildError() && !showLogs()}>
                 <div class="space-y-4">
                   <h3 class="text-sm font-medium text-foreground-muted">
                     Project Summary
@@ -393,6 +591,22 @@ export const BuildPanel: Component = () => {
                       </div>
                     </div>
                   </div>
+
+                  {/* Project path info */}
+                  <Show when={projectStore.projectPath()}>
+                    <div class="p-3 bg-surface rounded-lg">
+                      <div class="text-foreground-muted text-xs mb-1">Project Path</div>
+                      <div class="text-xs font-mono break-all">{projectStore.projectPath()}</div>
+                    </div>
+                  </Show>
+                  <Show when={!projectStore.projectPath()}>
+                    <div class="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                      <div class="text-yellow-500 text-sm font-medium mb-1">Unsaved Project</div>
+                      <div class="text-xs text-foreground-muted">
+                        Save the project to enable relative output paths (like ./dist)
+                      </div>
+                    </div>
+                  </Show>
                 </div>
               </Show>
             </div>
@@ -455,6 +669,7 @@ export const BuildPanel: Component = () => {
 interface BuildOutputDirInputProps {
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }
 
 const BuildOutputDirInput: Component<BuildOutputDirInputProps> = (props) => {
@@ -471,7 +686,7 @@ const BuildOutputDirInput: Component<BuildOutputDirInputProps> = (props) => {
   return (
     <input
       type="text"
-      class="flex-1 px-3 py-2 bg-background border border-border rounded focus:outline-none focus:border-accent"
+      class="flex-1 px-3 py-2 bg-background border border-border rounded focus:outline-none focus:border-accent disabled:opacity-50"
       value={localValue()}
       onFocus={() => setIsFocused(true)}
       onInput={(e) => {
@@ -480,6 +695,7 @@ const BuildOutputDirInput: Component<BuildOutputDirInputProps> = (props) => {
         props.onChange(val);
       }}
       onBlur={() => setIsFocused(false)}
+      disabled={props.disabled}
     />
   );
 };
