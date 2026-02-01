@@ -18,6 +18,7 @@ import {
 } from "@/stores/script";
 import { TrashIcon, IconZap, MemoryIcon } from "@/components/common/Icons";
 import { QuickNodeMenu } from "./QuickNodeMenu";
+import { NodeCommander } from "./NodeCommander";
 import { CanvasMinimap } from "./CanvasMinimap";
 
 // Port type colors for visual distinction
@@ -268,6 +269,17 @@ export const NodeCanvas: Component = () => {
     canvasY: number;
   } | null>(null);
 
+  // Node Commander state (opened with / or Ctrl+K)
+  const [commanderMenu, setCommanderMenu] = createSignal<{
+    screenX: number;
+    screenY: number;
+    canvasX: number;
+    canvasY: number;
+  } | null>(null);
+
+  // Track last mouse position for commander
+  const [lastMousePos, setLastMousePos] = createSignal({ x: 0, y: 0 });
+
   // Canvas dimensions for minimap
   const [canvasDimensions, setCanvasDimensions] = createSignal({ width: 800, height: 600 });
   const [showMinimap, setShowMinimap] = createSignal(true);
@@ -434,15 +446,51 @@ export const NodeCanvas: Component = () => {
   // Keyboard shortcuts are now handled centrally by hotkeys store in App.tsx
   // This ensures consistent behavior across tabs and proper macOS Backspace/Delete handling
 
+  // Helper to open commander at a position
+  const openCommander = (screenX: number, screenY: number) => {
+    if (!canvasRef) return;
+
+    const rect = canvasRef.getBoundingClientRect();
+    const canvasX = (screenX - rect.left - offset().x) / scale();
+    const canvasY = (screenY - rect.top - offset().y) / scale();
+
+    // Position the commander menu, ensuring it stays within viewport
+    const menuWidth = 384; // w-96
+    const menuHeight = 480;
+    const adjustedX = Math.min(screenX, window.innerWidth - menuWidth - 16);
+    const adjustedY = Math.min(screenY, window.innerHeight - menuHeight - 16);
+
+    setCommanderMenu({
+      screenX: Math.max(16, adjustedX),
+      screenY: Math.max(16, adjustedY),
+      canvasX,
+      canvasY,
+    });
+  };
+
   // Handle keyboard shortcuts for canvas
   const handleKeyDown = (e: KeyboardEvent) => {
-    // Space key to open quick node menu
-    if (e.code === "Space" && !e.repeat && canvasRef) {
-      // Don't open if user is typing in an input
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
+    // Don't handle if user is typing in an input
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      return;
+    }
 
+    // / key or Ctrl+K to open Node Commander
+    if ((e.key === "/" || (e.key === "k" && (e.ctrlKey || e.metaKey))) && !e.repeat && canvasRef) {
+      e.preventDefault();
+
+      // Use last mouse position or center of canvas
+      const rect = canvasRef.getBoundingClientRect();
+      const mousePos = lastMousePos();
+      const screenX = mousePos.x > 0 ? mousePos.x : rect.left + rect.width / 2;
+      const screenY = mousePos.y > 0 ? mousePos.y : rect.top + rect.height / 2;
+
+      openCommander(screenX, screenY);
+      return;
+    }
+
+    // Space key to open quick node menu (simpler version)
+    if (e.code === "Space" && !e.repeat && canvasRef) {
       e.preventDefault();
 
       // Get mouse position or center of canvas
@@ -463,8 +511,18 @@ export const NodeCanvas: Component = () => {
     }
   };
 
+  // Track mouse position for commander
+  const handleCanvasMouseMove = (e: MouseEvent) => {
+    setLastMousePos({ x: e.clientX, y: e.clientY });
+  };
+
   // Handle quick node selection
   const handleQuickNodeSelect = (type: ScriptNodeType, x: number, y: number) => {
+    scriptStore.addNode(type, x, y);
+  };
+
+  // Handle commander node selection
+  const handleCommanderSelect = (type: ScriptNodeType, x: number, y: number) => {
     scriptStore.addNode(type, x, y);
   };
 
@@ -674,6 +732,7 @@ export const NodeCanvas: Component = () => {
         }}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
+        onMouseMove={handleCanvasMouseMove}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
@@ -863,7 +922,7 @@ export const NodeCanvas: Component = () => {
         <div class="absolute bottom-2 left-2 text-[10px] text-foreground-muted/50 pointer-events-none">
           <span>
             Scroll: Pan | {isMac ? "⌘" : "Ctrl"}+Scroll: Zoom | Space: Quick add
-            | Shift+Click: Multi-select
+            | /: Commander | Shift+Click: Multi-select
           </span>
         </div>
 
@@ -877,6 +936,20 @@ export const NodeCanvas: Component = () => {
               canvasY={menu().canvasY}
               onSelect={handleQuickNodeSelect}
               onClose={() => setQuickMenu(null)}
+            />
+          )}
+        </Show>
+
+        {/* Node Commander (advanced search) */}
+        <Show when={commanderMenu()}>
+          {(menu) => (
+            <NodeCommander
+              x={menu().screenX}
+              y={menu().screenY}
+              canvasX={menu().canvasX}
+              canvasY={menu().canvasY}
+              onSelect={handleCommanderSelect}
+              onClose={() => setCommanderMenu(null)}
             />
           )}
         </Show>
