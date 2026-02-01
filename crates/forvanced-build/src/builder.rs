@@ -426,25 +426,31 @@ impl Default for Builder {
 
 /// Find the runtime template path
 fn find_runtime_path() -> Result<PathBuf, BuildError> {
-    // Try common locations
+    let cwd = std::env::current_dir().unwrap_or_default();
+    debug!("Searching for runtime template from cwd: {}", cwd.display());
+
+    // Try common locations - including when running from apps/builder
     let candidates = [
         PathBuf::from("apps/runtime"),
+        PathBuf::from("../runtime"),              // When in apps/builder
         PathBuf::from("../apps/runtime"),
         PathBuf::from("../../apps/runtime"),
-        std::env::current_dir()
-            .unwrap_or_default()
-            .join("apps/runtime"),
+        PathBuf::from("../../runtime"),           // When in apps/builder/src-tauri
+        cwd.join("apps/runtime"),
+        cwd.join("../runtime"),
     ];
 
     for path in &candidates {
         if path.exists() && path.join("src-tauri").exists() {
-            return Ok(path.clone());
+            let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
+            debug!("Found runtime template at: {}", canonical.display());
+            return Ok(canonical);
         }
     }
 
     // Try from CARGO_MANIFEST_DIR
     if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
-        let workspace_root = PathBuf::from(manifest_dir)
+        let workspace_root = PathBuf::from(&manifest_dir)
             .parent()
             .and_then(|p| p.parent())
             .map(|p| p.to_path_buf());
@@ -452,12 +458,45 @@ fn find_runtime_path() -> Result<PathBuf, BuildError> {
         if let Some(root) = workspace_root {
             let runtime_path = root.join("apps/runtime");
             if runtime_path.exists() {
+                debug!("Found runtime template via CARGO_MANIFEST_DIR: {}", runtime_path.display());
                 return Ok(runtime_path);
             }
         }
     }
 
+    // Try to find workspace root by looking for Cargo.toml with [workspace]
+    if let Some(workspace_root) = find_workspace_root(&cwd) {
+        let runtime_path = workspace_root.join("apps/runtime");
+        if runtime_path.exists() && runtime_path.join("src-tauri").exists() {
+            debug!("Found runtime template via workspace root: {}", runtime_path.display());
+            return Ok(runtime_path);
+        }
+    }
+
     Err(BuildError::RuntimeNotFound(PathBuf::from("apps/runtime")))
+}
+
+/// Find the workspace root by searching upward for Cargo.toml with [workspace]
+fn find_workspace_root(start: &Path) -> Option<PathBuf> {
+    let mut current = start.to_path_buf();
+
+    for _ in 0..10 {  // Limit search depth
+        let cargo_toml = current.join("Cargo.toml");
+        if cargo_toml.exists() {
+            // Check if it's a workspace root
+            if let Ok(content) = std::fs::read_to_string(&cargo_toml) {
+                if content.contains("[workspace]") {
+                    return Some(current);
+                }
+            }
+        }
+
+        if !current.pop() {
+            break;
+        }
+    }
+
+    None
 }
 
 /// Recursively copy a directory
