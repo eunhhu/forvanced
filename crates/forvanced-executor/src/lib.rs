@@ -50,9 +50,8 @@ pub enum NodeContext {
 pub fn classify_node(node_type: &str) -> NodeContext {
     match node_type {
         // Event Listeners - Host (entry points)
-        "event_ui" | "event_attach" | "event_detach" | "event_hotkey" | "event_interval" => {
-            NodeContext::Host
-        }
+        "event_ui" | "event_attach" | "event_detach" | "event_hotkey" | "event_interval"
+        | "event_hook" | "event_memory_watch" => NodeContext::Host,
 
         // Constants - Host
         "const_string" | "const_number" | "const_boolean" | "const_pointer" => NodeContext::Host,
@@ -87,6 +86,10 @@ pub fn classify_node(node_type: &str) -> NodeContext {
 
         // UI Operations - Host
         "ui_get_value" | "ui_set_value" | "ui_get_props" => NodeContext::Host,
+
+        // Device/Process Management - Host
+        "device_enumerate" | "device_select" | "device_get_current" => NodeContext::Host,
+        "process_enumerate" | "application_enumerate" => NodeContext::Host,
 
         // Process Control - Host (calls Frida manager)
         "process_attach" | "process_detach" | "process_spawn" | "process_is_attached" => {

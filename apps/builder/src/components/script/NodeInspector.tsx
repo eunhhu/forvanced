@@ -317,6 +317,79 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
             <UIPropsConfig node={props.node} />
           </Show>
 
+          {/* Comment Node */}
+          <Show when={props.node.type === "comment"}>
+            <PropertyRow label="Text">
+              <textarea
+                class="w-full px-2 py-1 text-xs bg-background border border-border rounded focus:outline-none focus:border-accent resize-none"
+                rows={4}
+                placeholder="Add your notes here..."
+                value={(props.node.config.text as string) ?? ""}
+                onInput={(e) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: { ...props.node.config, text: e.currentTarget.value },
+                  })
+                }
+              />
+            </PropertyRow>
+            <PropertyRow label="Color">
+              <div class="flex gap-1">
+                <For each={["gray", "yellow", "green", "blue", "red", "purple"]}>
+                  {(color) => (
+                    <button
+                      class={`w-5 h-5 rounded border-2 transition-all ${
+                        (props.node.config.color as string ?? "gray") === color
+                          ? "ring-2 ring-accent ring-offset-1 ring-offset-background"
+                          : "hover:scale-110"
+                      }`}
+                      classList={{
+                        "bg-gray-600 border-gray-400": color === "gray",
+                        "bg-yellow-600 border-yellow-400": color === "yellow",
+                        "bg-green-600 border-green-400": color === "green",
+                        "bg-blue-600 border-blue-400": color === "blue",
+                        "bg-red-600 border-red-400": color === "red",
+                        "bg-purple-600 border-purple-400": color === "purple",
+                      }}
+                      onClick={() =>
+                        scriptStore.updateNode(props.node.id, {
+                          config: { ...props.node.config, color },
+                        })
+                      }
+                      title={color}
+                    />
+                  )}
+                </For>
+              </div>
+            </PropertyRow>
+            <PropertyRow label="Width">
+              <InspectorNumberInput
+                min={100}
+                max={500}
+                value={(props.node.config.width as number) ?? 200}
+                onChange={(val) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: { ...props.node.config, width: val },
+                  })
+                }
+              />
+            </PropertyRow>
+            <PropertyRow label="Height">
+              <InspectorNumberInput
+                min={40}
+                max={400}
+                value={(props.node.config.height as number) ?? 80}
+                onChange={(val) =>
+                  scriptStore.updateNode(props.node.id, {
+                    config: { ...props.node.config, height: val },
+                  })
+                }
+              />
+            </PropertyRow>
+            <div class="text-[9px] text-foreground-muted italic mt-1">
+              Comments are not executed - they're for documentation only.
+            </div>
+          </Show>
+
           <Show when={props.node.type === "event_hotkey"}>
             <PropertyRow label="Hotkey">
               <InspectorTextInput

@@ -1,5 +1,11 @@
-import { Component, For, Show, createSignal, createMemo } from "solid-js";
-import { scriptStore, type ScriptNodeType } from "@/stores/script";
+import { Component, For, Show, createSignal, createMemo, createEffect } from "solid-js";
+import {
+  scriptStore,
+  type ScriptNodeType,
+  nodeCategoryInfo,
+  getNodeContext,
+  type NodeCategoryInfo,
+} from "@/stores/script";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -22,50 +28,82 @@ import {
   EditIcon,
 } from "@/components/common/Icons";
 
-// Category icons
-const categoryIcons: Record<string, Component<{ class?: string }>> = {
-  Constants: IconHash, // Literal values (string, number, boolean, pointer)
-  Events: IconZap, // Event listeners (entry points)
-  Flow: IconWorkflow,
-  Memory: MemoryIcon,
-  Pointer: MemoryIcon,
-  Module: IconFunction,
-  Variable: IconVariable,
-  Array: IconList, // Array operations
-  Object: IconBox, // Object operations
-  Math: IconCalculator,
-  String: IconTerminal,
-  Conversion: IconArrowSwap, // Type conversion
-  Native: IconTerminal,
-  Interceptor: IconZap,
-  Output: IconGitBranch,
-  Function: IconFunction,
+// Context filter type
+type ContextFilter = "all" | "host" | "target";
+
+// Category icons mapped by icon name
+const categoryIconMap: Record<string, Component<{ class?: string }>> = {
+  hash: IconHash,
+  zap: IconZap,
+  workflow: IconWorkflow,
+  memory: MemoryIcon,
+  function: IconFunction,
+  variable: IconVariable,
+  list: IconList,
+  box: IconBox,
+  calculator: IconCalculator,
+  terminal: IconTerminal,
+  arrowswap: IconArrowSwap,
+  gitbranch: IconGitBranch,
+  cpu: IconWorkflow, // Fallback
+  play: IconZap, // Fallback
+  layout: IconBox, // Fallback
 };
 
-// Category colors for visual distinction
-const categoryColors: Record<string, string> = {
-  Constants: "text-pink-400", // Prominent for data entry
-  Events: "text-emerald-400", // Entry points
-  Flow: "text-blue-400",
-  Memory: "text-purple-400",
-  Pointer: "text-violet-400",
-  Module: "text-green-400",
-  Variable: "text-yellow-400",
-  Array: "text-indigo-400", // Collections
-  Object: "text-sky-400", // Object operations
-  Math: "text-orange-400",
-  String: "text-teal-400",
-  Conversion: "text-lime-400", // Type conversion
-  Native: "text-red-400",
-  Interceptor: "text-rose-400",
-  Output: "text-cyan-400",
-  Function: "text-amber-400",
-};
+// Get category icon component
+function getCategoryIcon(info: NodeCategoryInfo): Component<{ class?: string }> {
+  return categoryIconMap[info.icon] ?? IconWorkflow;
+}
+
+// Get category color classes
+function getCategoryColorClass(info: NodeCategoryInfo, variant: "text" | "bg" | "border"): string {
+  const colorMap: Record<string, Record<string, string>> = {
+    pink: { text: "text-pink-400", bg: "bg-pink-500/20", border: "border-pink-500/50" },
+    emerald: { text: "text-emerald-400", bg: "bg-emerald-500/20", border: "border-emerald-500/50" },
+    blue: { text: "text-blue-400", bg: "bg-blue-500/20", border: "border-blue-500/50" },
+    purple: { text: "text-purple-400", bg: "bg-purple-500/20", border: "border-purple-500/50" },
+    violet: { text: "text-violet-400", bg: "bg-violet-500/20", border: "border-violet-500/50" },
+    green: { text: "text-green-400", bg: "bg-green-500/20", border: "border-green-500/50" },
+    yellow: { text: "text-yellow-400", bg: "bg-yellow-500/20", border: "border-yellow-500/50" },
+    indigo: { text: "text-indigo-400", bg: "bg-indigo-500/20", border: "border-indigo-500/50" },
+    sky: { text: "text-sky-400", bg: "bg-sky-500/20", border: "border-sky-500/50" },
+    orange: { text: "text-orange-400", bg: "bg-orange-500/20", border: "border-orange-500/50" },
+    teal: { text: "text-teal-400", bg: "bg-teal-500/20", border: "border-teal-500/50" },
+    lime: { text: "text-lime-400", bg: "bg-lime-500/20", border: "border-lime-500/50" },
+    red: { text: "text-red-400", bg: "bg-red-500/20", border: "border-red-500/50" },
+    rose: { text: "text-rose-400", bg: "bg-rose-500/20", border: "border-rose-500/50" },
+    cyan: { text: "text-cyan-400", bg: "bg-cyan-500/20", border: "border-cyan-500/50" },
+    amber: { text: "text-amber-400", bg: "bg-amber-500/20", border: "border-amber-500/50" },
+    slate: { text: "text-slate-400", bg: "bg-slate-500/20", border: "border-slate-500/50" },
+    gray: { text: "text-gray-400", bg: "bg-gray-500/20", border: "border-gray-500/50" },
+  };
+  return colorMap[info.color]?.[variant] ?? colorMap.blue[variant];
+}
+
+// Recent nodes storage key
+const RECENT_NODES_KEY = "forvanced:recentNodes";
+const MAX_RECENT_NODES = 8;
+
+// Get recent nodes from localStorage
+function getRecentNodes(): ScriptNodeType[] {
+  try {
+    const stored = localStorage.getItem(RECENT_NODES_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Add node to recent list
+function addToRecentNodes(nodeType: ScriptNodeType) {
+  const recent = getRecentNodes().filter((t) => t !== nodeType);
+  recent.unshift(nodeType);
+  const trimmed = recent.slice(0, MAX_RECENT_NODES);
+  localStorage.setItem(RECENT_NODES_KEY, JSON.stringify(trimmed));
+}
 
 // Script item with inline action buttons
-const ScriptItem: Component<{ script: { id: string; name: string } }> = (
-  props,
-) => {
+const ScriptItem: Component<{ script: { id: string; name: string } }> = (props) => {
   const [isRenaming, setIsRenaming] = createSignal(false);
   const [renameValue, setRenameValue] = createSignal("");
 
@@ -126,9 +164,7 @@ const ScriptItem: Component<{ script: { id: string; name: string } }> = (
         }`}
         onClick={() => scriptStore.setCurrentScriptId(props.script.id)}
       >
-        <span class="flex-1 px-1 py-1 text-xs truncate">
-          {props.script.name}
-        </span>
+        <span class="flex-1 px-1 py-1 text-xs truncate">{props.script.name}</span>
         <div
           class={`flex items-center gap-0.5 ${isSelected() ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
         >
@@ -159,28 +195,113 @@ const ScriptItem: Component<{ script: { id: string; name: string } }> = (
   );
 };
 
+// Node item component with context badge
+const NodeItem: Component<{
+  node: { type: ScriptNodeType; label: string; description: string; category: string };
+  onDragStart: (e: DragEvent, type: ScriptNodeType) => void;
+  showContextBadge?: boolean;
+}> = (props) => {
+  const nodeContext = () => getNodeContext(props.node.type);
+  const isTarget = () => nodeContext() === "target";
+
+  return (
+    <div
+      class={`mx-2 mb-1 px-2 py-1.5 rounded border cursor-grab hover:border-accent/50 transition-all group ${
+        isTarget()
+          ? "bg-gradient-to-r from-red-950/30 to-background border-red-500/30 hover:border-red-400/50"
+          : "bg-background border-border/50"
+      }`}
+      draggable={true}
+      onDragStart={(e) => {
+        props.onDragStart(e, props.node.type);
+        addToRecentNodes(props.node.type);
+      }}
+    >
+      <div class="flex items-center gap-1.5">
+        <span class="text-xs font-medium flex-1">{props.node.label}</span>
+        <Show when={props.showContextBadge !== false}>
+          <span
+            class={`text-[8px] px-1 py-0.5 rounded font-medium ${
+              isTarget()
+                ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+            }`}
+            title={
+              isTarget()
+                ? "Runs in target process (requires Frida)"
+                : "Runs locally (no Frida required)"
+            }
+          >
+            {isTarget() ? "TARGET" : "HOST"}
+          </span>
+        </Show>
+      </div>
+      <div class="text-[10px] text-foreground-muted truncate mt-0.5">
+        {props.node.description}
+      </div>
+    </div>
+  );
+};
+
 export const NodePalette: Component = () => {
   const [searchQuery, setSearchQuery] = createSignal("");
+  const [contextFilter, setContextFilter] = createSignal<ContextFilter>("all");
   const [expandedCategories, setExpandedCategories] = createSignal<Set<string>>(
-    new Set(["Constants", "Events", "Flow", "Variable"]), // Important categories expanded by default
+    new Set(["Constants", "Events", "Flow", "Variable"])
   );
+  const [recentNodes, setRecentNodes] = createSignal<ScriptNodeType[]>(getRecentNodes());
+  const [showRecent, setShowRecent] = createSignal(true);
+
+  // Refresh recent nodes on mount and when nodes are added
+  createEffect(() => {
+    setRecentNodes(getRecentNodes());
+  });
 
   const categories = createMemo(() => scriptStore.getNodeCategories());
 
+  // Filter by search and context
   const filteredCategories = createMemo(() => {
     const query = searchQuery().toLowerCase();
-    if (!query) return categories();
+    const filter = contextFilter();
 
     return categories()
-      .map((cat) => ({
-        ...cat,
-        nodes: cat.nodes.filter(
-          (n) =>
+      .map((cat) => {
+        const catInfo = nodeCategoryInfo[cat.category];
+
+        // Filter nodes within category
+        const filteredNodes = cat.nodes.filter((n) => {
+          // Search filter
+          const matchesSearch =
+            !query ||
             n.label.toLowerCase().includes(query) ||
-            n.description.toLowerCase().includes(query),
-        ),
-      }))
+            n.description.toLowerCase().includes(query) ||
+            n.type.toLowerCase().includes(query);
+
+          // Context filter
+          const nodeContext = getNodeContext(n.type);
+          const matchesContext =
+            filter === "all" ||
+            (filter === "host" && nodeContext === "host") ||
+            (filter === "target" && nodeContext === "target");
+
+          return matchesSearch && matchesContext;
+        });
+
+        return {
+          ...cat,
+          nodes: filteredNodes,
+          info: catInfo,
+        };
+      })
       .filter((cat) => cat.nodes.length > 0);
+  });
+
+  // Get recent nodes templates
+  const recentNodeTemplates = createMemo(() => {
+    const recent = recentNodes();
+    return recent
+      .map((type) => scriptStore.nodeTemplates.find((t) => t.type === type))
+      .filter(Boolean);
   });
 
   const toggleCategory = (category: string) => {
@@ -201,8 +322,17 @@ export const NodePalette: Component = () => {
 
   const hasScript = createMemo(() => scriptStore.getCurrentScript() !== null);
 
+  // Keyboard shortcut to focus search
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+      e.preventDefault();
+      const input = document.querySelector<HTMLInputElement>('[data-search-input]');
+      input?.focus();
+    }
+  };
+
   return (
-    <div class="w-56 border-r border-border bg-surface flex flex-col">
+    <div class="w-60 border-r border-border bg-surface flex flex-col" onKeyDown={handleKeyDown}>
       {/* Header */}
       <div class="p-3 border-b border-border">
         <h3 class="font-medium text-sm">Nodes</h3>
@@ -215,11 +345,50 @@ export const NodePalette: Component = () => {
           <IconSearch class="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-foreground-muted" />
           <input
             type="text"
-            placeholder="Search nodes..."
+            data-search-input
+            placeholder="Search nodes... (Cmd+F)"
             class="w-full pl-7 pr-2 py-1.5 text-xs bg-background border border-border rounded focus:outline-none focus:border-accent"
             value={searchQuery()}
             onInput={(e) => setSearchQuery(e.currentTarget.value)}
           />
+        </div>
+
+        {/* Context filter tabs */}
+        <div class="flex mt-2 gap-1 p-0.5 bg-background rounded-lg border border-border">
+          <button
+            class={`flex-1 px-2 py-1 text-[10px] rounded transition-colors ${
+              contextFilter() === "all"
+                ? "bg-accent text-white"
+                : "text-foreground-muted hover:bg-surface-hover"
+            }`}
+            onClick={() => setContextFilter("all")}
+          >
+            All
+          </button>
+          <button
+            class={`flex-1 px-2 py-1 text-[10px] rounded transition-colors flex items-center justify-center gap-1 ${
+              contextFilter() === "host"
+                ? "bg-blue-600 text-white"
+                : "text-foreground-muted hover:bg-surface-hover"
+            }`}
+            onClick={() => setContextFilter("host")}
+            title="Host nodes run locally without Frida"
+          >
+            <span class="w-1.5 h-1.5 rounded-full bg-blue-400" />
+            Host
+          </button>
+          <button
+            class={`flex-1 px-2 py-1 text-[10px] rounded transition-colors flex items-center justify-center gap-1 ${
+              contextFilter() === "target"
+                ? "bg-red-600 text-white"
+                : "text-foreground-muted hover:bg-surface-hover"
+            }`}
+            onClick={() => setContextFilter("target")}
+            title="Target nodes require Frida connection"
+          >
+            <span class="w-1.5 h-1.5 rounded-full bg-red-400" />
+            Target
+          </button>
         </div>
       </div>
 
@@ -233,29 +402,70 @@ export const NodePalette: Component = () => {
             </div>
           }
         >
+          {/* Recent nodes section */}
+          <Show when={recentNodeTemplates().length > 0 && !searchQuery() && contextFilter() === "all"}>
+            <div class="border-b border-border">
+              <button
+                class="w-full px-3 py-2 flex items-center gap-2 hover:bg-surface-hover transition-colors"
+                onClick={() => setShowRecent(!showRecent())}
+              >
+                <Show when={showRecent()} fallback={<ChevronRightIcon class="w-3 h-3" />}>
+                  <ChevronDownIcon class="w-3 h-3" />
+                </Show>
+                <span class="text-xs font-medium text-foreground-muted">Recent</span>
+                <span class="text-[10px] text-foreground-muted ml-auto">
+                  {recentNodeTemplates().length}
+                </span>
+              </button>
+              <Show when={showRecent()}>
+                <div class="pb-2">
+                  <For each={recentNodeTemplates()}>
+                    {(node) => (
+                      <NodeItem
+                        node={node!}
+                        onDragStart={handleDragStart}
+                        showContextBadge={true}
+                      />
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </div>
+          </Show>
+
+          {/* Category list */}
           <For each={filteredCategories()}>
             {(cat) => {
-              const Icon = categoryIcons[cat.category] ?? IconWorkflow;
+              const info = () => cat.info ?? nodeCategoryInfo.Flow;
+              const IconComp = getCategoryIcon(info());
               const isExpanded = () =>
                 expandedCategories().has(cat.category) || searchQuery() !== "";
+              const isTargetCategory = () => info().context === "target";
 
               return (
                 <div class="border-b border-border last:border-b-0">
                   {/* Category header */}
                   <button
-                    class="w-full px-3 py-2 flex items-center gap-2 hover:bg-surface-hover transition-colors"
+                    class={`w-full px-3 py-2 flex items-center gap-2 hover:bg-surface-hover transition-colors ${
+                      isTargetCategory() ? "bg-red-950/10" : ""
+                    }`}
                     onClick={() => toggleCategory(cat.category)}
                   >
-                    <Show
-                      when={isExpanded()}
-                      fallback={<ChevronRightIcon class="w-3 h-3" />}
-                    >
+                    <Show when={isExpanded()} fallback={<ChevronRightIcon class="w-3 h-3" />}>
                       <ChevronDownIcon class="w-3 h-3" />
                     </Show>
-                    <Icon
-                      class={`w-3.5 h-3.5 ${categoryColors[cat.category]}`}
-                    />
+                    <IconComp class={`w-3.5 h-3.5 ${getCategoryColorClass(info(), "text")}`} />
                     <span class="text-xs font-medium">{cat.category}</span>
+                    {/* Category context indicator */}
+                    <span
+                      class={`text-[8px] px-1 rounded ${
+                        isTargetCategory()
+                          ? "bg-red-500/20 text-red-400"
+                          : "bg-blue-500/20 text-blue-400"
+                      }`}
+                    >
+                      {isTargetCategory() ? "T" : "H"}
+                    </span>
                     <span class="text-[10px] text-foreground-muted ml-auto">
                       {cat.nodes.length}
                     </span>
@@ -266,16 +476,11 @@ export const NodePalette: Component = () => {
                     <div class="pb-2">
                       <For each={cat.nodes}>
                         {(node) => (
-                          <div
-                            class="mx-2 mb-1 px-2 py-1.5 bg-background rounded border border-border/50 cursor-grab hover:border-accent/50 transition-colors"
-                            draggable={true}
-                            onDragStart={(e) => handleDragStart(e, node.type)}
-                          >
-                            <div class="text-xs font-medium">{node.label}</div>
-                            <div class="text-[10px] text-foreground-muted truncate">
-                              {node.description}
-                            </div>
-                          </div>
+                          <NodeItem
+                            node={node}
+                            onDragStart={handleDragStart}
+                            showContextBadge={false}
+                          />
                         )}
                       </For>
                     </div>
@@ -288,9 +493,31 @@ export const NodePalette: Component = () => {
           <Show when={filteredCategories().length === 0}>
             <div class="p-4 text-center text-foreground-muted text-xs">
               No nodes found
+              <Show when={contextFilter() !== "all"}>
+                <button
+                  class="block mx-auto mt-2 text-accent hover:underline"
+                  onClick={() => setContextFilter("all")}
+                >
+                  Show all nodes
+                </button>
+              </Show>
             </div>
           </Show>
         </Show>
+      </div>
+
+      {/* Legend */}
+      <div class="px-3 py-2 border-t border-border text-[10px] text-foreground-muted">
+        <div class="flex items-center gap-3">
+          <div class="flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-blue-500" />
+            <span>Host (local)</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-red-500" />
+            <span>Target (Frida)</span>
+          </div>
+        </div>
       </div>
 
       {/* Script list */}
@@ -315,9 +542,7 @@ export const NodePalette: Component = () => {
             {(script) => <ScriptItem script={script} />}
           </For>
           <Show when={scriptStore.scripts().length === 0}>
-            <div class="px-2 py-1 text-[10px] text-foreground-muted">
-              No scripts yet
-            </div>
+            <div class="px-2 py-1 text-[10px] text-foreground-muted">No scripts yet</div>
           </Show>
         </div>
       </div>

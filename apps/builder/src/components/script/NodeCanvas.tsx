@@ -12,8 +12,11 @@ import {
   type ScriptNode,
   type ScriptNodeType,
   type Port,
+  getNodeContext,
 } from "@/stores/script";
-import { TrashIcon } from "@/components/common/Icons";
+import { TrashIcon, IconZap, MemoryIcon } from "@/components/common/Icons";
+import { QuickNodeMenu } from "./QuickNodeMenu";
+import { CanvasMinimap } from "./CanvasMinimap";
 
 // Port type colors for visual distinction
 const portTypeColors: Record<string, { border: string; bg: string }> = {
@@ -66,77 +69,140 @@ function getConnectionColor(fromPort: Port | undefined): string {
   return colorMap[fromPort.valueType || "any"] || "#a855f7";
 }
 
-// Node colors by category
+// Comment colors
+const commentColors: Record<string, { bg: string; border: string }> = {
+  gray: { bg: "bg-gray-800/50", border: "border-gray-600/50" },
+  yellow: { bg: "bg-yellow-900/40", border: "border-yellow-600/50" },
+  green: { bg: "bg-green-900/40", border: "border-green-600/50" },
+  blue: { bg: "bg-blue-900/40", border: "border-blue-600/50" },
+  red: { bg: "bg-red-900/40", border: "border-red-600/50" },
+  purple: { bg: "bg-purple-900/40", border: "border-purple-600/50" },
+};
+
+// Node colors by category - Host nodes have subtle styling, Target nodes are more prominent
 const nodeColors: Record<
   string,
-  { bg: string; border: string; header: string }
+  { bg: string; border: string; header: string; isTarget?: boolean }
 > = {
+  // Host categories (blue-tinted, subtle)
+  Constants: {
+    bg: "bg-pink-900/20",
+    border: "border-pink-500/40",
+    header: "bg-pink-500/15",
+  },
+  Events: {
+    bg: "bg-emerald-900/20",
+    border: "border-emerald-500/40",
+    header: "bg-emerald-500/15",
+  },
   Flow: {
-    bg: "bg-blue-900/30",
-    border: "border-blue-500/50",
-    header: "bg-blue-500/20",
-  },
-  Memory: {
-    bg: "bg-purple-900/30",
-    border: "border-purple-500/50",
-    header: "bg-purple-500/20",
-  },
-  Pointer: {
-    bg: "bg-violet-900/30",
-    border: "border-violet-500/50",
-    header: "bg-violet-500/20",
-  },
-  Module: {
-    bg: "bg-green-900/30",
-    border: "border-green-500/50",
-    header: "bg-green-500/20",
+    bg: "bg-blue-900/20",
+    border: "border-blue-500/40",
+    header: "bg-blue-500/15",
   },
   Variable: {
-    bg: "bg-yellow-900/30",
-    border: "border-yellow-500/50",
-    header: "bg-yellow-500/20",
+    bg: "bg-yellow-900/20",
+    border: "border-yellow-500/40",
+    header: "bg-yellow-500/15",
+  },
+  Array: {
+    bg: "bg-indigo-900/20",
+    border: "border-indigo-500/40",
+    header: "bg-indigo-500/15",
+  },
+  Object: {
+    bg: "bg-sky-900/20",
+    border: "border-sky-500/40",
+    header: "bg-sky-500/15",
   },
   Math: {
-    bg: "bg-orange-900/30",
-    border: "border-orange-500/50",
-    header: "bg-orange-500/20",
+    bg: "bg-orange-900/20",
+    border: "border-orange-500/40",
+    header: "bg-orange-500/15",
   },
   String: {
-    bg: "bg-teal-900/30",
-    border: "border-teal-500/50",
-    header: "bg-teal-500/20",
+    bg: "bg-teal-900/20",
+    border: "border-teal-500/40",
+    header: "bg-teal-500/15",
   },
-  Native: {
-    bg: "bg-red-900/30",
-    border: "border-red-500/50",
-    header: "bg-red-500/20",
-  },
-  Interceptor: {
-    bg: "bg-rose-900/30",
-    border: "border-rose-500/50",
-    header: "bg-rose-500/20",
-  },
-  Hook: {
-    bg: "bg-pink-900/30",
-    border: "border-pink-500/50",
-    header: "bg-pink-500/20",
+  Conversion: {
+    bg: "bg-lime-900/20",
+    border: "border-lime-500/40",
+    header: "bg-lime-500/15",
   },
   Output: {
-    bg: "bg-cyan-900/30",
-    border: "border-cyan-500/50",
-    header: "bg-cyan-500/20",
+    bg: "bg-cyan-900/20",
+    border: "border-cyan-500/40",
+    header: "bg-cyan-500/15",
   },
-  UI: {
-    bg: "bg-indigo-900/30",
-    border: "border-indigo-500/50",
-    header: "bg-indigo-500/20",
+  Device: {
+    bg: "bg-slate-900/20",
+    border: "border-slate-500/40",
+    header: "bg-slate-500/15",
+  },
+  Process: {
+    bg: "bg-gray-900/20",
+    border: "border-gray-500/40",
+    header: "bg-gray-500/15",
   },
   Function: {
-    bg: "bg-amber-900/30",
-    border: "border-amber-500/50",
-    header: "bg-amber-500/20",
+    bg: "bg-amber-900/20",
+    border: "border-amber-500/40",
+    header: "bg-amber-500/15",
+  },
+  UI: {
+    bg: "bg-indigo-900/20",
+    border: "border-indigo-500/40",
+    header: "bg-indigo-500/15",
+  },
+  // Target categories (red-tinted, more prominent with dashed border indicator)
+  Memory: {
+    bg: "bg-gradient-to-br from-purple-900/30 to-red-900/20",
+    border: "border-purple-500/50 border-dashed",
+    header: "bg-purple-500/25",
+    isTarget: true,
+  },
+  Pointer: {
+    bg: "bg-gradient-to-br from-violet-900/30 to-red-900/20",
+    border: "border-violet-500/50 border-dashed",
+    header: "bg-violet-500/25",
+    isTarget: true,
+  },
+  Module: {
+    bg: "bg-gradient-to-br from-green-900/30 to-red-900/20",
+    border: "border-green-500/50 border-dashed",
+    header: "bg-green-500/25",
+    isTarget: true,
+  },
+  Native: {
+    bg: "bg-gradient-to-br from-red-900/30 to-red-950/30",
+    border: "border-red-500/50 border-dashed",
+    header: "bg-red-500/25",
+    isTarget: true,
+  },
+  Interceptor: {
+    bg: "bg-gradient-to-br from-rose-900/30 to-red-900/20",
+    border: "border-rose-500/50 border-dashed",
+    header: "bg-rose-500/25",
+    isTarget: true,
   },
 };
+
+// Get node styling including target indicator
+function getNodeStyle(type: ScriptNodeType): {
+  bg: string;
+  border: string;
+  header: string;
+  isTarget: boolean;
+} {
+  const category = getNodeCategory(type);
+  const colors = nodeColors[category] ?? nodeColors.Flow;
+  const isTarget = getNodeContext(type) === "target";
+  return {
+    ...colors,
+    isTarget,
+  };
+}
 
 // Get category for node type
 function getNodeCategory(type: ScriptNodeType): string {
@@ -187,6 +253,18 @@ export const NodeCanvas: Component = () => {
     y: number;
     connectionId: string;
   } | null>(null);
+
+  // Quick node menu state (opened with Space key)
+  const [quickMenu, setQuickMenu] = createSignal<{
+    screenX: number;
+    screenY: number;
+    canvasX: number;
+    canvasY: number;
+  } | null>(null);
+
+  // Canvas dimensions for minimap
+  const [canvasDimensions, setCanvasDimensions] = createSignal({ width: 800, height: 600 });
+  const [showMinimap, setShowMinimap] = createSignal(true);
 
   const currentScript = createMemo(() => scriptStore.getCurrentScript());
 
@@ -350,6 +428,40 @@ export const NodeCanvas: Component = () => {
   // Keyboard shortcuts are now handled centrally by hotkeys store in App.tsx
   // This ensures consistent behavior across tabs and proper macOS Backspace/Delete handling
 
+  // Handle keyboard shortcuts for canvas
+  const handleKeyDown = (e: KeyboardEvent) => {
+    // Space key to open quick node menu
+    if (e.code === "Space" && !e.repeat && canvasRef) {
+      // Don't open if user is typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      e.preventDefault();
+
+      // Get mouse position or center of canvas
+      const rect = canvasRef.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+
+      // Convert to canvas coordinates
+      const canvasX = (centerX - rect.left - offset().x) / scale();
+      const canvasY = (centerY - rect.top - offset().y) / scale();
+
+      setQuickMenu({
+        screenX: centerX - 140, // Half of menu width
+        screenY: centerY - 100,
+        canvasX,
+        canvasY,
+      });
+    }
+  };
+
+  // Handle quick node selection
+  const handleQuickNodeSelect = (type: ScriptNodeType, x: number, y: number) => {
+    scriptStore.addNode(type, x, y);
+  };
+
   // Handle drop from palette
   const handleDragOver = (e: DragEvent) => {
     e.preventDefault();
@@ -459,11 +571,27 @@ export const NodeCanvas: Component = () => {
   onMount(() => {
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("keydown", handleKeyDown);
+
+    // Track canvas dimensions
+    if (canvasRef) {
+      const resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          setCanvasDimensions({
+            width: entry.contentRect.width,
+            height: entry.contentRect.height,
+          });
+        }
+      });
+      resizeObserver.observe(canvasRef);
+      onCleanup(() => resizeObserver.disconnect());
+    }
   });
 
   onCleanup(() => {
     window.removeEventListener("mousemove", handleMouseMove);
     window.removeEventListener("mouseup", handleMouseUp);
+    window.removeEventListener("keydown", handleKeyDown);
   });
 
   // Get port position for a node
@@ -711,10 +839,43 @@ export const NodeCanvas: Component = () => {
         {/* Help text */}
         <div class="absolute bottom-2 left-2 text-[10px] text-foreground-muted/50 pointer-events-none">
           <span>
-            Scroll: Pan | {isMac ? "⌘" : "Ctrl"}+Scroll: Zoom | Drag: Box select
-            | Shift+Click: Add to selection
+            Scroll: Pan | {isMac ? "⌘" : "Ctrl"}+Scroll: Zoom | Space: Quick add
+            | Shift+Click: Multi-select
           </span>
         </div>
+
+        {/* Quick node menu */}
+        <Show when={quickMenu()}>
+          {(menu) => (
+            <QuickNodeMenu
+              x={menu().screenX}
+              y={menu().screenY}
+              canvasX={menu().canvasX}
+              canvasY={menu().canvasY}
+              onSelect={handleQuickNodeSelect}
+              onClose={() => setQuickMenu(null)}
+            />
+          )}
+        </Show>
+
+        {/* Minimap */}
+        <Show when={showMinimap() && (currentScript()?.nodes.length ?? 0) > 0}>
+          <CanvasMinimap
+            offset={offset()}
+            scale={scale()}
+            canvasWidth={canvasDimensions().width}
+            canvasHeight={canvasDimensions().height}
+            onViewportChange={setOffset}
+          />
+        </Show>
+
+        {/* Minimap toggle */}
+        <button
+          class="absolute bottom-2 right-3 px-2 py-1 text-[10px] bg-surface/80 hover:bg-surface border border-border rounded transition-colors"
+          onClick={() => setShowMinimap(!showMinimap())}
+        >
+          {showMinimap() ? "Hide Map" : "Show Map"}
+        </button>
       </div>
     </div>
   );
@@ -808,8 +969,9 @@ interface NodeComponentProps {
 const NodeComponent: Component<NodeComponentProps> = (props) => {
   const [isDragging, setIsDragging] = createSignal(false);
 
-  const category = () => getNodeCategory(props.node.type);
-  const colors = () => nodeColors[category()] ?? nodeColors.Flow;
+  const style = () => getNodeStyle(props.node.type);
+  const isTarget = () => getNodeContext(props.node.type) === "target";
+  const isEventNode = () => props.node.type.startsWith("event_");
 
   const handleMouseDown = (e: MouseEvent) => {
     if (e.button !== 0) return;
@@ -887,10 +1049,55 @@ const NodeComponent: Component<NodeComponentProps> = (props) => {
     return "";
   };
 
+  // Check if this is a comment node
+  const isComment = () => props.node.type === "comment";
+  const commentColor = () => commentColors[props.node.config?.color as string] ?? commentColors.gray;
+
+  // Render comment node differently
+  if (isComment()) {
+    const width = () => props.node.config?.width as number ?? 200;
+    const height = () => props.node.config?.height as number ?? 80;
+
+    return (
+      <div
+        data-node-id={props.node.id}
+        class={`absolute rounded-lg border-2 border-dashed ${commentColor().bg} ${commentColor().border} ${ringClass()}`}
+        style={{
+          left: `${props.node.x}px`,
+          top: `${props.node.y}px`,
+          width: `${width()}px`,
+          height: `${height()}px`,
+          cursor: isDragging() ? "grabbing" : "grab",
+        }}
+        onMouseDown={handleMouseDown}
+      >
+        {/* Comment content */}
+        <div class="p-2 h-full flex flex-col">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-[10px] text-foreground-muted uppercase tracking-wider font-medium">
+              💬 Comment
+            </span>
+            <Show when={props.isSelected}>
+              <button
+                class="p-0.5 hover:bg-error/30 rounded transition-colors"
+                onClick={handleDelete}
+              >
+                <TrashIcon class="w-3 h-3 text-error" />
+              </button>
+            </Show>
+          </div>
+          <p class="text-xs text-foreground flex-1 overflow-hidden whitespace-pre-wrap">
+            {props.node.config?.text as string ?? ""}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       data-node-id={props.node.id}
-      class={`absolute rounded-lg border shadow-lg ${colors().bg} ${colors().border} ${ringClass()}`}
+      class={`absolute rounded-lg border shadow-lg ${style().bg} ${style().border} ${ringClass()}`}
       style={{
         left: `${props.node.x}px`,
         top: `${props.node.y}px`,
@@ -899,14 +1106,39 @@ const NodeComponent: Component<NodeComponentProps> = (props) => {
       }}
       onMouseDown={handleMouseDown}
     >
+      {/* Target node indicator strip */}
+      <Show when={isTarget()}>
+        <div class="absolute -top-0.5 left-2 right-2 h-1 bg-gradient-to-r from-red-500 to-rose-500 rounded-t-full opacity-80" />
+      </Show>
+
       {/* Header */}
       <div
-        class={`px-3 py-1.5 rounded-t-lg border-b ${colors().header} ${colors().border} flex items-center justify-between`}
+        class={`px-3 py-1.5 rounded-t-lg border-b ${style().header} ${style().border} flex items-center gap-2`}
       >
-        <span class="text-xs font-medium truncate">{props.node.label}</span>
-        <Show when={props.isSelected && !props.node.type.startsWith("event_")}>
+        {/* Context indicator icon */}
+        <Show
+          when={isTarget()}
+          fallback={
+            <Show when={isEventNode()}>
+              <IconZap class="w-3 h-3 text-emerald-400 flex-shrink-0" />
+            </Show>
+          }
+        >
+          <MemoryIcon class="w-3 h-3 text-red-400 flex-shrink-0" />
+        </Show>
+
+        <span class="text-xs font-medium truncate flex-1">{props.node.label}</span>
+
+        {/* Target badge */}
+        <Show when={isTarget()}>
+          <span class="text-[7px] px-1 py-0.5 rounded bg-red-500/30 text-red-300 font-medium flex-shrink-0">
+            TARGET
+          </span>
+        </Show>
+
+        <Show when={props.isSelected && !isEventNode()}>
           <button
-            class="p-0.5 hover:bg-error/30 rounded transition-colors"
+            class="p-0.5 hover:bg-error/30 rounded transition-colors flex-shrink-0"
             onClick={handleDelete}
           >
             <TrashIcon class="w-3 h-3 text-error" />
@@ -924,25 +1156,42 @@ const NodeComponent: Component<NodeComponentProps> = (props) => {
               props.isDraggingConnection && props.isPortCompatible(port);
             const isIncompatible = () =>
               props.isDraggingConnection && !props.isPortCompatible(port);
+
+            // Generate tooltip with type conversion hint
+            const portTooltip = () => {
+              const baseTooltip = port.valueType
+                ? `${port.name} (${port.valueType})`
+                : port.name;
+
+              if (isCompatible()) {
+                return `${baseTooltip} - Drop to connect`;
+              }
+              return baseTooltip;
+            };
+
             return (
-              <div class="flex items-center h-6 px-2 group">
+              <div class="flex items-center h-6 px-2 group relative">
                 <div
                   class={`w-3 h-3 rounded-full border-2 -ml-4 cursor-pointer transition-all ${portColor.border} ${portColor.bg} ${
                     isCompatible()
-                      ? "scale-150 ring-2 ring-green-400 ring-offset-1 ring-offset-transparent"
+                      ? "scale-150 ring-2 ring-green-400 ring-offset-1 ring-offset-transparent animate-pulse"
                       : isIncompatible()
-                        ? "opacity-30"
+                        ? "opacity-30 scale-75"
                         : "hover:scale-125"
                   }`}
                   onMouseUp={(e) => props.onPortMouseUp(e, props.node.id, port)}
-                  title={
-                    port.valueType
-                      ? `${port.name} (${port.valueType})`
-                      : port.name
-                  }
+                  title={portTooltip()}
                 />
+                {/* Compatible port indicator */}
+                <Show when={isCompatible()}>
+                  <span class="absolute -left-2 text-[8px] text-green-400 font-bold animate-pulse">
+                    +
+                  </span>
+                </Show>
                 <span
-                  class={`text-[10px] ml-2 ${isIncompatible() ? "opacity-30" : "text-foreground-muted"}`}
+                  class={`text-[10px] ml-2 transition-opacity ${
+                    isIncompatible() ? "opacity-30" : isCompatible() ? "text-green-400" : "text-foreground-muted"
+                  }`}
                 >
                   {port.name}
                   {port.valueType && port.valueType !== "any" && (

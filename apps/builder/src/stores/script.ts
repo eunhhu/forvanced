@@ -130,7 +130,9 @@ export type ScriptNodeType =
   // UI Value Operations (for UI-Script binding)
   | "ui_get_value" // Read current UI component value
   | "ui_set_value" // Set UI component value programmatically
-  | "ui_get_props"; // Read UI component properties (label, min, max, etc.)
+  | "ui_get_props" // Read UI component properties (label, min, max, etc.)
+  // Utility/Documentation
+  | "comment"; // Comment node for documentation (no execution)
 
 // Value Types
 export type ValueType =
@@ -275,6 +277,180 @@ export function isTargetNode(nodeType: ScriptNodeType): boolean {
 // Check if a node type is a host node (executes locally)
 export function isHostNode(nodeType: ScriptNodeType): boolean {
   return getNodeContext(nodeType) === "host";
+}
+
+// Node category info with icons, colors, and context
+export interface NodeCategoryInfo {
+  name: string;
+  icon: string; // Icon name for lookup
+  color: string; // Tailwind color class base (e.g., "pink", "emerald")
+  context: NodeContext; // Most common context for this category
+  description: string;
+}
+
+// Category metadata for UI display
+export const nodeCategoryInfo: Record<string, NodeCategoryInfo> = {
+  Constants: {
+    name: "Constants",
+    icon: "hash",
+    color: "pink",
+    context: "host",
+    description: "Literal values (string, number, boolean, pointer)",
+  },
+  Events: {
+    name: "Events",
+    icon: "zap",
+    color: "emerald",
+    context: "host",
+    description: "Entry points for script execution",
+  },
+  Flow: {
+    name: "Flow",
+    icon: "workflow",
+    color: "blue",
+    context: "host",
+    description: "Control flow (if, loop, delay)",
+  },
+  Memory: {
+    name: "Memory",
+    icon: "memory",
+    color: "purple",
+    context: "target",
+    description: "Read/write memory in target process",
+  },
+  Pointer: {
+    name: "Pointer",
+    icon: "memory",
+    color: "violet",
+    context: "target",
+    description: "Pointer arithmetic and operations",
+  },
+  Module: {
+    name: "Module",
+    icon: "function",
+    color: "green",
+    context: "target",
+    description: "Module and symbol operations",
+  },
+  Variable: {
+    name: "Variable",
+    icon: "variable",
+    color: "yellow",
+    context: "host",
+    description: "Store and retrieve values",
+  },
+  Array: {
+    name: "Array",
+    icon: "list",
+    color: "indigo",
+    context: "host",
+    description: "Array operations",
+  },
+  Object: {
+    name: "Object",
+    icon: "box",
+    color: "sky",
+    context: "host",
+    description: "Object property operations",
+  },
+  Math: {
+    name: "Math",
+    icon: "calculator",
+    color: "orange",
+    context: "host",
+    description: "Math and logic operations",
+  },
+  String: {
+    name: "String",
+    icon: "terminal",
+    color: "teal",
+    context: "host",
+    description: "String manipulation",
+  },
+  Conversion: {
+    name: "Conversion",
+    icon: "arrowswap",
+    color: "lime",
+    context: "host",
+    description: "Type conversion utilities",
+  },
+  Native: {
+    name: "Native",
+    icon: "terminal",
+    color: "red",
+    context: "target",
+    description: "Call native functions",
+  },
+  Interceptor: {
+    name: "Interceptor",
+    icon: "zap",
+    color: "rose",
+    context: "target",
+    description: "Hook and intercept functions",
+  },
+  Output: {
+    name: "Output",
+    icon: "gitbranch",
+    color: "cyan",
+    context: "host",
+    description: "Logging and notifications",
+  },
+  Device: {
+    name: "Device",
+    icon: "cpu",
+    color: "slate",
+    context: "host",
+    description: "Device and process management",
+  },
+  Process: {
+    name: "Process",
+    icon: "play",
+    color: "gray",
+    context: "host",
+    description: "Process attach/detach control",
+  },
+  Function: {
+    name: "Function",
+    icon: "function",
+    color: "amber",
+    context: "host",
+    description: "Define and call reusable functions",
+  },
+  UI: {
+    name: "UI",
+    icon: "layout",
+    color: "indigo",
+    context: "host",
+    description: "Read/write UI component values",
+  },
+  Utility: {
+    name: "Utility",
+    icon: "note",
+    color: "gray",
+    context: "host",
+    description: "Documentation and utility nodes",
+  },
+};
+
+// Get category info for a node type
+export function getNodeCategoryInfo(nodeType: ScriptNodeType): NodeCategoryInfo {
+  const template = nodeTemplates.find((t) => t.type === nodeType);
+  const category = template?.category ?? "Flow";
+  return nodeCategoryInfo[category] ?? nodeCategoryInfo.Flow;
+}
+
+// Get all categories that are target-context (for filtering)
+export function getTargetCategories(): string[] {
+  return Object.entries(nodeCategoryInfo)
+    .filter(([_, info]) => info.context === "target")
+    .map(([name]) => name);
+}
+
+// Get all categories that are host-context (for filtering)
+export function getHostCategories(): string[] {
+  return Object.entries(nodeCategoryInfo)
+    .filter(([_, info]) => info.context === "host")
+    .map(([name]) => name);
 }
 
 export const nodeTemplates: NodeTemplate[] = [
@@ -1931,6 +2107,23 @@ export const nodeTemplates: NodeTemplate[] = [
     outputs: [
       { name: "value", type: "value", valueType: "any", direction: "output" },
     ],
+  },
+  // ============================================
+  // Utility/Documentation Nodes
+  // ============================================
+  {
+    type: "comment",
+    label: "Comment",
+    category: "Utility",
+    description: "Add a note or comment to document your script (not executed)",
+    defaultConfig: {
+      text: "Add your notes here...",
+      color: "gray",
+      width: 200,
+      height: 80,
+    },
+    inputs: [],
+    outputs: [],
   },
 ];
 

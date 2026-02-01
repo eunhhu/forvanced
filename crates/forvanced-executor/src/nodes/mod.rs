@@ -4,6 +4,7 @@
 //! Target nodes are executed via RPC in the Frida script context.
 
 pub mod constants;
+pub mod device;
 pub mod flow;
 pub mod math;
 pub mod variables;
@@ -140,8 +141,16 @@ pub fn get_executor(node_type: &str) -> Option<Box<dyn NodeExecutor>> {
         "ui_set_value" => Some(Box::new(ui::UISetValueExecutor)),
         "ui_get_props" => Some(Box::new(ui::UIGetPropsExecutor)),
 
+        // Device Management
+        "device_enumerate" => Some(Box::new(device::DeviceEnumerateExecutor)),
+        "device_select" => Some(Box::new(device::DeviceSelectExecutor)),
+        "device_get_current" => Some(Box::new(device::DeviceGetCurrentExecutor)),
+        "process_enumerate" => Some(Box::new(device::ProcessEnumerateExecutor)),
+        "application_enumerate" => Some(Box::new(device::ApplicationEnumerateExecutor)),
+
         // Event nodes don't have executors - they're entry points
-        "event_ui" | "event_attach" | "event_detach" | "event_hotkey" | "event_interval" => None,
+        "event_ui" | "event_attach" | "event_detach" | "event_hotkey" | "event_interval"
+        | "event_hook" | "event_memory_watch" => None,
 
         // Target nodes are handled by RPC
         _ => None,
@@ -158,5 +167,6 @@ pub fn is_event_node(node_type: &str) -> bool {
     matches!(
         node_type,
         "event_ui" | "event_attach" | "event_detach" | "event_hotkey" | "event_interval"
+        | "event_hook" | "event_memory_watch"
     )
 }
