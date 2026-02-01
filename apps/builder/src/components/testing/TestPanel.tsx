@@ -279,7 +279,7 @@ export const TestPanel: Component = () => {
         id: v.id,
         name: v.name,
         valueType: v.type,
-        defaultValue: v.defaultValue,
+        defaultValue: v.defaultValue ?? null,
       })),
       nodes: script.nodes.map((n: ScriptNode) => ({
         id: n.id,

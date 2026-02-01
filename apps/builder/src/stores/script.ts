@@ -1264,12 +1264,9 @@ export const nodeTemplates: NodeTemplate[] = [
     label: "Format String",
     category: "String",
     description: "Format string with placeholders ({0}, {1}, etc.)",
-    defaultConfig: { template: "Value: {0}" },
+    defaultConfig: { template: "Value: {0}", argCount: 1 },
     inputs: [
       { name: "arg0", type: "value", valueType: "any", direction: "input" },
-      { name: "arg1", type: "value", valueType: "any", direction: "input" },
-      { name: "arg2", type: "value", valueType: "any", direction: "input" },
-      { name: "arg3", type: "value", valueType: "any", direction: "input" },
     ],
     outputs: [
       {
@@ -2340,6 +2337,54 @@ function createScriptStore() {
     });
   }
 
+  // Update string_format node argument count
+  function updateFormatStringArgCount(nodeId: string, argCount: number) {
+    const script = getCurrentScript();
+    if (!script) return;
+
+    const node = script.nodes.find((n) => n.id === nodeId);
+    if (!node || node.type !== "string_format") return;
+
+    // Create new arg inputs
+    const argInputs: Port[] = [];
+    for (let i = 0; i < argCount; i++) {
+      // Try to preserve existing arg port id if it exists
+      const existingArgPort = node.inputs.find((p) => p.name === `arg${i}`);
+      argInputs.push({
+        id: existingArgPort?.id || crypto.randomUUID(),
+        name: `arg${i}`,
+        type: "value",
+        valueType: "any",
+        direction: "input",
+      });
+    }
+
+    // Remove connections to deleted arg ports
+    const validArgNames = new Set(argInputs.map((p) => p.name));
+    const newConnections = script.connections.filter((conn) => {
+      if (conn.toNodeId !== nodeId) return true;
+      const port = node.inputs.find((p) => p.id === conn.toPortId);
+      if (!port) return true;
+      return validArgNames.has(port.name);
+    });
+
+    updateScript(script.id, {
+      nodes: script.nodes.map((n) =>
+        n.id === nodeId
+          ? {
+              ...n,
+              inputs: argInputs,
+              config: {
+                ...n.config,
+                argCount,
+              },
+            }
+          : n,
+      ),
+      connections: newConnections,
+    });
+  }
+
   // Delete node
   function deleteNode(nodeId: string) {
     const script = getCurrentScript();
@@ -2622,6 +2667,7 @@ function createScriptStore() {
     addNode,
     updateNode,
     updateNativeNodeArgCount,
+    updateFormatStringArgCount,
     deleteNode,
     addConnection,
     deleteConnection,

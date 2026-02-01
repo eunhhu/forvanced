@@ -32,12 +32,18 @@ pub struct ExecutionResult {
     pub error: Option<String>,
 }
 
+/// Persistent variable state for scripts
+pub type VariableState = Arc<RwLock<HashMap<String, Value>>>;
+
 /// Main script executor
 pub struct ScriptExecutor {
     /// RPC bridge for target node execution
     rpc_bridge: Arc<RwLock<RpcBridge>>,
     /// UI state shared with frontend
     ui_state: UIState,
+    /// Script variable state (persists across executions within same script)
+    /// Key is script ID, value is variable name -> value
+    script_variables: Arc<RwLock<HashMap<String, HashMap<String, Value>>>>,
 }
 
 impl ScriptExecutor {
@@ -46,7 +52,61 @@ impl ScriptExecutor {
         Self {
             rpc_bridge: Arc::new(RwLock::new(RpcBridge::new())),
             ui_state,
+            script_variables: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Get or create variable state for a script
+    async fn get_script_variables(&self, script: &Script) -> HashMap<String, Value> {
+        let mut states = self.script_variables.write().await;
+        if !states.contains_key(&script.id) {
+            // Initialize variables from script definitions
+            let mut vars = HashMap::new();
+            for var_def in &script.variables {
+                let default_value = var_def
+                    .default_value
+                    .as_ref()
+                    .map(|v| Value::from(v.clone()))
+                    .unwrap_or_else(|| Self::default_value_for_type(&var_def.value_type));
+                vars.insert(var_def.name.clone(), default_value);
+            }
+            states.insert(script.id.clone(), vars);
+        }
+        states.get(&script.id).cloned().unwrap_or_default()
+    }
+
+    /// Save variable state for a script
+    async fn save_script_variables(&self, script_id: &str, variables: HashMap<String, Value>) {
+        let mut states = self.script_variables.write().await;
+        states.insert(script_id.to_string(), variables);
+    }
+
+    /// Get default value for a value type
+    fn default_value_for_type(value_type: &crate::script::ValueType) -> Value {
+        use crate::script::ValueType;
+        match value_type {
+            ValueType::Int8 | ValueType::Uint8 |
+            ValueType::Int16 | ValueType::Uint16 |
+            ValueType::Int32 | ValueType::Uint32 |
+            ValueType::Int64 | ValueType::Uint64 => Value::Integer(0),
+            ValueType::Float | ValueType::Double => Value::Float(0.0),
+            ValueType::Pointer => Value::Pointer(0),
+            ValueType::String => Value::String(String::new()),
+            ValueType::Boolean => Value::Boolean(false),
+            ValueType::Any => Value::Null,
+        }
+    }
+
+    /// Clear variable state for a specific script
+    pub async fn clear_script_state(&self, script_id: &str) {
+        let mut states = self.script_variables.write().await;
+        states.remove(script_id);
+    }
+
+    /// Clear all variable states
+    pub async fn clear_all_states(&self) {
+        let mut states = self.script_variables.write().await;
+        states.clear();
     }
 
     /// Set the session for target node execution
@@ -76,9 +136,16 @@ impl ScriptExecutor {
         event_value: Value,
         component_id: Option<String>,
     ) -> ExecutorResult<ExecutionResult> {
-        // Create execution context
-        let mut ctx = ExecutionContext::new(script, Arc::clone(&self.ui_state))
-            .with_event(event_value, component_id);
+        // Load persisted variable state for this script
+        let persisted_vars = self.get_script_variables(&script).await;
+
+        // Create execution context with persisted variables
+        let mut ctx = ExecutionContext::new_with_variables(
+            script,
+            Arc::clone(&self.ui_state),
+            persisted_vars,
+        )
+        .with_event(event_value, component_id);
 
         // Find the event node
         let event_node = ctx.find_node(event_node_id)?.clone();
@@ -91,11 +158,27 @@ impl ScriptExecutor {
             )));
         }
 
-        // Set up event outputs (value, componentId, etc.)
+        // Set up event outputs based on node type
         let mut event_outputs = HashMap::new();
         event_outputs.insert("value".to_string(), ctx.event_value().clone());
         if let Some(cid) = ctx.event_component_id() {
             event_outputs.insert("componentId".to_string(), Value::String(cid.to_string()));
+        }
+        // Handle specific event node outputs
+        match event_node.node_type.as_str() {
+            "event_interval" => {
+                // tick output contains the tick count (event_value)
+                event_outputs.insert("tick".to_string(), ctx.event_value().clone());
+            }
+            "event_hotkey" => {
+                // key output contains the key info
+                event_outputs.insert("key".to_string(), ctx.event_value().clone());
+            }
+            "event_attach" | "event_detach" => {
+                // session output contains session id
+                event_outputs.insert("session".to_string(), ctx.event_value().clone());
+            }
+            _ => {}
         }
         ctx.set_node_outputs(event_node_id, event_outputs);
 
@@ -119,10 +202,15 @@ impl ScriptExecutor {
             }
         }
 
+        // Save variable state for next execution
+        let script_id = script.id.clone();
+        let final_variables = ctx.variables().clone();
+        self.save_script_variables(&script_id, final_variables.clone()).await;
+
         Ok(ExecutionResult {
             success: true,
-            variables: HashMap::new(), // TODO: expose variables
-            logs: vec![],
+            variables: final_variables,
+            logs: ctx.take_logs(),
             error: None,
         })
     }
@@ -250,37 +338,102 @@ impl ScriptExecutor {
         Ok(inputs)
     }
 
-    /// Execute a value-only node (no flow inputs, typically constants)
-    /// This avoids recursion by not calling collect_inputs for value nodes
-    async fn execute_value_node(
-        &self,
-        ctx: &mut ExecutionContext,
-        node: &ScriptNode,
-    ) -> ExecutorResult<NodeOutput> {
-        // Value nodes don't have inputs to collect (they're constants or getters)
-        let inputs = HashMap::new();
+    /// Execute a value-only node (no flow inputs)
+    /// Recursively collects inputs from connected value nodes
+    /// Uses Box::pin to handle recursive async calls
+    fn execute_value_node<'a>(
+        &'a self,
+        ctx: &'a mut ExecutionContext,
+        node: &'a ScriptNode,
+    ) -> Pin<Box<dyn Future<Output = ExecutorResult<NodeOutput>> + Send + 'a>> {
+        Box::pin(async move {
+            // Collect inputs from connected value nodes (recursive)
+            let inputs = self.collect_value_inputs(ctx, node).await?;
 
-        // Determine execution context
-        let node_context = classify_node(&node.node_type);
+            // Determine execution context
+            let node_context = classify_node(&node.node_type);
 
-        match node_context {
-            NodeContext::Host => {
-                if let Some(executor) = nodes::get_executor(&node.node_type) {
-                    executor.execute(node, &inputs, ctx).await
-                } else {
-                    Err(ExecutorError::InvalidOperation(format!(
-                        "No executor for value node type: {}",
-                        node.node_type
-                    )))
+            match node_context {
+                NodeContext::Host => {
+                    if let Some(executor) = nodes::get_executor(&node.node_type) {
+                        executor.execute(node, &inputs, ctx).await
+                    } else {
+                        Err(ExecutorError::InvalidOperation(format!(
+                            "No executor for value node type: {}",
+                            node.node_type
+                        )))
+                    }
+                }
+                NodeContext::Target => {
+                    // Value-only target nodes are rare, but handle them
+                    let bridge = self.rpc_bridge.read().await;
+                    let outputs = bridge.execute_target_node(node, &inputs).await?;
+                    Ok(NodeOutput::values(outputs))
                 }
             }
-            NodeContext::Target => {
-                // Value-only target nodes are rare, but handle them
-                let bridge = self.rpc_bridge.read().await;
-                let outputs = bridge.execute_target_node(node, &inputs).await?;
-                Ok(NodeOutput::values(outputs))
+        })
+    }
+
+    /// Collect inputs for a value-only node (recursively evaluates connected value nodes)
+    fn collect_value_inputs<'a>(
+        &'a self,
+        ctx: &'a mut ExecutionContext,
+        node: &'a ScriptNode,
+    ) -> Pin<Box<dyn Future<Output = ExecutorResult<HashMap<String, Value>>> + Send + 'a>> {
+        Box::pin(async move {
+            let mut inputs = HashMap::new();
+            let script = ctx.script().clone();
+
+            for input_port in &node.inputs {
+                // Skip flow ports
+                if input_port.port_type == PortType::Flow {
+                    continue;
+                }
+
+                // Find connection to this input
+                if let Some(conn) = script.connection_to_port(&node.id, &input_port.id) {
+                    let from_node_id = &conn.from_node_id;
+                    let from_port_id = &conn.from_port_id;
+
+                    if let Some(from_node) = script.find_node(from_node_id) {
+                        if let Some(from_port) = from_node.output_by_id(from_port_id) {
+                            // Check cache first
+                            if let Some(value) = ctx.get_node_output(from_node_id, &from_port.name) {
+                                inputs.insert(input_port.name.clone(), value.clone());
+                                continue;
+                            }
+
+                            // Don't try to evaluate event nodes or flow nodes -
+                            // their outputs should already be cached from execution flow
+                            if nodes::is_event_node(&from_node.node_type) {
+                                // Event node outputs not cached means it hasn't been triggered yet
+                                // Just skip this input
+                                continue;
+                            }
+
+                            // Only recursively evaluate pure value nodes (no flow inputs)
+                            let has_flow_input = from_node.inputs.iter().any(|p| p.port_type == PortType::Flow);
+                            if has_flow_input {
+                                // Flow node outputs should be cached from execution
+                                // If not cached, the node hasn't been executed yet - skip
+                                continue;
+                            }
+
+                            // Recursively evaluate the source node (pure value node)
+                            let from_node = from_node.clone();
+                            let output = self.execute_value_node(ctx, &from_node).await?;
+                            ctx.set_node_outputs(from_node_id, output.values.clone());
+
+                            if let Some(value) = output.values.get(&from_port.name) {
+                                inputs.insert(input_port.name.clone(), value.clone());
+                            }
+                        }
+                    }
+                }
             }
-        }
+
+            Ok(inputs)
+        })
     }
 
     /// Execute a loop node (for_each, for_range, loop)

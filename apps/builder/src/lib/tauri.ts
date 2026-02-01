@@ -152,6 +152,19 @@ function getMockResponse<T>(cmd: string, args?: Record<string, unknown>): T {
     },
     get_recent_projects: [],
     remove_recent_project: undefined,
+    // Executor commands
+    execute_script: {
+      success: true,
+      variables: {},
+      logs: ["[Mock] Script executed successfully"],
+      error: null,
+    },
+    set_executor_session: undefined,
+    clear_executor_session: undefined,
+    set_ui_value: undefined,
+    get_ui_value: null,
+    get_all_ui_values: {},
+    set_ui_values_batch: undefined,
   };
 
   return (mocks[cmd] ?? null) as T;

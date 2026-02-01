@@ -18,7 +18,7 @@ impl NodeExecutor for LogExecutor {
         &self,
         _node: &ScriptNode,
         inputs: &HashMap<String, Value>,
-        _ctx: &mut ExecutionContext,
+        ctx: &mut ExecutionContext,
     ) -> ExecutorResult<NodeOutput> {
         let message = inputs
             .get("message")
@@ -30,6 +30,9 @@ impl NodeExecutor for LogExecutor {
 
         // Also print to stdout for debugging
         println!("[Script Log] {}", message);
+
+        // Add to execution context logs (for frontend)
+        ctx.add_log(message);
 
         Ok(NodeOutput::flow("exec"))
     }

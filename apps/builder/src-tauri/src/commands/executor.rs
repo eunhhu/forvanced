@@ -97,6 +97,7 @@ pub struct VariableData {
     pub id: String,
     pub name: String,
     pub value_type: String,
+    #[serde(default)]
     pub default_value: serde_json::Value,
 }
 
@@ -272,6 +273,16 @@ pub async fn execute_script(
         "execute_script called: event_node={}, component={:?}",
         event_node_id, component_id
     );
+
+    // Debug: Print all nodes and their configs
+    for node in &script.nodes {
+        info!("Node: {} ({}), config: {:?}", node.label, node.node_type, node.config);
+    }
+
+    // Debug: Print all connections
+    for conn in &script.connections {
+        info!("Connection: {} -> {}", conn.from_node_id, conn.to_node_id);
+    }
 
     let converted_script = convert_script(script);
     let converted_value = json_to_value(event_value);

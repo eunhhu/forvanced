@@ -791,24 +791,7 @@ const NodeProperties: Component<NodePropertiesProps> = (props) => {
 
           {/* String format template */}
           <Show when={props.node.type === "string_format"}>
-            <PropertyRow label="Template">
-              <InspectorTextInput
-                class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
-                placeholder="Value: {0}"
-                value={(props.node.config.template as string) ?? "Value: {0}"}
-                onChange={(val) =>
-                  scriptStore.updateNode(props.node.id, {
-                    config: {
-                      ...props.node.config,
-                      template: val,
-                    },
-                  })
-                }
-              />
-            </PropertyRow>
-            <div class="text-[9px] text-foreground-muted">
-              Use {"{"} 0 {"}"}, {"{"} 1 {"}"}, etc. for placeholders
-            </div>
+            <FormatStringConfig node={props.node} />
           </Show>
 
           {/* To string format */}
@@ -1941,6 +1924,66 @@ const ProcessAttachConfig: Component<ProcessAttachConfigProps> = (props) => {
         <p class="pt-1 border-t border-border/50">
           Use "Select Device" first to choose the target device.
         </p>
+      </div>
+    </>
+  );
+};
+
+// ============================================
+// Format String Config - For string_format node
+// ============================================
+interface FormatStringConfigProps {
+  node: ScriptNode;
+}
+
+const FormatStringConfig: Component<FormatStringConfigProps> = (props) => {
+  const argCount = () => (props.node.config.argCount as number) ?? 1;
+
+  const handleArgCountChange = (newCount: number) => {
+    const safeCount = Math.max(0, Math.min(16, newCount)); // Limit to 16 args
+    scriptStore.updateFormatStringArgCount(props.node.id, safeCount);
+  };
+
+  return (
+    <>
+      <PropertyRow label="Template">
+        <InspectorTextInput
+          class="w-full px-2 py-1 text-xs bg-background border border-border rounded"
+          placeholder="Value: {0}"
+          value={(props.node.config.template as string) ?? "Value: {0}"}
+          onChange={(val) =>
+            scriptStore.updateNode(props.node.id, {
+              config: {
+                ...props.node.config,
+                template: val,
+              },
+            })
+          }
+        />
+      </PropertyRow>
+
+      <PropertyRow label="Arg Count">
+        <div class="flex items-center gap-2">
+          <button
+            class="px-2 py-1 text-xs bg-background border border-border rounded hover:bg-surface-hover"
+            onClick={() => handleArgCountChange(argCount() - 1)}
+            disabled={argCount() <= 0}
+          >
+            -
+          </button>
+          <span class="text-xs w-6 text-center">{argCount()}</span>
+          <button
+            class="px-2 py-1 text-xs bg-background border border-border rounded hover:bg-surface-hover"
+            onClick={() => handleArgCountChange(argCount() + 1)}
+            disabled={argCount() >= 16}
+          >
+            +
+          </button>
+        </div>
+      </PropertyRow>
+
+      <div class="text-[9px] text-foreground-muted">
+        Use {"{0}"}, {"{1}"}, etc. for placeholders in template
       </div>
     </>
   );

@@ -821,6 +821,7 @@ const PropertyInput: Component<PropertyInputProps> = (props) => {
 };
 
 // Uncontrolled text input for array items (tabs, dropdown options) that doesn't lose focus
+// Key fix: Only call onChange on blur to prevent array replacement during typing
 interface ArrayItemInputProps {
   value: string;
   onChange: (value: string) => void;
@@ -849,11 +850,26 @@ const ArrayItemInput: Component<ArrayItemInputProps> = (props) => {
       value={localValue()}
       onFocus={() => setIsFocused(true)}
       onInput={(e) => {
-        const val = e.currentTarget.value;
-        setLocalValue(val);
-        props.onChange(val);
+        // Only update local value during typing - don't call onChange yet
+        setLocalValue(e.currentTarget.value);
       }}
-      onBlur={() => setIsFocused(false)}
+      onBlur={(e) => {
+        setIsFocused(false);
+        // Only call onChange on blur to prevent array replacement during typing
+        const newVal = e.currentTarget.value;
+        if (newVal !== props.value) {
+          props.onChange(newVal);
+        }
+      }}
+      onKeyDown={(e) => {
+        // Also commit on Enter key
+        if (e.key === "Enter") {
+          const newVal = (e.target as HTMLInputElement).value;
+          if (newVal !== props.value) {
+            props.onChange(newVal);
+          }
+        }
+      }}
     />
   );
 };

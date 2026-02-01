@@ -57,15 +57,29 @@ pub struct ExecutionContext {
 
     /// Event component ID (for UI events)
     event_component_id: Option<String>,
+
+    /// Execution logs (collected from log nodes)
+    logs: Vec<String>,
 }
 
 impl ExecutionContext {
     /// Create a new execution context
     pub fn new(script: Script, ui_state: UIState) -> Self {
+        // Initialize variables from script definitions with default values
+        let mut variables = HashMap::new();
+        for var_def in &script.variables {
+            let default_value = var_def
+                .default_value
+                .as_ref()
+                .map(|v| Value::from(v.clone()))
+                .unwrap_or_else(|| Self::default_value_for_type(&var_def.value_type));
+            variables.insert(var_def.name.clone(), default_value);
+        }
+
         Self {
             script,
             session_id: None,
-            variables: HashMap::new(),
+            variables,
             node_outputs: HashMap::new(),
             visited: HashSet::new(),
             loop_stack: Vec::new(),
@@ -73,7 +87,55 @@ impl ExecutionContext {
             ui_state,
             event_value: Value::Null,
             event_component_id: None,
+            logs: Vec::new(),
         }
+    }
+
+    /// Create a new execution context with pre-loaded variables
+    pub fn new_with_variables(
+        script: Script,
+        ui_state: UIState,
+        variables: HashMap<String, Value>,
+    ) -> Self {
+        Self {
+            script,
+            session_id: None,
+            variables,
+            node_outputs: HashMap::new(),
+            visited: HashSet::new(),
+            loop_stack: Vec::new(),
+            functions: HashMap::new(),
+            ui_state,
+            event_value: Value::Null,
+            event_component_id: None,
+            logs: Vec::new(),
+        }
+    }
+
+    /// Get default value for a value type
+    fn default_value_for_type(value_type: &crate::script::ValueType) -> Value {
+        use crate::script::ValueType;
+        match value_type {
+            ValueType::Int8 | ValueType::Uint8 |
+            ValueType::Int16 | ValueType::Uint16 |
+            ValueType::Int32 | ValueType::Uint32 |
+            ValueType::Int64 | ValueType::Uint64 => Value::Integer(0),
+            ValueType::Float | ValueType::Double => Value::Float(0.0),
+            ValueType::Pointer => Value::Pointer(0),
+            ValueType::String => Value::String(String::new()),
+            ValueType::Boolean => Value::Boolean(false),
+            ValueType::Any => Value::Null,
+        }
+    }
+
+    /// Get all variables (for persistence)
+    pub fn take_variables(&mut self) -> HashMap<String, Value> {
+        std::mem::take(&mut self.variables)
+    }
+
+    /// Get variables reference
+    pub fn variables(&self) -> &HashMap<String, Value> {
+        &self.variables
     }
 
     /// Set the session ID
@@ -282,6 +344,25 @@ impl ExecutionContext {
     /// Get the script reference
     pub fn script(&self) -> &Script {
         &self.script
+    }
+
+    // ============================================
+    // Logging
+    // ============================================
+
+    /// Add a log message
+    pub fn add_log(&mut self, message: String) {
+        self.logs.push(message);
+    }
+
+    /// Get all collected logs
+    pub fn take_logs(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.logs)
+    }
+
+    /// Get logs without consuming
+    pub fn logs(&self) -> &[String] {
+        &self.logs
     }
 }
 
