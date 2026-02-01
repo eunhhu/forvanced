@@ -282,14 +282,19 @@ export const DesignCanvas: Component = () => {
       {/* Canvas */}
       <div
         ref={canvasContainerRef}
-        class="flex-1 relative overflow-hidden bg-background canvas-drop-zone"
+        tabIndex={0}
+        class="flex-1 relative overflow-hidden bg-background canvas-drop-zone focus:outline-none"
         style={{
           "background-image":
             "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
           "background-size": `${20 * scale()}px ${20 * scale()}px`,
           "background-position": `${offset().x}px ${offset().y}px`,
         }}
-        onMouseDown={handleCanvasMouseDown}
+        onMouseDown={(e) => {
+          // Focus canvas on click so keyboard events work
+          canvasContainerRef?.focus();
+          handleCanvasMouseDown(e);
+        }}
         onWheel={handleWheel}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
@@ -350,6 +355,7 @@ export const DesignCanvas: Component = () => {
                       scale={scale()}
                       inAutoLayout={true}
                       parentDirection="vertical"
+                      focusCanvas={() => canvasContainerRef?.focus()}
                     />
                   )}
                 </For>
@@ -417,6 +423,8 @@ interface CanvasComponentProps {
   parentDirection?: LayoutDirection;
   /** Current zoom scale for drag calculations */
   scale?: number;
+  /** Focus the canvas for keyboard events */
+  focusCanvas?: () => void;
 }
 
 const CanvasComponent: Component<CanvasComponentProps> = (props) => {
@@ -454,6 +462,9 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
     if (target.closest("[data-action]")) {
       return;
     }
+
+    // Focus canvas so keyboard shortcuts work immediately
+    props.focusCanvas?.();
 
     // Don't allow dragging locked components
     if (isLocked()) {
@@ -715,6 +726,8 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
           <AutoLayoutContainer
             component={props.component}
             parentOffset={props.parentOffset}
+            scale={props.scale}
+            focusCanvas={props.focusCanvas}
           >
             {children()}
           </AutoLayoutContainer>
@@ -725,6 +738,8 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
           <PageContainer
             component={props.component}
             parentOffset={props.parentOffset}
+            scale={props.scale}
+            focusCanvas={props.focusCanvas}
           >
             {children()}
           </PageContainer>
@@ -757,6 +772,7 @@ const CanvasComponent: Component<CanvasComponentProps> = (props) => {
                       getContainerHeaderHeight(props.component),
                   }}
                   scale={props.scale}
+                  focusCanvas={props.focusCanvas}
                 />
               )}
             </For>
@@ -827,6 +843,7 @@ interface AutoLayoutContainerProps {
   parentOffset: { x: number; y: number };
   children: UIComponent[];
   scale?: number;
+  focusCanvas?: () => void;
 }
 
 const AutoLayoutContainer: Component<AutoLayoutContainerProps> = (props) => {
@@ -920,6 +937,7 @@ const AutoLayoutContainer: Component<AutoLayoutContainerProps> = (props) => {
             inAutoLayout={true}
             parentDirection={direction()}
             scale={props.scale}
+            focusCanvas={props.focusCanvas}
           />
         )}
       </For>
@@ -935,6 +953,7 @@ interface PageContainerProps {
   parentOffset: { x: number; y: number };
   children: UIComponent[];
   scale?: number;
+  focusCanvas?: () => void;
 }
 
 const PageContainer: Component<PageContainerProps> = (props) => {
@@ -1019,6 +1038,7 @@ const PageContainer: Component<PageContainerProps> = (props) => {
               activeTabId={activeTab()?.id}
               parentDirection="vertical"
               scale={props.scale}
+              focusCanvas={props.focusCanvas}
             />
           )}
         </For>

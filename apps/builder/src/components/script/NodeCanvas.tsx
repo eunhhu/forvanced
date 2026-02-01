@@ -475,8 +475,8 @@ export const NodeCanvas: Component = () => {
       return;
     }
 
-    // / key or Ctrl+K to open Node Commander
-    if ((e.key === "/" || (e.key === "k" && (e.ctrlKey || e.metaKey))) && !e.repeat && canvasRef) {
+    // / key to open Node Commander
+    if (e.key === "/" && !e.repeat && canvasRef) {
       e.preventDefault();
 
       // Use last mouse position or center of canvas
@@ -635,7 +635,6 @@ export const NodeCanvas: Component = () => {
   onMount(() => {
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
-    window.addEventListener("keydown", handleKeyDown);
 
     // Track canvas dimensions
     if (canvasRef) {
@@ -655,7 +654,6 @@ export const NodeCanvas: Component = () => {
   onCleanup(() => {
     window.removeEventListener("mousemove", handleMouseMove);
     window.removeEventListener("mouseup", handleMouseUp);
-    window.removeEventListener("keydown", handleKeyDown);
   });
 
   // Get port position for a node
@@ -722,7 +720,8 @@ export const NodeCanvas: Component = () => {
       {/* Canvas */}
       <div
         ref={canvasRef}
-        class="flex-1 relative overflow-hidden bg-background select-none"
+        tabIndex={0}
+        class="flex-1 relative overflow-hidden bg-background select-none focus:outline-none"
         style={{
           "background-image":
             "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
@@ -731,10 +730,15 @@ export const NodeCanvas: Component = () => {
           cursor: isSelecting() ? "crosshair" : "default",
         }}
         onWheel={handleWheel}
-        onMouseDown={handleMouseDown}
+        onMouseDown={(e) => {
+          // Focus canvas on click so keyboard events work
+          canvasRef?.focus();
+          handleMouseDown(e);
+        }}
         onMouseMove={handleCanvasMouseMove}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
+        onKeyDown={handleKeyDown}
       >
         {/* Transform container */}
         <div
@@ -858,6 +862,7 @@ export const NodeCanvas: Component = () => {
                 scale={scale()}
                 isDraggingConnection={!!draggingConnection()}
                 isPortCompatible={(port) => isPortCompatible(node.id, port)}
+                focusCanvas={() => canvasRef?.focus()}
               />
             )}
           </For>
@@ -1114,6 +1119,7 @@ interface NodeComponentProps {
   scale: number;
   isDraggingConnection: boolean;
   isPortCompatible: (port: Port) => boolean;
+  focusCanvas: () => void;
 }
 
 const NodeComponent: Component<NodeComponentProps> = (props) => {
@@ -1127,6 +1133,9 @@ const NodeComponent: Component<NodeComponentProps> = (props) => {
     if (e.button !== 0) return;
     e.preventDefault(); // Prevent text selection and default drag behavior
     e.stopPropagation();
+
+    // Focus canvas so keyboard shortcuts work immediately
+    props.focusCanvas();
 
     // Handle Shift+click for multi-select (Adobe style)
     const addToSelection = e.shiftKey;

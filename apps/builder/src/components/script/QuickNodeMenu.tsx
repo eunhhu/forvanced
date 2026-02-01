@@ -144,6 +144,11 @@ export const QuickNodeMenu: Component<QuickNodeMenuProps> = (props) => {
     props.onClose();
   };
 
+  // Prevent scroll from propagating to canvas
+  const handleWheel = (e: WheelEvent) => {
+    e.stopPropagation();
+  };
+
   return (
     <div
       ref={menuRef}
@@ -154,6 +159,7 @@ export const QuickNodeMenu: Component<QuickNodeMenuProps> = (props) => {
         "max-height": "400px",
       }}
       onKeyDown={handleKeyDown}
+      onWheel={handleWheel}
     >
       {/* Search input */}
       <div class="p-2 border-b border-border">

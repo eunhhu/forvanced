@@ -277,6 +277,11 @@ export const NodeCommander: Component<NodeCommanderProps> = (props) => {
     return getNodeContext(node.type) === "target" ? MemoryIcon : IconWorkflow;
   };
 
+  // Prevent scroll from propagating to canvas
+  const handleWheel = (e: WheelEvent) => {
+    e.stopPropagation();
+  };
+
   return (
     <div
       ref={menuRef}
@@ -287,6 +292,7 @@ export const NodeCommander: Component<NodeCommanderProps> = (props) => {
         "max-height": "480px",
       }}
       onKeyDown={handleKeyDown}
+      onWheel={handleWheel}
     >
       {/* Search input */}
       <div class="p-3 border-b border-border bg-surface/80">
