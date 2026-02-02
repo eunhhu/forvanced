@@ -26,7 +26,7 @@ interface NodeCommanderProps {
 
 // Recent nodes storage
 const RECENT_NODES_KEY = "forvanced:recentNodes";
-const MAX_RECENT = 8;
+const MAX_RECENT = 5;
 
 function getRecentNodes(): ScriptNodeType[] {
   try {

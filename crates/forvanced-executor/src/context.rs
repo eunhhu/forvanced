@@ -60,6 +60,17 @@ pub struct ExecutionContext {
 
     /// Execution logs (collected from log nodes)
     logs: Vec<String>,
+    
+    /// Notifications to send to frontend
+    notifications: Vec<Notification>,
+}
+
+/// Notification to display in the frontend
+#[derive(Debug, Clone)]
+pub struct Notification {
+    pub title: String,
+    pub message: String,
+    pub level: String, // "info", "warning", "error", "success"
 }
 
 impl ExecutionContext {
@@ -88,6 +99,7 @@ impl ExecutionContext {
             event_value: Value::Null,
             event_component_id: None,
             logs: Vec::new(),
+            notifications: Vec::new(),
         }
     }
 
@@ -109,6 +121,7 @@ impl ExecutionContext {
             event_value: Value::Null,
             event_component_id: None,
             logs: Vec::new(),
+            notifications: Vec::new(),
         }
     }
 
@@ -363,6 +376,25 @@ impl ExecutionContext {
     /// Get logs without consuming
     pub fn logs(&self) -> &[String] {
         &self.logs
+    }
+
+    // ============================================
+    // Notifications
+    // ============================================
+
+    /// Add a notification to be sent to the frontend
+    pub fn add_notification(&mut self, title: String, message: String, level: String) {
+        self.notifications.push(Notification { title, message, level });
+    }
+
+    /// Get all notifications and clear the list
+    pub fn take_notifications(&mut self) -> Vec<Notification> {
+        std::mem::take(&mut self.notifications)
+    }
+
+    /// Get notifications without consuming
+    pub fn notifications(&self) -> &[Notification] {
+        &self.notifications
     }
 }
 

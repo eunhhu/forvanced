@@ -31,7 +31,7 @@ pub mod rpc;
 pub mod script;
 pub mod value;
 
-pub use context::ExecutionContext;
+pub use context::{ExecutionContext, Notification};
 pub use error::{ExecutorError, ExecutorResult};
 pub use executor::ScriptExecutor;
 pub use rpc::{RpcBridge, RpcCaller, RpcRequest, RpcResponse};

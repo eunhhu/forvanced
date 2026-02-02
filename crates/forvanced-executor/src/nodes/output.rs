@@ -47,7 +47,7 @@ impl NodeExecutor for NotifyExecutor {
         &self,
         node: &ScriptNode,
         inputs: &HashMap<String, Value>,
-        _ctx: &mut ExecutionContext,
+        ctx: &mut ExecutionContext,
     ) -> ExecutorResult<NodeOutput> {
         let title = inputs
             .get("title")
@@ -74,8 +74,10 @@ impl NodeExecutor for NotifyExecutor {
             }
         }
 
-        // In a real implementation, this would send an event to the frontend
-        // to display a toast/notification
+        // Add notification to context for frontend to display
+        ctx.add_notification(title.clone(), message.clone(), level.clone());
+
+        // Also print to stdout for debugging
         println!("[Notify] [{}] {}: {}", level.to_uppercase(), title, message);
 
         Ok(NodeOutput::flow("exec"))

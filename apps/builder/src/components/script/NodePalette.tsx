@@ -82,7 +82,7 @@ function getCategoryColorClass(info: NodeCategoryInfo, variant: "text" | "bg" | 
 
 // Recent nodes storage key
 const RECENT_NODES_KEY = "forvanced:recentNodes";
-const MAX_RECENT_NODES = 8;
+const MAX_RECENT_NODES = 5;
 
 // Get recent nodes from localStorage
 function getRecentNodes(): ScriptNodeType[] {
@@ -418,7 +418,7 @@ export const NodePalette: Component = () => {
                 </span>
               </button>
               <Show when={showRecent()}>
-                <div class="pb-2">
+                <div class="pb-2 max-h-32 overflow-y-auto">
                   <For each={recentNodeTemplates()}>
                     {(node) => (
                       <NodeItem

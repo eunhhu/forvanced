@@ -367,38 +367,39 @@ async fn do_build(
         return Err("Build cancelled".to_string());
     }
 
-    // Build Tauri/Rust backend directly with cargo
+    // Build Tauri application with bun tauri build
     emit_build_state(app, true, "building", 50);
     emit_build_log(app, "Building Tauri application...", "info");
 
-    let tauri_src_dir = project_dir.join("src-tauri");
-
-    let mut cargo_args = vec!["build"];
-    if options.release {
-        cargo_args.push("--release");
+    // Use bun tauri build to create bundled executables
+    let mut tauri_args = vec!["tauri", "build"];
+    
+    if !options.release {
+        tauri_args.push("--debug");
     }
 
     let target_str = options.target.tauri_target();
     if !target_str.is_empty() {
-        cargo_args.push("--target");
-        cargo_args.push(target_str);
+        tauri_args.push("--target");
+        tauri_args.push(target_str);
     }
 
     if options.bundle_frida {
-        cargo_args.push("--features");
-        cargo_args.push("real");
+        tauri_args.push("--");
+        tauri_args.push("--features");
+        tauri_args.push("real");
     }
 
     run_command_with_cancellation(
         app,
         &state.build_cancelled,
         &state.build_child_pid,
-        "cargo",
-        &cargo_args,
-        &tauri_src_dir,
+        "bun",
+        &tauri_args,
+        &project_dir,
     ).await.map_err(|e| {
         emit_build_log(app, &format!("Build failed: {}", e), "error");
-        format!("Cargo build failed: {}", e)
+        format!("Tauri build failed: {}", e)
     })?;
 
     // Find built executables

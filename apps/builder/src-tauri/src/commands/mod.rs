@@ -113,6 +113,7 @@ pub async fn enumerate_applications(state: State<'_, AppState>) -> Result<Vec<Ap
 #[tauri::command]
 pub async fn attach_to_process(state: State<'_, AppState>, pid: u32) -> Result<String, String> {
     info!("attach_to_process called with pid: {}", pid);
+    eprintln!("[CMD DEBUG] attach_to_process called with pid: {}", pid);
 
     let device_id = state
         .current_device_id
@@ -120,14 +121,23 @@ pub async fn attach_to_process(state: State<'_, AppState>, pid: u32) -> Result<S
         .await
         .clone()
         .ok_or("No device selected")?;
+    eprintln!("[CMD DEBUG] device_id: {}", device_id);
 
     let guard = state.frida_manager.read().await;
     let manager = guard.as_ref().ok_or("Frida not initialized")?;
+    eprintln!("[CMD DEBUG] Got frida manager");
 
-    manager
+    let result = manager
         .attach_on_device(&device_id, pid)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string());
+    
+    eprintln!("[CMD DEBUG] attach_on_device returned: {:?}", result);
+    eprintln!("[CMD DEBUG] Dropping guard...");
+    drop(guard);
+    eprintln!("[CMD DEBUG] Guard dropped, returning result");
+    
+    result
 }
 
 /// Attach to a process on current device by name

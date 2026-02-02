@@ -168,6 +168,11 @@ pub async fn trigger_ui_event(
     event_type: String,
     value: serde_json::Value,
 ) -> Result<(), String> {
+    tracing::info!(
+        "trigger_ui_event called: component_id={}, event_type={}, value={:?}",
+        component_id, event_type, value
+    );
+    
     let state = state.lock().await;
 
     // Sync component value
@@ -175,14 +180,28 @@ pub async fn trigger_ui_event(
 
     // Find scripts that listen to this component's events
     if let Some(config) = &state.config {
+        tracing::info!("Found {} scripts in config", config.scripts.len());
+        
         for script in &config.scripts {
+            tracing::debug!("Checking script '{}' with {} nodes", script.name, script.nodes.len());
+            
             // Look for event_ui nodes that match this component
             for node in &script.nodes {
+                tracing::debug!(
+                    "  Node '{}' type='{}' config={:?}",
+                    node.id, node.node_type, node.config
+                );
+                
                 if node.node_type == "event_ui" {
                     let node_component_id = node.config.get("componentId")
                         .and_then(|v| v.as_str());
                     let node_event_type = node.config.get("eventType")
                         .and_then(|v| v.as_str());
+                    
+                    tracing::info!(
+                        "  event_ui node: componentId={:?}, eventType={:?} (looking for {} / {})",
+                        node_component_id, node_event_type, component_id, event_type
+                    );
 
                     if node_component_id == Some(&component_id)
                         && node_event_type == Some(&event_type)
