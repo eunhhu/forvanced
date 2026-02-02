@@ -25,7 +25,7 @@ pub async fn list_devices(state: State<'_, AppState>) -> Result<Vec<DeviceInfo>,
     let guard = state.frida_manager.read().await;
     let manager = guard.as_ref().ok_or("Frida not initialized")?;
 
-    manager.enumerate_devices().map_err(|e| e.to_string())
+    manager.enumerate_devices().await.map_err(|e| e.to_string())
 }
 
 /// Select a device to work with
@@ -37,7 +37,7 @@ pub async fn select_device(state: State<'_, AppState>, device_id: String) -> Res
     let guard = state.frida_manager.read().await;
     let manager = guard.as_ref().ok_or("Frida not initialized")?;
 
-    let devices = manager.enumerate_devices().map_err(|e| e.to_string())?;
+    let devices = manager.enumerate_devices().await.map_err(|e| e.to_string())?;
     if !devices.iter().any(|d| d.id == device_id) {
         return Err(format!("Device '{}' not found", device_id));
     }
@@ -64,7 +64,7 @@ pub async fn add_remote_device(
     let guard = state.frida_manager.read().await;
     let manager = guard.as_ref().ok_or("Frida not initialized")?;
 
-    manager.add_remote_device(&address).map_err(|e| e.to_string())
+    manager.add_remote_device(&address).await.map_err(|e| e.to_string())
 }
 
 /// Enumerate processes on current device
@@ -84,6 +84,7 @@ pub async fn enumerate_processes(state: State<'_, AppState>) -> Result<Vec<Proce
 
     manager
         .enumerate_processes_on_device(&device_id)
+        .await
         .map_err(|e| e.to_string())
 }
 
@@ -104,6 +105,7 @@ pub async fn enumerate_applications(state: State<'_, AppState>) -> Result<Vec<Ap
 
     manager
         .enumerate_applications_on_device(&device_id)
+        .await
         .map_err(|e| e.to_string())
 }
 
