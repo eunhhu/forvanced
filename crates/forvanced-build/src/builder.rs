@@ -172,6 +172,8 @@ impl Builder {
         output_dir: &Path,
     ) -> Result<PathBuf, BuildError> {
         info!("Generating project: {}", project.name);
+        info!("Runtime path: {}", self.runtime_path.display());
+        info!("Output dir: {}", output_dir.display());
 
         // Validate project
         if project.ui.components.is_empty() {
@@ -180,16 +182,23 @@ impl Builder {
 
         // Create output directory
         let project_dir = output_dir.join(&sanitize_name(&project.name));
+        info!("Project dir: {}", project_dir.display());
+
         if project_dir.exists() {
+            info!("Removing existing project directory...");
             fs::remove_dir_all(&project_dir).await?;
+            info!("Existing directory removed");
         }
         fs::create_dir_all(&project_dir).await?;
+        info!("Created project directory");
 
         // Copy runtime template
+        info!("Copying runtime template from {} to {}...", self.runtime_path.display(), project_dir.display());
         copy_dir_recursive(&self.runtime_path, &project_dir).await?;
-        debug!("Copied runtime template to: {}", project_dir.display());
+        info!("Copied runtime template to: {}", project_dir.display());
 
         // Generate project config
+        info!("Generating project config...");
         let config = ProjectConfig::from(project);
         let config_json = serde_json::to_string_pretty(&config)
             .map_err(|e| BuildError::SerializationError(e.to_string()))?;
@@ -197,19 +206,27 @@ impl Builder {
         // Write config to be embedded at build time
         let config_path = project_dir.join("src-tauri/project_config.json");
         fs::write(&config_path, &config_json).await?;
-        debug!("Written project config: {}", config_path.display());
+        info!("Written project config: {}", config_path.display());
 
         // Update tauri.conf.json with project name
+        info!("Updating tauri.conf.json...");
         self.update_tauri_config(&project_dir, project).await?;
+        info!("Updated tauri.conf.json");
 
         // Update Cargo.toml with project name
+        info!("Updating Cargo.toml...");
         self.update_cargo_toml(&project_dir, project).await?;
+        info!("Updated Cargo.toml");
 
         // Update package.json with project name
+        info!("Updating package.json...");
         self.update_package_json(&project_dir, project).await?;
+        info!("Updated package.json");
 
         // Generate lib.rs that loads the embedded config
+        info!("Generating lib.rs...");
         self.generate_lib_rs(&project_dir).await?;
+        info!("Generated lib.rs");
 
         info!("Project generated at: {}", project_dir.display());
         Ok(project_dir)
@@ -499,12 +516,31 @@ fn find_workspace_root(start: &Path) -> Option<PathBuf> {
     None
 }
 
-/// Recursively copy a directory
+/// Recursively copy a directory (using blocking I/O for better performance)
 async fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), BuildError> {
-    fs::create_dir_all(dst).await?;
+    let src = src.to_path_buf();
+    let dst = dst.to_path_buf();
 
-    let mut entries = fs::read_dir(src).await?;
-    while let Some(entry) = entries.next_entry().await? {
+    tokio::task::spawn_blocking(move || {
+        copy_dir_recursive_sync(&src, &dst)
+    })
+    .await
+    .map_err(|e| BuildError::CommandFailed(format!("Copy task failed: {}", e)))??;
+
+    Ok(())
+}
+
+/// Synchronous directory copy (faster than async for many small files)
+fn copy_dir_recursive_sync(src: &Path, dst: &Path) -> Result<(), BuildError> {
+    debug!("copy_dir_recursive_sync: {} -> {}", src.display(), dst.display());
+    std::fs::create_dir_all(dst)?;
+
+    let entries = std::fs::read_dir(src)?;
+    let mut file_count = 0;
+    let mut dir_count = 0;
+
+    for entry in entries {
+        let entry = entry?;
         let path = entry.path();
         let file_name = path.file_name().unwrap();
         let dst_path = dst.join(file_name);
@@ -512,16 +548,20 @@ async fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), BuildError> {
         // Skip certain directories
         let name = file_name.to_string_lossy();
         if name == "node_modules" || name == "target" || name == "dist" || name == ".git" {
+            debug!("Skipping: {}", name);
             continue;
         }
 
         if path.is_dir() {
-            Box::pin(copy_dir_recursive(&path, &dst_path)).await?;
+            dir_count += 1;
+            copy_dir_recursive_sync(&path, &dst_path)?;
         } else {
-            fs::copy(&path, &dst_path).await?;
+            file_count += 1;
+            std::fs::copy(&path, &dst_path)?;
         }
     }
 
+    debug!("Copied {} files and {} directories from {}", file_count, dir_count, src.display());
     Ok(())
 }
 

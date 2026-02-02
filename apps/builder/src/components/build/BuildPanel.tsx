@@ -317,32 +317,60 @@ export const BuildPanel: Component = () => {
 
   return (
     <div class="h-full flex flex-col relative">
-      {/* Build Lock Overlay */}
+      {/* Build Lock Overlay with Log Panel */}
       <Show when={isBuilding()}>
-        <div class="absolute inset-0 bg-black/30 z-40 flex items-center justify-center backdrop-blur-sm">
-          <div class="bg-surface rounded-lg p-6 shadow-xl border border-border max-w-md w-full mx-4">
-            <div class="flex items-center gap-3 mb-4">
-              <div class="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-              <div>
+        <div class="absolute inset-0 bg-black/50 z-40 flex flex-col backdrop-blur-sm">
+          {/* Header with progress */}
+          <div class="p-4 bg-surface/90 border-b border-border">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              <div class="flex-1">
                 <h3 class="font-medium">{phaseNames[buildPhase()] || "Building..."}</h3>
-                <p class="text-sm text-foreground-muted">Do not close the app</p>
+                <p class="text-xs text-foreground-muted">Do not close the app or modify files</p>
               </div>
+              <button
+                class="px-3 py-1 text-sm text-foreground-muted hover:text-error border border-border rounded hover:border-error transition-colors"
+                onClick={handleCancelBuild}
+              >
+                Cancel
+              </button>
             </div>
 
             {/* Progress bar */}
-            <div class="w-full bg-background rounded-full h-2 mb-3">
+            <div class="w-full bg-background rounded-full h-2">
               <div
                 class="bg-accent h-2 rounded-full transition-all duration-300"
                 style={{ width: `${buildProgress()}%` }}
               />
             </div>
+          </div>
 
-            <button
-              class="w-full py-2 text-sm text-foreground-muted hover:text-error transition-colors"
-              onClick={handleCancelBuild}
+          {/* Log Panel - takes remaining space */}
+          <div class="flex-1 flex flex-col overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-2 bg-surface/80 border-b border-border">
+              <span class="text-sm font-medium">Build Log</span>
+              <span class="text-xs text-foreground-muted">{buildLogs().length} messages</span>
+            </div>
+            <div
+              ref={logContainerRef}
+              class="flex-1 overflow-y-auto bg-background/95 p-3 font-mono text-xs"
             >
-              Cancel Build
-            </button>
+              <For each={buildLogs()}>
+                {(log) => (
+                  <div class={`py-0.5 ${getLogColor(log.level)}`}>
+                    <span class="text-foreground-muted opacity-50 mr-2">
+                      {new Date(log.timestamp).toLocaleTimeString()}
+                    </span>
+                    {log.message}
+                  </div>
+                )}
+              </For>
+              <Show when={buildLogs().length === 0}>
+                <div class="text-foreground-muted text-center py-8">
+                  Waiting for build output...
+                </div>
+              </Show>
+            </div>
           </div>
         </div>
       </Show>
@@ -484,11 +512,11 @@ export const BuildPanel: Component = () => {
               </div>
             </div>
 
-            {/* Build Log Panel */}
-            <Show when={showLogs()}>
+            {/* Build Log Panel - shown after build completes if there are logs */}
+            <Show when={showLogs() && !isBuilding() && buildLogs().length > 0}>
               <div class="border-b border-border">
                 <div class="flex items-center justify-between px-4 py-2 bg-surface/50">
-                  <span class="text-sm font-medium">Build Log</span>
+                  <span class="text-sm font-medium">Build Log ({buildLogs().length} messages)</span>
                   <button
                     class="p-1 hover:bg-surface-hover rounded"
                     onClick={() => setShowLogs(false)}
@@ -497,7 +525,6 @@ export const BuildPanel: Component = () => {
                   </button>
                 </div>
                 <div
-                  ref={logContainerRef}
                   class="h-40 overflow-y-auto bg-background p-2 font-mono text-xs"
                 >
                   <For each={buildLogs()}>
@@ -510,11 +537,6 @@ export const BuildPanel: Component = () => {
                       </div>
                     )}
                   </For>
-                  <Show when={buildLogs().length === 0}>
-                    <div class="text-foreground-muted text-center py-4">
-                      Build logs will appear here...
-                    </div>
-                  </Show>
                 </div>
               </div>
             </Show>

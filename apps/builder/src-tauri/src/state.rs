@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use std::sync::atomic::AtomicU32;
 
 use forvanced_core::Project;
 use forvanced_frida::FridaManager;
@@ -56,6 +57,8 @@ pub struct AppState {
     pub is_building: Arc<RwLock<bool>>,
     /// Whether the current build should be cancelled
     pub build_cancelled: Arc<RwLock<bool>>,
+    /// Current build child process ID (0 if none)
+    pub build_child_pid: Arc<AtomicU32>,
 }
 
 impl AppState {
@@ -76,6 +79,7 @@ impl AppState {
             config_dir,
             is_building: Arc::new(RwLock::new(false)),
             build_cancelled: Arc::new(RwLock::new(false)),
+            build_child_pid: Arc::new(AtomicU32::new(0)),
         }
     }
 

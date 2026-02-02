@@ -3,8 +3,11 @@ use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
-use tracing::{debug, info};
+use tokio::sync::RwLock;
+use tracing::{debug, info, warn};
 
 use crate::AppState;
 
@@ -197,35 +200,63 @@ pub async fn build_project(
 ) -> Result<BuildResult, String> {
     info!("build_project called with config: {:?}", config);
 
+    // Check if already building
+    {
+        let is_building = state.is_building.read().await;
+        if *is_building {
+            return Err("A build is already in progress".to_string());
+        }
+    }
+
     // Set building state
+    {
+        *state.is_building.write().await = true;
+        *state.build_cancelled.write().await = false;
+    }
+
     emit_build_state(&app, true, "initializing", 0);
     emit_build_log(&app, "Starting build process...", "info");
 
+    // Use a helper to ensure cleanup on any exit path
+    let result = do_build(&app, &state, config).await;
+
+    // Cleanup
+    {
+        *state.is_building.write().await = false;
+        state.build_child_pid.store(0, Ordering::SeqCst);
+    }
+
+    if result.is_err() {
+        emit_build_state(&app, false, "error", 0);
+    }
+
+    result
+}
+
+async fn do_build(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    config: BuildConfig,
+) -> Result<BuildResult, String> {
     let project_guard = state.current_project.read().await;
     let project = project_guard
         .as_ref()
-        .ok_or_else(|| {
-            emit_build_state(&app, false, "error", 0);
-            "No project loaded".to_string()
-        })?;
+        .ok_or_else(|| "No project loaded".to_string())?;
 
     let target = BuildTarget::from_str(&config.target)
-        .ok_or_else(|| {
-            emit_build_state(&app, false, "error", 0);
-            format!("Invalid build target: {}", config.target)
-        })?;
+        .ok_or_else(|| format!("Invalid build target: {}", config.target))?;
 
     // Try to find runtime path from app context
-    let runtime_path = find_runtime_path_from_app(&app);
+    let runtime_path = find_runtime_path_from_app(app);
     if let Some(ref path) = runtime_path {
         info!("Using runtime path: {}", path.display());
-        emit_build_log(&app, &format!("Runtime template: {}", path.display()), "debug");
+        emit_build_log(app, &format!("Runtime template: {}", path.display()), "debug");
     }
 
     // Resolve output directory relative to project path
     let resolved_output_dir = resolve_output_dir(&config.output_dir, config.project_path.as_deref());
     info!("Resolved output directory: {}", resolved_output_dir.display());
-    emit_build_log(&app, &format!("Output directory: {}", resolved_output_dir.display()), "info");
+    emit_build_log(app, &format!("Output directory: {}", resolved_output_dir.display()), "info");
 
     let options = BuildOptions {
         output_dir: resolved_output_dir.clone(),
@@ -236,37 +267,47 @@ pub async fn build_project(
     };
 
     // Try to find runtime path from app context first
-    let builder = if let Some(path) = runtime_path {
-        Builder::with_runtime_path(path).map_err(|e| {
-            emit_build_state(&app, false, "error", 0);
-            e.to_string()
-        })?
+    let builder = if let Some(ref path) = runtime_path {
+        Builder::with_runtime_path(path.clone()).map_err(|e| e.to_string())?
     } else {
-        // Fall back to auto-detection
-        Builder::new().map_err(|e| {
-            emit_build_state(&app, false, "error", 0);
-            e.to_string()
-        })?
+        Builder::new().map_err(|e| e.to_string())?
     };
 
-    // Generate project first
-    emit_build_state(&app, true, "generating", 10);
-    emit_build_log(&app, "Generating project files...", "info");
+    // Check for cancellation
+    if *state.build_cancelled.read().await {
+        return Err("Build cancelled".to_string());
+    }
 
+    // Generate project first
+    emit_build_state(app, true, "generating", 10);
+    emit_build_log(app, "Generating project files...", "info");
+    emit_build_log(app, &format!("Runtime template: {}", runtime_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "auto-detect".to_string())), "debug");
+    emit_build_log(app, &format!("Output directory: {}", resolved_output_dir.display()), "debug");
+
+    // Drop the project guard before the long async operation
+    let project_clone = project.clone();
+    drop(project_guard);
+
+    emit_build_log(app, "Starting project generation (this may take a moment)...", "info");
     let project_dir = builder
-        .generate_project(project, &resolved_output_dir)
+        .generate_project(&project_clone, &resolved_output_dir)
         .await
         .map_err(|e| {
-            emit_build_state(&app, false, "error", 0);
-            emit_build_log(&app, &format!("Generation failed: {}", e), "error");
+            emit_build_log(app, &format!("Generation failed: {}", e), "error");
             e.to_string()
         })?;
 
-    emit_build_log(&app, &format!("Project generated at: {}", project_dir.display()), "info");
-    emit_build_state(&app, true, "installing_deps", 20);
+    emit_build_log(app, &format!("Project generated at: {}", project_dir.display()), "info");
+
+    // Check for cancellation
+    if *state.build_cancelled.read().await {
+        return Err("Build cancelled".to_string());
+    }
+
+    emit_build_state(app, true, "installing_deps", 20);
 
     // Install dependencies with streaming output
-    emit_build_log(&app, "Installing dependencies...", "info");
+    emit_build_log(app, "Installing dependencies...", "info");
     let install_cmd = if which::which("pnpm").is_ok() {
         "pnpm"
     } else if which::which("bun").is_ok() {
@@ -275,22 +316,26 @@ pub async fn build_project(
         "npm"
     };
 
-    let install_result = run_command_with_streaming(
-        &app,
+    run_command_with_cancellation(
+        app,
+        &state.build_cancelled,
+        &state.build_child_pid,
         install_cmd,
         &["install"],
         &project_dir,
-    ).await;
+    ).await.map_err(|e| {
+        emit_build_log(app, &format!("Failed to install dependencies: {}", e), "error");
+        format!("{} install failed: {}", install_cmd, e)
+    })?;
 
-    if let Err(e) = install_result {
-        emit_build_state(&app, false, "error", 0);
-        emit_build_log(&app, &format!("Failed to install dependencies: {}", e), "error");
-        return Err(format!("{} install failed: {}", install_cmd, e));
+    // Check for cancellation
+    if *state.build_cancelled.read().await {
+        return Err("Build cancelled".to_string());
     }
 
     // Build with Tauri
-    emit_build_state(&app, true, "building", 40);
-    emit_build_log(&app, "Building with Tauri...", "info");
+    emit_build_state(app, true, "building", 40);
+    emit_build_log(app, "Building with Tauri...", "info");
 
     let mut args = vec!["tauri", "build"];
     if !options.release {
@@ -308,27 +353,26 @@ pub async fn build_project(
         args.push("real");
     }
 
-    let build_result = run_command_with_streaming(
-        &app,
+    run_command_with_cancellation(
+        app,
+        &state.build_cancelled,
+        &state.build_child_pid,
         "cargo",
         &args,
         &project_dir,
-    ).await;
-
-    if let Err(e) = build_result {
-        emit_build_state(&app, false, "error", 0);
-        emit_build_log(&app, &format!("Build failed: {}", e), "error");
-        return Err(format!("tauri build failed: {}", e));
-    }
+    ).await.map_err(|e| {
+        emit_build_log(app, &format!("Build failed: {}", e), "error");
+        format!("tauri build failed: {}", e)
+    })?;
 
     // Find built executables
-    emit_build_state(&app, true, "finalizing", 90);
-    emit_build_log(&app, "Finding built executables...", "info");
+    emit_build_state(app, true, "finalizing", 90);
+    emit_build_log(app, "Finding built executables...", "info");
 
     let executables = find_executables(&project_dir, options.release);
 
-    emit_build_state(&app, false, "complete", 100);
-    emit_build_log(&app, "Build completed successfully!", "info");
+    emit_build_state(app, false, "complete", 100);
+    emit_build_log(app, "Build completed successfully!", "info");
 
     Ok(BuildResult {
         project_dir: project_dir.to_string_lossy().to_string(),
@@ -340,9 +384,11 @@ pub async fn build_project(
     })
 }
 
-/// Run a command with streaming output to frontend
-async fn run_command_with_streaming(
+/// Run a command with streaming output and cancellation support
+async fn run_command_with_cancellation(
     app: &AppHandle,
+    cancelled: &Arc<RwLock<bool>>,
+    child_pid: &std::sync::atomic::AtomicU32,
     cmd: &str,
     args: &[&str],
     cwd: &std::path::Path,
@@ -356,7 +402,12 @@ async fn run_command_with_streaming(
 
     let mut child = command.spawn().map_err(|e| e.to_string())?;
 
-    // Stream stdout
+    // Store the child PID for cancellation
+    let pid = child.id();
+    child_pid.store(pid, Ordering::SeqCst);
+    info!("Started process {} with PID {}", cmd, pid);
+
+    // Stream stdout in background thread
     if let Some(stdout) = child.stdout.take() {
         let app_clone = app.clone();
         std::thread::spawn(move || {
@@ -367,7 +418,7 @@ async fn run_command_with_streaming(
         });
     }
 
-    // Stream stderr
+    // Stream stderr in background thread
     if let Some(stderr) = child.stderr.take() {
         let app_clone = app.clone();
         std::thread::spawn(move || {
@@ -386,14 +437,61 @@ async fn run_command_with_streaming(
         });
     }
 
-    // Wait for completion
-    let status = child.wait().map_err(|e| e.to_string())?;
+    // Poll for completion or cancellation
+    loop {
+        // Check if cancelled
+        if *cancelled.read().await {
+            warn!("Build cancelled, killing process {}", pid);
+            emit_build_log(app, "Build cancelled by user", "warn");
+            kill_process_tree(pid);
+            child_pid.store(0, Ordering::SeqCst);
+            return Err("Build cancelled".to_string());
+        }
 
-    if !status.success() {
-        return Err(format!("Command exited with status: {}", status));
+        // Check if process finished
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                child_pid.store(0, Ordering::SeqCst);
+                if !status.success() {
+                    return Err(format!("Command exited with status: {}", status));
+                }
+                return Ok(());
+            }
+            Ok(None) => {
+                // Still running, wait a bit
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+            Err(e) => {
+                child_pid.store(0, Ordering::SeqCst);
+                return Err(format!("Failed to wait for process: {}", e));
+            }
+        }
+    }
+}
+
+/// Kill a process and its children
+fn kill_process_tree(pid: u32) {
+    #[cfg(unix)]
+    {
+        use std::process::Command;
+        // Kill process group (negative PID kills the group)
+        let _ = Command::new("kill")
+            .args(["-TERM", "--", &format!("-{}", pid)])
+            .status();
+        // Also try killing just the process
+        let _ = Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .status();
     }
 
-    Ok(())
+    #[cfg(windows)]
+    {
+        use std::process::Command;
+        // Use taskkill to kill process tree
+        let _ = Command::new("taskkill")
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .status();
+    }
 }
 
 /// Emit a build log event to the frontend
@@ -520,10 +618,20 @@ pub async fn is_build_in_progress(state: State<'_, AppState>) -> Result<bool, St
     Ok(*state.is_building.read().await)
 }
 
-/// Cancel the current build (if possible)
+/// Cancel the current build
 #[tauri::command]
 pub async fn cancel_build(state: State<'_, AppState>) -> Result<(), String> {
-    // Set cancel flag - actual cancellation handled by build process
+    info!("Cancel build requested");
+
+    // Set cancel flag
     *state.build_cancelled.write().await = true;
+
+    // Also try to kill the current child process immediately
+    let pid = state.build_child_pid.load(Ordering::SeqCst);
+    if pid != 0 {
+        info!("Killing build process with PID {}", pid);
+        kill_process_tree(pid);
+    }
+
     Ok(())
 }
