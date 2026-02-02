@@ -8,10 +8,19 @@ use forvanced_executor::script::{
 use forvanced_executor::value::Value;
 use forvanced_executor::{rpc::generate_target_script, RpcCaller};
 use forvanced_frida::FridaError;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
+
+/// Notification event payload for frontend
+#[derive(Debug, Clone, Serialize)]
+pub struct NotificationEvent {
+    pub title: String,
+    pub message: String,
+    pub level: String,
+}
 
 /// RPC caller implementation that uses FridaManager
 struct FridaRpcCaller {
@@ -163,6 +172,7 @@ pub async fn execute_action(
 /// This will find and execute any scripts bound to the component
 #[tauri::command]
 pub async fn trigger_ui_event(
+    app: AppHandle,
     state: State<'_, Arc<Mutex<AppState>>>,
     component_id: String,
     event_type: String,
@@ -232,6 +242,18 @@ pub async fn trigger_ui_event(
                                     tracing::info!("Script '{}' executed successfully", script.name);
                                     for log in &result.logs {
                                         tracing::info!("Script log: {}", log);
+                                    }
+                                    // Emit notifications to frontend
+                                    for notification in &result.notifications {
+                                        tracing::info!(
+                                            "Emitting notification: {} - {}",
+                                            notification.title, notification.message
+                                        );
+                                        let _ = app.emit("notification", NotificationEvent {
+                                            title: notification.title.clone(),
+                                            message: notification.message.clone(),
+                                            level: notification.level.clone(),
+                                        });
                                     }
                                 } else {
                                     tracing::error!(

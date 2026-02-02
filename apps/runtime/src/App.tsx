@@ -1,6 +1,21 @@
-import { Component, createResource, Show } from "solid-js";
+import { Component, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { ProjectUI } from "./components/ProjectUI";
+
+// Notification type from backend
+interface NotificationEvent {
+  title: string;
+  message: string;
+  level: string;
+}
+
+interface Toast {
+  id: number;
+  title: string;
+  message: string;
+  level: string;
+}
 
 // Types matching backend
 interface ProjectConfig {
@@ -57,6 +72,32 @@ interface ScriptConnection {
 }
 
 const App: Component = () => {
+  const [toasts, setToasts] = createSignal<Toast[]>([]);
+  let toastId = 0;
+
+  // Listen for notification events from backend
+  onMount(async () => {
+    const unlisten = await listen<NotificationEvent>("notification", (event) => {
+      const id = ++toastId;
+      const toast: Toast = {
+        id,
+        title: event.payload.title,
+        message: event.payload.message,
+        level: event.payload.level,
+      };
+      setToasts((prev) => [...prev, toast]);
+
+      // Auto-remove after 5 seconds
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 5000);
+    });
+
+    onCleanup(() => {
+      unlisten();
+    });
+  });
+
   // Fetch project config from backend
   const [config] = createResource(async () => {
     try {
@@ -67,6 +108,15 @@ const App: Component = () => {
       throw e;
     }
   });
+
+  const getToastColor = (level: string) => {
+    switch (level) {
+      case "error": return "bg-red-600";
+      case "warning": return "bg-yellow-600";
+      case "success": return "bg-green-600";
+      default: return "bg-blue-600";
+    }
+  };
 
   return (
     <div class="h-screen w-screen flex flex-col bg-background overflow-hidden">
@@ -88,6 +138,20 @@ const App: Component = () => {
             <ProjectUI config={cfg()} />
           )}
         </Show>
+      </div>
+
+      {/* Toast notifications */}
+      <div class="fixed bottom-4 right-4 flex flex-col gap-2 z-50">
+        <For each={toasts()}>
+          {(toast) => (
+            <div
+              class={`${getToastColor(toast.level)} text-white px-4 py-3 rounded-lg shadow-lg max-w-sm animate-slide-in`}
+            >
+              <div class="font-medium text-sm">{toast.title}</div>
+              <div class="text-xs opacity-90">{toast.message}</div>
+            </div>
+          )}
+        </For>
       </div>
     </div>
   );

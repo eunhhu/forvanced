@@ -412,14 +412,18 @@ codegen-units = 1
     async fn generate_lib_rs(&self, project_dir: &Path, project: &Project) -> Result<(), BuildError> {
         let lib_path = project_dir.join("src-tauri/src/lib.rs");
 
-        let content = r#"//! Generated standalone project runtime
+        // Overwrite lib.rs to load the embedded config
+        let content = r#"//! Forvanced Runtime - Generated project app
+//!
+//! This is the runtime that executes the project built by Forvanced Builder.
+//! It renders the UI components and executes Frida scripts.
 
 mod commands;
 mod state;
 
 use state::AppState;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::Mutex;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 /// Embedded project configuration
@@ -430,22 +434,27 @@ pub fn run() {
     // Initialize tracing
     tracing_subscriber::registry()
         .with(fmt::layer())
-        .with(EnvFilter::from_default_env().add_directive(tracing::level_filters::LevelFilter::INFO.into()))
+        .with(EnvFilter::from_default_env().add_directive("forvanced=debug".parse().unwrap()))
         .init();
 
-    tracing::info!("Starting Generated Project");
+    tracing::info!("Starting Forvanced Runtime");
 
-    // Load embedded config
+    // Load embedded config and create app state
     let config: state::ProjectConfig = serde_json::from_str(PROJECT_CONFIG)
         .expect("Failed to parse embedded project config");
-
-    let app_state = AppState::from_config(config);
-    let app_state = Arc::new(RwLock::new(app_state));
+    
+    tracing::info!("Loaded project config: {} with {} scripts", config.name, config.scripts.len());
+    
+    let app_state = Arc::new(Mutex::new(AppState::from_config(config)));
 
     tauri::Builder::default()
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::get_project_config,
+            commands::attach_process,
+            commands::detach_process,
+            commands::execute_action,
+            commands::trigger_ui_event,
             commands::get_component_value,
             commands::set_component_value,
         ])
@@ -456,9 +465,7 @@ pub fn run() {
 
         fs::write(&lib_path, content).await?;
 
-        // Also generate standalone commands.rs, state.rs, and main.rs
-        self.generate_commands_rs(project_dir).await?;
-        self.generate_state_rs(project_dir).await?;
+        // Generate main.rs
         self.generate_main_rs(project_dir, project).await?;
 
         Ok(())

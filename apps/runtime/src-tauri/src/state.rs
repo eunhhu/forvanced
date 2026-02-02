@@ -159,6 +159,27 @@ impl AppState {
         }
     }
 
+    /// Create AppState from embedded config (used by generated projects)
+    pub fn from_config(config: ProjectConfig) -> Self {
+        let frida_manager = FridaManager::new()
+            .expect("Failed to initialize FridaManager");
+
+        let component_values: Arc<RwLock<HashMap<String, serde_json::Value>>> =
+            Arc::new(RwLock::new(HashMap::new()));
+        let executor_ui_state: ExecutorUIState = Arc::new(RwLock::new(HashMap::new()));
+        let executor = ScriptExecutor::new(Arc::clone(&executor_ui_state));
+
+        Self {
+            frida_manager: Arc::new(frida_manager),
+            session_id: None,
+            script_id: None,
+            executor,
+            component_values,
+            executor_ui_state,
+            config: Some(config),
+        }
+    }
+
     /// Sync component value from JSON to executor state
     pub async fn sync_component_value(&self, component_id: &str, value: serde_json::Value) {
         // Update JSON state

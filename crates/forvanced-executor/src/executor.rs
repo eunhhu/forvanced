@@ -28,6 +28,8 @@ pub struct ExecutionResult {
     pub variables: HashMap<String, Value>,
     /// Execution logs
     pub logs: Vec<String>,
+    /// Notifications to display in frontend
+    pub notifications: Vec<crate::context::Notification>,
     /// Error message if failed
     pub error: Option<String>,
 }
@@ -196,6 +198,7 @@ impl ScriptExecutor {
                         success: false,
                         variables: HashMap::new(),
                         logs: vec![],
+                        notifications: vec![],
                         error: Some(e.to_string()),
                     });
                 }
@@ -211,6 +214,7 @@ impl ScriptExecutor {
             success: true,
             variables: final_variables,
             logs: ctx.take_logs(),
+            notifications: ctx.take_notifications(),
             error: None,
         })
     }
