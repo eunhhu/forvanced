@@ -35,4 +35,51 @@ pub enum BuildError {
 
     #[error("Build cancelled")]
     Cancelled,
+
+    #[error("Missing required build tools")]
+    MissingTools(MissingToolsInfo),
+}
+
+/// Information about missing build tools with installation instructions
+#[derive(Debug, Clone)]
+pub struct MissingToolsInfo {
+    pub missing: Vec<MissingTool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MissingTool {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub install_instructions: Vec<InstallInstruction>,
+}
+
+#[derive(Debug, Clone)]
+pub struct InstallInstruction {
+    pub platform: &'static str,
+    pub command: &'static str,
+    pub url: Option<&'static str>,
+}
+
+impl std::fmt::Display for MissingToolsInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "\n╭─────────────────────────────────────────────────────────────╮")?;
+        writeln!(f, "│  🔧 빌드에 필요한 도구가 설치되어 있지 않습니다            │")?;
+        writeln!(f, "╰─────────────────────────────────────────────────────────────╯\n")?;
+
+        for tool in &self.missing {
+            writeln!(f, "❌ {} - {}", tool.name, tool.description)?;
+            writeln!(f, "   설치 방법:")?;
+            for inst in &tool.install_instructions {
+                if let Some(url) = inst.url {
+                    writeln!(f, "   • {}: {} ({})", inst.platform, inst.command, url)?;
+                } else {
+                    writeln!(f, "   • {}: {}", inst.platform, inst.command)?;
+                }
+            }
+            writeln!(f)?;
+        }
+
+        writeln!(f, "💡 모든 도구를 설치한 후 다시 빌드를 시도해주세요.")?;
+        Ok(())
+    }
 }

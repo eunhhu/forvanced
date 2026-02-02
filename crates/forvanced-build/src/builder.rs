@@ -2,7 +2,7 @@
 //!
 //! Uses apps/runtime as the template and embeds project configuration.
 
-use crate::error::BuildError;
+use crate::error::{BuildError, InstallInstruction, MissingTool, MissingToolsInfo};
 use forvanced_core::Project;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -238,13 +238,11 @@ impl Builder {
         project: &Project,
         options: &BuildOptions,
     ) -> Result<BuildOutput, BuildError> {
+        // Check for required tools before starting
+        self.check_required_tools()?;
+
         // First generate the project
         let project_dir = self.generate_project(project, &options.output_dir).await?;
-
-        // Check for tauri CLI
-        if which::which("cargo-tauri").is_err() && which::which("tauri").is_err() {
-            return Err(BuildError::TauriCliNotFound);
-        }
 
         // Install dependencies
         info!("Installing dependencies...");
@@ -579,6 +577,77 @@ impl AppState {
         fs::write(&path, content).await?;
         Ok(())
     }
+
+    /// Check if all required build tools are installed
+    fn check_required_tools(&self) -> Result<(), BuildError> {
+        let mut missing = Vec::new();
+
+        // Check for Node.js package manager (npm/pnpm/bun)
+        let has_node_pm = which::which("npm").is_ok()
+            || which::which("pnpm").is_ok()
+            || which::which("bun").is_ok();
+
+        if !has_node_pm {
+            missing.push(MissingTool {
+                name: "Node.js",
+                description: "JavaScript 런타임 및 패키지 매니저 (npm 포함)",
+                install_instructions: vec![
+                    InstallInstruction {
+                        platform: "Windows",
+                        command: "winget install OpenJS.NodeJS.LTS",
+                        url: Some("https://nodejs.org"),
+                    },
+                    InstallInstruction {
+                        platform: "macOS",
+                        command: "brew install node",
+                        url: Some("https://nodejs.org"),
+                    },
+                    InstallInstruction {
+                        platform: "Linux",
+                        command: "curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - && sudo apt-get install -y nodejs",
+                        url: Some("https://nodejs.org"),
+                    },
+                ],
+            });
+        }
+
+        // Check for Rust/Cargo
+        if which::which("cargo").is_err() {
+            missing.push(MissingTool {
+                name: "Rust",
+                description: "Rust 프로그래밍 언어 및 Cargo 패키지 매니저",
+                install_instructions: vec![
+                    InstallInstruction {
+                        platform: "Windows/macOS/Linux",
+                        command: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
+                        url: Some("https://rustup.rs"),
+                    },
+                ],
+            });
+        }
+
+        // Check for Tauri CLI
+        let has_tauri = which::which("cargo-tauri").is_ok() || which::which("tauri").is_ok();
+        if !has_tauri {
+            missing.push(MissingTool {
+                name: "Tauri CLI",
+                description: "Tauri 앱 빌드 도구",
+                install_instructions: vec![
+                    InstallInstruction {
+                        platform: "모든 플랫폼",
+                        command: "cargo install tauri-cli",
+                        url: None,
+                    },
+                ],
+            });
+        }
+
+        if !missing.is_empty() {
+            return Err(BuildError::MissingTools(MissingToolsInfo { missing }));
+        }
+
+        Ok(())
+    }
 }
 
 impl Default for Builder {
@@ -726,19 +795,131 @@ fn sanitize_name(name: &str) -> String {
 }
 
 fn find_executables(project_dir: &Path, release: bool) -> Result<Vec<PathBuf>, BuildError> {
-    let target_dir = project_dir.join("src-tauri/target");
     let profile = if release { "release" } else { "debug" };
+    
+    // Tauri outputs to project_dir/target (not src-tauri/target)
+    // When running in a workspace, it may also output to workspace root target
+    let possible_target_dirs = [
+        project_dir.join("target"),
+        project_dir.join("src-tauri/target"),
+    ];
 
     let mut executables = Vec::new();
 
-    #[cfg(target_os = "windows")]
-    {
+    for target_dir in &possible_target_dirs {
+        if !target_dir.exists() {
+            continue;
+        }
+
+        let bundle_dir = target_dir.join(profile).join("bundle");
+        if !bundle_dir.exists() {
+            continue;
+        }
+
+        debug!("Searching for executables in: {}", bundle_dir.display());
+
+        // macOS: .app and .dmg
+        let macos_dir = bundle_dir.join("macos");
+        if macos_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&macos_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().map(|e| e == "app").unwrap_or(false) {
+                        info!("Found macOS app: {}", path.display());
+                        executables.push(path);
+                    }
+                }
+            }
+        }
+
+        let dmg_dir = bundle_dir.join("dmg");
+        if dmg_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&dmg_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().map(|e| e == "dmg").unwrap_or(false) {
+                        info!("Found macOS dmg: {}", path.display());
+                        executables.push(path);
+                    }
+                }
+            }
+        }
+
+        // Windows: .exe and .msi
         let exe_dir = target_dir.join(profile);
         if exe_dir.exists() {
             if let Ok(entries) = std::fs::read_dir(&exe_dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
                     if path.extension().map(|e| e == "exe").unwrap_or(false) {
+                        info!("Found Windows exe: {}", path.display());
+                        executables.push(path);
+                    }
+                }
+            }
+        }
+
+        let msi_dir = bundle_dir.join("msi");
+        if msi_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&msi_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().map(|e| e == "msi").unwrap_or(false) {
+                        info!("Found Windows msi: {}", path.display());
+                        executables.push(path);
+                    }
+                }
+            }
+        }
+
+        let nsis_dir = bundle_dir.join("nsis");
+        if nsis_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&nsis_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().map(|e| e == "exe").unwrap_or(false) {
+                        info!("Found Windows nsis installer: {}", path.display());
+                        executables.push(path);
+                    }
+                }
+            }
+        }
+
+        // Linux: .deb, .rpm, .AppImage
+        let deb_dir = bundle_dir.join("deb");
+        if deb_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&deb_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().map(|e| e == "deb").unwrap_or(false) {
+                        info!("Found Linux deb: {}", path.display());
+                        executables.push(path);
+                    }
+                }
+            }
+        }
+
+        let rpm_dir = bundle_dir.join("rpm");
+        if rpm_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&rpm_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().map(|e| e == "rpm").unwrap_or(false) {
+                        info!("Found Linux rpm: {}", path.display());
+                        executables.push(path);
+                    }
+                }
+            }
+        }
+
+        let appimage_dir = bundle_dir.join("appimage");
+        if appimage_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&appimage_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                    if name.ends_with(".AppImage") {
+                        info!("Found Linux AppImage: {}", path.display());
                         executables.push(path);
                     }
                 }
@@ -746,44 +927,7 @@ fn find_executables(project_dir: &Path, release: bool) -> Result<Vec<PathBuf>, B
         }
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        let app_path = target_dir.join(profile).join("bundle/macos");
-        if app_path.exists() {
-            if let Ok(entries) = std::fs::read_dir(&app_path) {
-                for entry in entries.flatten() {
-                    if entry
-                        .path()
-                        .extension()
-                        .map(|e| e == "app")
-                        .unwrap_or(false)
-                    {
-                        executables.push(entry.path());
-                    }
-                }
-            }
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let deb_path = target_dir.join(profile).join("bundle/deb");
-        if deb_path.exists() {
-            if let Ok(entries) = std::fs::read_dir(&deb_path) {
-                for entry in entries.flatten() {
-                    if entry
-                        .path()
-                        .extension()
-                        .map(|e| e == "deb")
-                        .unwrap_or(false)
-                    {
-                        executables.push(entry.path());
-                    }
-                }
-            }
-        }
-    }
-
+    debug!("Found {} executable(s)", executables.len());
     Ok(executables)
 }
 
