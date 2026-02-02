@@ -225,7 +225,7 @@ impl Builder {
 
         // Generate lib.rs that loads the embedded config
         info!("Generating lib.rs...");
-        self.generate_lib_rs(&project_dir).await?;
+        self.generate_lib_rs(&project_dir, project).await?;
         info!("Generated lib.rs");
 
         info!("Project generated at: {}", project_dir.display());
@@ -317,20 +317,19 @@ impl Builder {
 
         // Update product name and identifier
         if let Some(obj) = config.as_object_mut() {
-            obj["productName"] = serde_json::json!(project.name);
+            obj.insert("productName".to_string(), serde_json::json!(project.name));
 
-            if let Some(bundle) = obj.get_mut("bundle").and_then(|b| b.as_object_mut()) {
-                let identifier = format!("com.forvanced.{}", sanitize_name(&project.name));
-                bundle["identifier"] = serde_json::json!(identifier);
-            }
+            // identifier is at root level in Tauri v2
+            let identifier = format!("com.forvanced.{}", sanitize_name(&project.name));
+            obj.insert("identifier".to_string(), serde_json::json!(identifier));
 
             // Update window title and size
             if let Some(app) = obj.get_mut("app").and_then(|a| a.as_object_mut()) {
                 if let Some(windows) = app.get_mut("windows").and_then(|w| w.as_array_mut()) {
                     if let Some(window) = windows.first_mut().and_then(|w| w.as_object_mut()) {
-                        window["title"] = serde_json::json!(project.name);
-                        window["width"] = serde_json::json!(project.ui.width);
-                        window["height"] = serde_json::json!(project.ui.height + 60); // Add header
+                        window.insert("title".to_string(), serde_json::json!(project.name));
+                        window.insert("width".to_string(), serde_json::json!(project.ui.width));
+                        window.insert("height".to_string(), serde_json::json!(project.ui.height + 60)); // Add header
                     }
                 }
             }
@@ -345,17 +344,51 @@ impl Builder {
 
     async fn update_cargo_toml(&self, project_dir: &Path, project: &Project) -> Result<(), BuildError> {
         let cargo_path = project_dir.join("src-tauri/Cargo.toml");
-        let content = fs::read_to_string(&cargo_path).await?;
 
         let sanitized = sanitize_name(&project.name);
         let lib_name = sanitized.replace('-', "_");
 
-        // Simple string replacement for package name
-        let updated = content
-            .replace("forvanced-runtime", &sanitized)
-            .replace("forvanced_runtime_lib", &format!("{}_lib", lib_name));
+        // Generate a standalone Cargo.toml without workspace inheritance
+        let cargo_content = format!(
+            r#"[package]
+name = "{name}"
+version = "{version}"
+edition = "2021"
+authors = ["Forvanced Team"]
+license = "MIT"
 
-        fs::write(&cargo_path, updated).await?;
+[features]
+default = ["mock"]
+mock = []
+real = []
+
+[lib]
+name = "{lib_name}_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = {{ version = "2", features = [] }}
+
+[dependencies]
+tauri = {{ version = "2", features = ["devtools"] }}
+serde = {{ version = "1.0", features = ["derive"] }}
+serde_json = "1.0"
+tokio = {{ version = "1.35", features = ["full"] }}
+tracing = "0.1"
+tracing-subscriber = {{ version = "0.3", features = ["env-filter"] }}
+async-trait = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+"#,
+            name = sanitized,
+            version = project.version,
+            lib_name = lib_name,
+        );
+
+        fs::write(&cargo_path, cargo_content).await?;
         Ok(())
     }
 
@@ -378,18 +411,17 @@ impl Builder {
         Ok(())
     }
 
-    async fn generate_lib_rs(&self, project_dir: &Path) -> Result<(), BuildError> {
+    async fn generate_lib_rs(&self, project_dir: &Path, project: &Project) -> Result<(), BuildError> {
         let lib_path = project_dir.join("src-tauri/src/lib.rs");
 
-        // Generate lib.rs that loads embedded config
-        let content = r#"//! Generated project runtime
+        let content = r#"//! Generated standalone project runtime
 
 mod commands;
 mod state;
 
 use state::AppState;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 /// Embedded project configuration
@@ -400,28 +432,22 @@ pub fn run() {
     // Initialize tracing
     tracing_subscriber::registry()
         .with(fmt::layer())
-        .with(EnvFilter::from_default_env().add_directive("forvanced=debug".parse().unwrap()))
+        .with(EnvFilter::from_default_env().add_directive(tracing::level_filters::LevelFilter::INFO.into()))
         .init();
 
-    tracing::info!("Starting Forvanced Project Runtime");
+    tracing::info!("Starting Generated Project");
 
     // Load embedded config
     let config: state::ProjectConfig = serde_json::from_str(PROJECT_CONFIG)
         .expect("Failed to parse embedded project config");
 
-    let mut app_state = AppState::new();
-    app_state.load_config(config);
-
-    let app_state = Arc::new(Mutex::new(app_state));
+    let app_state = AppState::from_config(config);
+    let app_state = Arc::new(RwLock::new(app_state));
 
     tauri::Builder::default()
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::get_project_config,
-            commands::attach_process,
-            commands::detach_process,
-            commands::execute_action,
-            commands::trigger_ui_event,
             commands::get_component_value,
             commands::set_component_value,
         ])
@@ -431,6 +457,126 @@ pub fn run() {
 "#;
 
         fs::write(&lib_path, content).await?;
+
+        // Also generate standalone commands.rs, state.rs, and main.rs
+        self.generate_commands_rs(project_dir).await?;
+        self.generate_state_rs(project_dir).await?;
+        self.generate_main_rs(project_dir, project).await?;
+
+        Ok(())
+    }
+
+    async fn generate_main_rs(&self, project_dir: &Path, project: &Project) -> Result<(), BuildError> {
+        let path = project_dir.join("src-tauri/src/main.rs");
+        let lib_name = sanitize_name(&project.name).replace('-', "_");
+
+        let content = format!(
+            r#"// Prevents additional console window on Windows in release, DO NOT REMOVE!!
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+fn main() {{
+    {lib_name}_lib::run()
+}}
+"#,
+            lib_name = lib_name
+        );
+
+        fs::write(&path, content).await?;
+        Ok(())
+    }
+
+    async fn generate_commands_rs(&self, project_dir: &Path) -> Result<(), BuildError> {
+        let path = project_dir.join("src-tauri/src/commands.rs");
+
+        let content = r#"//! Generated Tauri commands
+
+use crate::state::{AppState, ProjectConfig};
+use std::sync::Arc;
+use tauri::State;
+use tokio::sync::RwLock;
+
+/// Get the project configuration
+#[tauri::command]
+pub async fn get_project_config(
+    state: State<'_, Arc<RwLock<AppState>>>,
+) -> Result<ProjectConfig, String> {
+    let state = state.read().await;
+    Ok(state.config.clone())
+}
+
+/// Get a component's current value
+#[tauri::command]
+pub async fn get_component_value(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    component_id: String,
+) -> Result<serde_json::Value, String> {
+    let state = state.read().await;
+    Ok(state.component_values.get(&component_id).cloned().unwrap_or(serde_json::Value::Null))
+}
+
+/// Set a component's value
+#[tauri::command]
+pub async fn set_component_value(
+    state: State<'_, Arc<RwLock<AppState>>>,
+    component_id: String,
+    value: serde_json::Value,
+) -> Result<(), String> {
+    let mut state = state.write().await;
+    state.component_values.insert(component_id, value);
+    Ok(())
+}
+"#;
+
+        fs::write(&path, content).await?;
+        Ok(())
+    }
+
+    async fn generate_state_rs(&self, project_dir: &Path) -> Result<(), BuildError> {
+        let path = project_dir.join("src-tauri/src/state.rs");
+
+        let content = r#"//! Generated application state
+
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+/// Project configuration (embedded at build time)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectConfig {
+    pub name: String,
+    pub version: String,
+    pub target_process: Option<String>,
+    pub auto_attach: bool,
+    pub components: Vec<serde_json::Value>,
+    pub scripts: Vec<serde_json::Value>,
+    pub canvas: CanvasConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasConfig {
+    pub width: u32,
+    pub height: u32,
+    pub padding: u32,
+    pub gap: u32,
+}
+
+/// Application state
+pub struct AppState {
+    pub config: ProjectConfig,
+    pub component_values: HashMap<String, serde_json::Value>,
+}
+
+impl AppState {
+    pub fn from_config(config: ProjectConfig) -> Self {
+        Self {
+            config,
+            component_values: HashMap::new(),
+        }
+    }
+}
+"#;
+
+        fs::write(&path, content).await?;
         Ok(())
     }
 }

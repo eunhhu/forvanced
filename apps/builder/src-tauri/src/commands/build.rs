@@ -306,26 +306,60 @@ async fn do_build(
 
     emit_build_state(app, true, "installing_deps", 20);
 
-    // Install dependencies with streaming output
-    emit_build_log(app, "Installing dependencies...", "info");
-    let install_cmd = if which::which("pnpm").is_ok() {
-        "pnpm"
-    } else if which::which("bun").is_ok() {
-        "bun"
+    // Install dependencies with bun (preferred) or fall back to npm
+    emit_build_log(app, "Installing frontend dependencies...", "info");
+
+    // Try bun first, fall back to npm if not available
+    let (install_cmd, install_args): (&str, Vec<&str>) = if which::which("bun").is_ok() {
+        ("bun", vec!["install"])
+    } else if which::which("npm").is_ok() {
+        ("npm", vec!["install"])
     } else {
-        "npm"
+        emit_build_log(app, "Warning: Neither bun nor npm found, skipping frontend dependencies", "warn");
+        ("", vec![])
+    };
+
+    if !install_cmd.is_empty() {
+        run_command_with_cancellation(
+            app,
+            &state.build_cancelled,
+            &state.build_child_pid,
+            install_cmd,
+            &install_args,
+            &project_dir,
+        ).await.map_err(|e| {
+            emit_build_log(app, &format!("Failed to install dependencies: {}", e), "error");
+            format!("{} install failed: {}", install_cmd, e)
+        })?;
+    }
+
+    // Check for cancellation
+    if *state.build_cancelled.read().await {
+        return Err("Build cancelled".to_string());
+    }
+
+    // Build frontend with bun/vite
+    emit_build_state(app, true, "building_frontend", 30);
+    emit_build_log(app, "Building frontend...", "info");
+
+    let (build_cmd, build_args): (&str, Vec<&str>) = if which::which("bun").is_ok() {
+        ("bun", vec!["run", "build"])
+    } else if which::which("npm").is_ok() {
+        ("npm", vec!["run", "build"])
+    } else {
+        return Err("Neither bun nor npm found. Please install bun.".to_string());
     };
 
     run_command_with_cancellation(
         app,
         &state.build_cancelled,
         &state.build_child_pid,
-        install_cmd,
-        &["install"],
+        build_cmd,
+        &build_args,
         &project_dir,
     ).await.map_err(|e| {
-        emit_build_log(app, &format!("Failed to install dependencies: {}", e), "error");
-        format!("{} install failed: {}", install_cmd, e)
+        emit_build_log(app, &format!("Failed to build frontend: {}", e), "error");
+        format!("Frontend build failed: {}", e)
     })?;
 
     // Check for cancellation
@@ -333,24 +367,26 @@ async fn do_build(
         return Err("Build cancelled".to_string());
     }
 
-    // Build with Tauri
-    emit_build_state(app, true, "building", 40);
-    emit_build_log(app, "Building with Tauri...", "info");
+    // Build Tauri/Rust backend directly with cargo
+    emit_build_state(app, true, "building", 50);
+    emit_build_log(app, "Building Tauri application...", "info");
 
-    let mut args = vec!["tauri", "build"];
-    if !options.release {
-        args.push("--debug");
+    let tauri_src_dir = project_dir.join("src-tauri");
+
+    let mut cargo_args = vec!["build"];
+    if options.release {
+        cargo_args.push("--release");
     }
 
     let target_str = options.target.tauri_target();
     if !target_str.is_empty() {
-        args.push("--target");
-        args.push(target_str);
+        cargo_args.push("--target");
+        cargo_args.push(target_str);
     }
 
     if options.bundle_frida {
-        args.push("--features");
-        args.push("real");
+        cargo_args.push("--features");
+        cargo_args.push("real");
     }
 
     run_command_with_cancellation(
@@ -358,11 +394,11 @@ async fn do_build(
         &state.build_cancelled,
         &state.build_child_pid,
         "cargo",
-        &args,
-        &project_dir,
+        &cargo_args,
+        &tauri_src_dir,
     ).await.map_err(|e| {
         emit_build_log(app, &format!("Build failed: {}", e), "error");
-        format!("tauri build failed: {}", e)
+        format!("Cargo build failed: {}", e)
     })?;
 
     // Find built executables
