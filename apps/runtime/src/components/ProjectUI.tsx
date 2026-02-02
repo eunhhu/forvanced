@@ -57,7 +57,6 @@ interface ScriptConnection {
 
 interface ProjectUIProps {
   config: ProjectConfig;
-  isConnected: boolean;
 }
 
 export const ProjectUI: Component<ProjectUIProps> = (props) => {
@@ -123,11 +122,6 @@ export const ProjectUI: Component<ProjectUIProps> = (props) => {
 
   // Execute action when component triggers it
   const executeAction = async (actionType: string, params: Record<string, unknown>) => {
-    if (!props.isConnected) {
-      console.warn("Not connected, action skipped:", actionType);
-      return;
-    }
-
     try {
       const result = await invoke("execute_action", { actionType, params });
       console.log("Action result:", result);
@@ -156,7 +150,6 @@ export const ProjectUI: Component<ProjectUIProps> = (props) => {
             setValue={setValue}
             executeAction={executeAction}
             gap={canvas().gap}
-            isConnected={props.isConnected}
             parentDirection="vertical"
           />
         )}
@@ -198,7 +191,6 @@ interface RuntimeComponentProps {
   setValue: (id: string, value: unknown, eventType?: string) => Promise<void>;
   executeAction: (actionType: string, params: Record<string, unknown>) => Promise<unknown>;
   gap: number;
-  isConnected: boolean;
   parentDirection?: "horizontal" | "vertical";
 }
 
@@ -273,9 +265,7 @@ const RuntimeComponent: Component<RuntimeComponentProps> = (props) => {
       case "button":
         return (
           <button
-            class={`px-4 py-2 bg-accent text-white rounded-md hover:bg-accent/90 active:scale-95 transition-all font-medium text-center ${
-              !props.isConnected ? "opacity-50 cursor-not-allowed" : ""
-            }`}
+            class="px-4 py-2 bg-accent text-white rounded-md hover:bg-accent/90 active:scale-95 transition-all font-medium text-center"
             style={{
               "font-size": `${baseFontSize}px`,
               width: getWidth(),
@@ -295,7 +285,6 @@ const RuntimeComponent: Component<RuntimeComponentProps> = (props) => {
                 console.error("Failed to trigger button event:", e);
               }
             }}
-            disabled={!props.isConnected}
           >
             {comp().label}
           </button>
@@ -311,7 +300,7 @@ const RuntimeComponent: Component<RuntimeComponentProps> = (props) => {
             <button
               class={`w-12 h-6 rounded-full transition-colors relative ${
                 isOn() ? "bg-accent" : "bg-background-tertiary"
-              } ${!props.isConnected ? "opacity-50" : ""}`}
+              }`}
               onClick={() => {
                 const newValue = !isOn();
                 props.setValue(comp().id, newValue, "change");
@@ -424,7 +413,6 @@ const RuntimeComponent: Component<RuntimeComponentProps> = (props) => {
                     setValue={props.setValue}
                     executeAction={props.executeAction}
                     gap={groupGap()}
-                    isConnected={props.isConnected}
                     parentDirection="vertical"
                   />
                 )}
@@ -459,7 +447,6 @@ const RuntimeComponent: Component<RuntimeComponentProps> = (props) => {
                   setValue={props.setValue}
                   executeAction={props.executeAction}
                   gap={stackGap()}
-                  isConnected={props.isConnected}
                   parentDirection={direction() as "horizontal" | "vertical"}
                 />
               )}
@@ -530,7 +517,6 @@ const RuntimeComponent: Component<RuntimeComponentProps> = (props) => {
                       setValue={props.setValue}
                       executeAction={props.executeAction}
                       gap={pageGap()}
-                      isConnected={props.isConnected}
                       parentDirection="vertical"
                     />
                   )}
@@ -569,7 +555,6 @@ const RuntimeComponent: Component<RuntimeComponentProps> = (props) => {
                     setValue={props.setValue}
                     executeAction={props.executeAction}
                     gap={scrollGap()}
-                    isConnected={props.isConnected}
                     parentDirection={scrollDir() as "horizontal" | "vertical"}
                   />
                 )}
@@ -610,7 +595,6 @@ const RuntimeComponent: Component<RuntimeComponentProps> = (props) => {
                     setValue={props.setValue}
                     executeAction={props.executeAction}
                     gap={cardGap()}
-                    isConnected={props.isConnected}
                     parentDirection="vertical"
                   />
                 )}
@@ -646,7 +630,6 @@ const RuntimeComponent: Component<RuntimeComponentProps> = (props) => {
                     setValue={props.setValue}
                     executeAction={props.executeAction}
                     gap={containerGap()}
-                    isConnected={props.isConnected}
                     parentDirection="vertical"
                   />
                 )}
