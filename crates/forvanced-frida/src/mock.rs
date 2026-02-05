@@ -29,7 +29,7 @@ impl FridaManager {
     }
 
     /// Returns a simulated list of devices for UI testing.
-    pub fn enumerate_devices(&self) -> Result<Vec<DeviceInfo>> {
+    pub async fn enumerate_devices(&self) -> Result<Vec<DeviceInfo>> {
         debug!("Mock: enumerating devices");
 
         let mock_devices = vec![
@@ -43,7 +43,7 @@ impl FridaManager {
     }
 
     /// Returns a simulated list of processes for a device.
-    pub fn enumerate_processes_on_device(&self, device_id: &str) -> Result<Vec<ProcessInfo>> {
+    pub async fn enumerate_processes_on_device(&self, device_id: &str) -> Result<Vec<ProcessInfo>> {
         debug!("Mock: enumerating processes on device {}", device_id);
 
         if device_id != "local" {
@@ -74,7 +74,7 @@ impl FridaManager {
     }
 
     /// Returns a simulated list of applications for mobile devices.
-    pub fn enumerate_applications_on_device(&self, device_id: &str) -> Result<Vec<ApplicationInfo>> {
+    pub async fn enumerate_applications_on_device(&self, device_id: &str) -> Result<Vec<ApplicationInfo>> {
         debug!("Mock: enumerating applications on device {}", device_id);
 
         if device_id == "local" {
@@ -177,7 +177,7 @@ impl FridaManager {
     }
 
     /// Simulates adding a remote device.
-    pub fn add_remote_device(&self, address: &str) -> Result<DeviceInfo> {
+    pub async fn add_remote_device(&self, address: &str) -> Result<DeviceInfo> {
         debug!("Mock: adding remote device at {}", address);
 
         // Return a fake remote device

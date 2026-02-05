@@ -276,12 +276,12 @@ pub async fn execute_script(
 
     // Debug: Print all nodes and their configs
     for node in &script.nodes {
-        info!("Node: {} ({}), config: {:?}", node.label, node.node_type, node.config);
+        tracing::debug!("Node: {} ({}), config: {:?}", node.label, node.node_type, node.config);
     }
 
     // Debug: Print all connections
     for conn in &script.connections {
-        info!("Connection: {} -> {}", conn.from_node_id, conn.to_node_id);
+        tracing::debug!("Connection: {} -> {}", conn.from_node_id, conn.to_node_id);
     }
 
     let converted_script = convert_script(script);

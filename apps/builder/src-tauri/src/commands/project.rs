@@ -63,7 +63,10 @@ pub async fn save_project(
         .write()
         .await
         .add(project_name, path_str.clone());
-    let _ = state.save_recent_projects().await;
+    
+    if let Err(e) = state.save_recent_projects().await {
+        tracing::warn!("Failed to save recent projects list: {}", e);
+    }
 
     Ok(path_str)
 }
@@ -96,7 +99,10 @@ pub async fn load_project(state: State<'_, AppState>, path: String) -> Result<Pr
         .write()
         .await
         .add(project_name, path_str);
-    let _ = state.save_recent_projects().await;
+    
+    if let Err(e) = state.save_recent_projects().await {
+        tracing::warn!("Failed to save recent projects list: {}", e);
+    }
 
     Ok(project)
 }

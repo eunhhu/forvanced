@@ -71,6 +71,7 @@ pub async fn attach_process(
 
     // List devices and find local
     let devices = state.frida_manager.enumerate_devices()
+        .await
         .map_err(|e: FridaError| e.to_string())?;
 
     let local_device = devices.iter()
@@ -79,6 +80,7 @@ pub async fn attach_process(
 
     // List processes
     let processes = state.frida_manager.enumerate_processes_on_device(&local_device.id)
+        .await
         .map_err(|e: FridaError| e.to_string())?;
 
     // Find target process
