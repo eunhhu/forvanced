@@ -469,6 +469,14 @@ impl Default for FridaManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::session::ScriptMessage;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn make_manager() -> FridaManager {
+        FridaManager::new().unwrap()
+    }
+
+    // --- Creation ---
 
     #[test]
     fn test_mock_manager_creation() {
@@ -477,22 +485,81 @@ mod tests {
     }
 
     #[test]
-    fn test_mock_enumerate_processes() {
-        let manager = FridaManager::new().unwrap();
-        let processes = manager.enumerate_processes_on_device("local").unwrap();
-        assert!(!processes.is_empty());
+    fn test_mock_manager_default() {
+        let manager = FridaManager::default();
+        // Should succeed via Default trait
+        let _ = manager;
     }
 
-    #[test]
-    fn test_mock_enumerate_applications() {
-        let manager = FridaManager::new().unwrap();
-        let apps = manager.enumerate_applications_on_device("usb-iphone").unwrap();
-        assert!(!apps.is_empty());
+    // --- Enumerate devices ---
+
+    #[tokio::test]
+    async fn test_mock_enumerate_devices() {
+        let manager = make_manager();
+        let devices = manager.enumerate_devices().await.unwrap();
+        assert_eq!(devices.len(), 3);
+
+        assert_eq!(devices[0].id, "local");
+        assert_eq!(devices[0].device_type, FridaDeviceType::Local);
+
+        assert_eq!(devices[1].id, "usb-iphone");
+        assert_eq!(devices[1].device_type, FridaDeviceType::Usb);
+
+        assert_eq!(devices[2].id, "usb-android");
+        assert_eq!(devices[2].device_type, FridaDeviceType::Usb);
+    }
+
+    // --- Enumerate processes ---
+
+    #[tokio::test]
+    async fn test_mock_enumerate_processes() {
+        let manager = make_manager();
+        let processes = manager.enumerate_processes_on_device("local").await.unwrap();
+        assert!(!processes.is_empty());
+        assert!(processes.iter().any(|p| p.name == "Safari"));
+        assert!(processes.iter().any(|p| p.name == "ExampleGame"));
     }
 
     #[tokio::test]
+    async fn test_mock_enumerate_processes_invalid_device() {
+        let manager = make_manager();
+        let result = manager.enumerate_processes_on_device("nonexistent").await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("not found"));
+    }
+
+    // --- Enumerate applications ---
+
+    #[tokio::test]
+    async fn test_mock_enumerate_applications_iphone() {
+        let manager = make_manager();
+        let apps = manager.enumerate_applications_on_device("usb-iphone").await.unwrap();
+        assert!(!apps.is_empty());
+        assert!(apps.iter().any(|a| a.identifier == "com.apple.mobilesafari"));
+        assert!(apps.iter().any(|a| a.name == "Safari" && a.pid.is_some()));
+    }
+
+    #[tokio::test]
+    async fn test_mock_enumerate_applications_android() {
+        let manager = make_manager();
+        let apps = manager.enumerate_applications_on_device("usb-android").await.unwrap();
+        assert!(!apps.is_empty());
+        assert!(apps.iter().any(|a| a.identifier == "com.android.chrome"));
+    }
+
+    #[tokio::test]
+    async fn test_mock_enumerate_applications_local_empty() {
+        let manager = make_manager();
+        let apps = manager.enumerate_applications_on_device("local").await.unwrap();
+        assert!(apps.is_empty());
+    }
+
+    // --- Attach targets ---
+
+    #[tokio::test]
     async fn test_mock_attach_detach() {
-        let manager = FridaManager::new().unwrap();
+        let manager = make_manager();
 
         let session_id = manager.attach_on_device("local", 1234).await.unwrap();
         assert!(!session_id.is_empty());
@@ -507,13 +574,394 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_mock_attach_by_name() {
+        let manager = make_manager();
+        let session_id = manager
+            .attach_target("local", AttachTarget::Name("Safari".to_string()))
+            .await
+            .unwrap();
+        assert!(!session_id.is_empty());
+
+        let session = manager.get_session(&session_id).await.unwrap();
+        assert!(session.process.name.contains("name:Safari"));
+    }
+
+    #[tokio::test]
     async fn test_mock_attach_by_identifier() {
-        let manager = FridaManager::new().unwrap();
+        let manager = make_manager();
 
         let session_id = manager
             .attach_target("usb-iphone", AttachTarget::Identifier("com.example.app".to_string()))
             .await
             .unwrap();
         assert!(!session_id.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_mock_attach_invalid_device() {
+        let manager = make_manager();
+        let result = manager.attach_on_device("invalid-device", 100).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not found"));
+    }
+
+    // --- Spawn ---
+
+    #[tokio::test]
+    async fn test_mock_spawn_and_attach() {
+        let manager = make_manager();
+        let session_id = manager
+            .spawn_and_attach("usb-iphone", "com.example.app", SpawnOptions::default())
+            .await
+            .unwrap();
+        assert!(!session_id.is_empty());
+
+        let session = manager.get_session(&session_id).await.unwrap();
+        assert!(session.process.name.contains("spawn:com.example.app"));
+    }
+
+    #[tokio::test]
+    async fn test_mock_spawn_invalid_device() {
+        let manager = make_manager();
+        let result = manager
+            .spawn_and_attach("invalid", "com.example.app", SpawnOptions::default())
+            .await;
+        assert!(result.is_err());
+    }
+
+    // --- Add remote device ---
+
+    #[tokio::test]
+    async fn test_mock_add_remote_device() {
+        let manager = make_manager();
+        let device = manager.add_remote_device("192.168.1.100:27042").await.unwrap();
+        assert_eq!(device.id, "remote-192.168.1.100:27042");
+        assert!(device.name.contains("192.168.1.100:27042"));
+        assert_eq!(device.device_type, FridaDeviceType::Remote);
+    }
+
+    // --- Script injection ---
+
+    #[tokio::test]
+    async fn test_mock_inject_script() {
+        let manager = make_manager();
+        let session_id = manager.attach_on_device("local", 100).await.unwrap();
+
+        let script_id = manager
+            .inject_script(&session_id, "console.log('hello')")
+            .await
+            .unwrap();
+        assert!(!script_id.is_empty());
+
+        // Verify script is in session
+        let session = manager.get_session(&session_id).await.unwrap();
+        let ids = session.get_script_ids().await;
+        assert!(ids.contains(&script_id));
+    }
+
+    #[tokio::test]
+    async fn test_mock_inject_script_invalid_session() {
+        let manager = make_manager();
+        let result = manager.inject_script("nonexistent", "code").await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Session not found"));
+    }
+
+    // --- Script unload ---
+
+    #[tokio::test]
+    async fn test_mock_unload_script() {
+        let manager = make_manager();
+        let session_id = manager.attach_on_device("local", 100).await.unwrap();
+        let script_id = manager.inject_script(&session_id, "code").await.unwrap();
+
+        manager.unload_script(&session_id, &script_id).await.unwrap();
+
+        let session = manager.get_session(&session_id).await.unwrap();
+        let ids = session.get_script_ids().await;
+        assert!(!ids.contains(&script_id));
+    }
+
+    #[tokio::test]
+    async fn test_mock_unload_script_invalid_session() {
+        let manager = make_manager();
+        let result = manager.unload_script("nonexistent", "script-1").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_mock_unload_script_not_found() {
+        let manager = make_manager();
+        let session_id = manager.attach_on_device("local", 100).await.unwrap();
+        let result = manager.unload_script(&session_id, "nonexistent-script").await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Script not found"));
+    }
+
+    // --- RPC calls ---
+
+    #[tokio::test]
+    async fn test_mock_call_rpc_ping() {
+        let manager = make_manager();
+        let session_id = manager.attach_on_device("local", 100).await.unwrap();
+        let script_id = manager.inject_script(&session_id, "code").await.unwrap();
+
+        let result = manager.call_rpc(&session_id, &script_id, "ping", vec![]).await.unwrap();
+        assert_eq!(result, serde_json::json!("pong"));
+    }
+
+    #[tokio::test]
+    async fn test_mock_call_rpc_memory_read() {
+        let manager = make_manager();
+        let session_id = manager.attach_on_device("local", 100).await.unwrap();
+        let script_id = manager.inject_script(&session_id, "code").await.unwrap();
+
+        let result = manager
+            .call_rpc(&session_id, &script_id, "memoryRead", vec![
+                serde_json::json!("0x1000"),
+                serde_json::json!(4),
+                serde_json::json!("uint32"),
+            ])
+            .await
+            .unwrap();
+        assert_eq!(result, serde_json::json!(123456));
+    }
+
+    #[tokio::test]
+    async fn test_mock_call_rpc_memory_read_string() {
+        let manager = make_manager();
+        let session_id = manager.attach_on_device("local", 100).await.unwrap();
+        let script_id = manager.inject_script(&session_id, "code").await.unwrap();
+
+        let result = manager
+            .call_rpc(&session_id, &script_id, "memoryRead", vec![
+                serde_json::json!("0x1000"),
+                serde_json::json!(32),
+                serde_json::json!("string"),
+            ])
+            .await
+            .unwrap();
+        assert_eq!(result, serde_json::json!("mock_string"));
+    }
+
+    #[tokio::test]
+    async fn test_mock_call_rpc_memory_write() {
+        let manager = make_manager();
+        let session_id = manager.attach_on_device("local", 100).await.unwrap();
+        let script_id = manager.inject_script(&session_id, "code").await.unwrap();
+
+        let result = manager
+            .call_rpc(&session_id, &script_id, "memoryWrite", vec![])
+            .await
+            .unwrap();
+        assert_eq!(result["success"], true);
+    }
+
+    #[tokio::test]
+    async fn test_mock_call_rpc_get_module_base() {
+        let manager = make_manager();
+        let session_id = manager.attach_on_device("local", 100).await.unwrap();
+        let script_id = manager.inject_script(&session_id, "code").await.unwrap();
+
+        let result = manager
+            .call_rpc(&session_id, &script_id, "getModuleBase", vec![serde_json::json!("libc.so")])
+            .await
+            .unwrap();
+        // "libc.so" has 7 chars, 7 * 0x100000 = 0x700000
+        assert_eq!(result, serde_json::json!("0x700000"));
+    }
+
+    #[tokio::test]
+    async fn test_mock_call_rpc_enumerate_modules() {
+        let manager = make_manager();
+        let session_id = manager.attach_on_device("local", 100).await.unwrap();
+        let script_id = manager.inject_script(&session_id, "code").await.unwrap();
+
+        let result = manager
+            .call_rpc(&session_id, &script_id, "enumerateModules", vec![])
+            .await
+            .unwrap();
+        assert!(result.is_array());
+        assert_eq!(result.as_array().unwrap().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_mock_call_rpc_unknown_method() {
+        let manager = make_manager();
+        let session_id = manager.attach_on_device("local", 100).await.unwrap();
+        let script_id = manager.inject_script(&session_id, "code").await.unwrap();
+
+        let result = manager
+            .call_rpc(&session_id, &script_id, "unknownMethod", vec![serde_json::json!("arg1")])
+            .await
+            .unwrap();
+        assert_eq!(result["mock"], true);
+        assert_eq!(result["method"], "unknownMethod");
+    }
+
+    #[tokio::test]
+    async fn test_mock_call_rpc_invalid_session() {
+        let manager = make_manager();
+        let result = manager.call_rpc("nonexistent", "script", "ping", vec![]).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_mock_call_rpc_invalid_script() {
+        let manager = make_manager();
+        let session_id = manager.attach_on_device("local", 100).await.unwrap();
+
+        let result = manager
+            .call_rpc(&session_id, "nonexistent-script", "ping", vec![])
+            .await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Script not found"));
+    }
+
+    // --- Message callbacks ---
+
+    #[tokio::test]
+    async fn test_mock_on_session_message() {
+        let manager = make_manager();
+        let session_id = manager.attach_on_device("local", 100).await.unwrap();
+
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let count_clone = call_count.clone();
+
+        manager
+            .on_session_message(&session_id, Arc::new(move |_, _| {
+                count_clone.fetch_add(1, Ordering::SeqCst);
+            }))
+            .await
+            .unwrap();
+
+        manager
+            .dispatch_message(&session_id, "script-1", ScriptMessage::Log {
+                level: "info".into(),
+                text: "test".into(),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(call_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn test_mock_on_session_message_invalid_session() {
+        let manager = make_manager();
+        let result = manager
+            .on_session_message("nonexistent", Arc::new(|_, _| {}))
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_mock_dispatch_message_invalid_session() {
+        let manager = make_manager();
+        let result = manager
+            .dispatch_message("nonexistent", "script", ScriptMessage::Log {
+                level: "info".into(),
+                text: "test".into(),
+            })
+            .await;
+        assert!(result.is_err());
+    }
+
+    // --- Detach errors ---
+
+    #[tokio::test]
+    async fn test_mock_detach_nonexistent() {
+        let manager = make_manager();
+        let result = manager.detach("nonexistent-session").await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Session not found"));
+    }
+
+    #[tokio::test]
+    async fn test_mock_detach_marks_session_detached() {
+        let manager = make_manager();
+        let session_id = manager.attach_on_device("local", 100).await.unwrap();
+
+        let session = manager.get_session(&session_id).await.unwrap();
+        assert!(!session.is_detached().await);
+
+        manager.detach(&session_id).await.unwrap();
+        // Session should now be detached
+        assert!(session.is_detached().await);
+
+        // get_session should return None after detach
+        assert!(manager.get_session(&session_id).await.is_none());
+    }
+
+    // --- Multi-session management ---
+
+    #[tokio::test]
+    async fn test_mock_concurrent_sessions() {
+        let manager = make_manager();
+
+        let s1 = manager.attach_on_device("local", 100).await.unwrap();
+        let s2 = manager.attach_on_device("local", 200).await.unwrap();
+        let s3 = manager.attach_target("usb-iphone", AttachTarget::Name("Safari".into())).await.unwrap();
+
+        assert_eq!(manager.list_sessions().await.len(), 3);
+        assert!(manager.get_session(&s1).await.is_some());
+        assert!(manager.get_session(&s2).await.is_some());
+        assert!(manager.get_session(&s3).await.is_some());
+
+        // Detach one
+        manager.detach(&s2).await.unwrap();
+        assert_eq!(manager.list_sessions().await.len(), 2);
+        assert!(manager.get_session(&s2).await.is_none());
+
+        // Detach remaining
+        manager.detach(&s1).await.unwrap();
+        manager.detach(&s3).await.unwrap();
+        assert!(manager.list_sessions().await.is_empty());
+    }
+
+    // --- Full lifecycle ---
+
+    #[tokio::test]
+    async fn test_mock_full_lifecycle() {
+        let manager = make_manager();
+
+        // 1. Enumerate devices
+        let devices = manager.enumerate_devices().await.unwrap();
+        assert!(!devices.is_empty());
+
+        // 2. Enumerate processes
+        let processes = manager.enumerate_processes_on_device("local").await.unwrap();
+        assert!(!processes.is_empty());
+
+        // 3. Attach
+        let session_id = manager.attach_on_device("local", processes[0].pid).await.unwrap();
+
+        // 4. Inject script
+        let script_id = manager.inject_script(&session_id, "console.log('test')").await.unwrap();
+
+        // 5. Register message callback
+        let msg_count = Arc::new(AtomicUsize::new(0));
+        let mc = msg_count.clone();
+        manager.on_session_message(&session_id, Arc::new(move |_, _| {
+            mc.fetch_add(1, Ordering::SeqCst);
+        })).await.unwrap();
+
+        // 6. Call RPC
+        let rpc_result = manager.call_rpc(&session_id, &script_id, "ping", vec![]).await.unwrap();
+        assert_eq!(rpc_result, serde_json::json!("pong"));
+
+        // 7. Dispatch message
+        manager.dispatch_message(&session_id, &script_id, ScriptMessage::Log {
+            level: "info".into(),
+            text: "lifecycle test".into(),
+        }).await.unwrap();
+        assert_eq!(msg_count.load(Ordering::SeqCst), 1);
+
+        // 8. Unload script
+        manager.unload_script(&session_id, &script_id).await.unwrap();
+
+        // 9. Detach
+        manager.detach(&session_id).await.unwrap();
+        assert!(manager.list_sessions().await.is_empty());
     }
 }

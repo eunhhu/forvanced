@@ -71,7 +71,20 @@ impl TargetAdapter for USBAdapter {
         let guard = self.frida_manager.read().await;
         let manager = guard.as_ref().ok_or(AdapterError::NotConnected)?;
 
-        manager.enumerate_usb_processes().map_err(|e| e.into())
+        // Use first available USB device
+        let devices = manager
+            .enumerate_devices()
+            .await
+            .map_err(|e: forvanced_frida::FridaError| AdapterError::Frida(e))?;
+        let usb_device = devices
+            .iter()
+            .find(|d| d.device_type == forvanced_frida::FridaDeviceType::Usb)
+            .ok_or(AdapterError::DeviceNotFound("No USB device found".into()))?;
+
+        manager
+            .enumerate_processes_on_device(&usb_device.id)
+            .await
+            .map_err(|e: forvanced_frida::FridaError| AdapterError::Frida(e))
     }
 
     async fn attach(&self, pid: u32) -> Result<String> {
@@ -80,7 +93,19 @@ impl TargetAdapter for USBAdapter {
         let guard = self.frida_manager.read().await;
         let manager = guard.as_ref().ok_or(AdapterError::NotConnected)?;
 
-        manager.attach_usb(pid).await.map_err(|e| e.into())
+        let devices = manager
+            .enumerate_devices()
+            .await
+            .map_err(|e: forvanced_frida::FridaError| AdapterError::Frida(e))?;
+        let usb_device = devices
+            .iter()
+            .find(|d| d.device_type == forvanced_frida::FridaDeviceType::Usb)
+            .ok_or(AdapterError::DeviceNotFound("No USB device found".into()))?;
+
+        manager
+            .attach_on_device(&usb_device.id, pid)
+            .await
+            .map_err(|e: forvanced_frida::FridaError| AdapterError::Frida(e))
     }
 
     async fn detach(&self, session_id: &str) -> Result<()> {
@@ -139,11 +164,61 @@ impl TargetAdapter for USBAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::TargetAdapter;
 
     #[tokio::test]
     async fn test_adapter_creation() {
         let adapter = USBAdapter::new();
         assert!(!adapter.is_connected());
         assert_eq!(adapter.adapter_id(), "usb");
+    }
+
+    #[test]
+    fn test_display_name() {
+        let adapter = USBAdapter::new();
+        assert_eq!(adapter.display_name(), "USB Device");
+    }
+
+    #[test]
+    fn test_default_trait() {
+        let adapter = USBAdapter::default();
+        assert!(!adapter.is_connected());
+        assert_eq!(adapter.adapter_id(), "usb");
+    }
+
+    #[test]
+    fn test_capabilities() {
+        let adapter = USBAdapter::new();
+        let caps = adapter.capabilities();
+        assert!(!caps.can_spawn);
+        assert!(caps.can_attach);
+        assert!(caps.can_enumerate);
+        assert!(caps.can_scan_memory);
+        assert!(caps.supports_java);
+        assert!(caps.supports_objc);
+        assert!(caps.supports_swift);
+    }
+
+    #[tokio::test]
+    async fn test_not_connected_enumerate() {
+        let adapter = USBAdapter::new();
+        let result = adapter.enumerate_processes().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_not_connected_attach() {
+        let adapter = USBAdapter::new();
+        let result = adapter.attach(1234).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_spawn_not_supported() {
+        let adapter = USBAdapter::new();
+        let result = adapter.spawn("/bin/ls", &[]).await;
+        assert!(result.is_err());
+        let err = format!("{}", result.unwrap_err());
+        assert!(err.contains("not yet implemented") || err.contains("not supported") || err.contains("NotSupported"));
     }
 }

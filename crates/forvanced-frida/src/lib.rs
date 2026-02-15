@@ -12,7 +12,7 @@ pub mod manager;
 
 pub use error::FridaError;
 pub use process::{ApplicationInfo, AttachTarget, DeviceInfo, FridaDeviceType, ProcessInfo, SpawnOptions};
-pub use session::{FridaSession, MessageCallback, RpcResult, ScriptHandle, ScriptMessage};
+pub use session::{FridaSession, MessageCallback, RpcResult, ScriptHandle, ScriptMessage, SessionState};
 
 #[cfg(all(feature = "mock", not(feature = "real")))]
 pub use mock::FridaManager;

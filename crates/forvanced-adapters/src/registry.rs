@@ -94,6 +94,55 @@ mod tests {
     #[test]
     fn test_registry_defaults() {
         let registry = AdapterRegistry::with_defaults();
-        assert!(registry.list_adapters().contains(&"local_pc".to_string()));
+        let adapters = registry.list_adapters();
+        assert!(adapters.contains(&"local_pc".to_string()));
+        assert!(adapters.contains(&"usb".to_string()));
+        assert!(adapters.contains(&"remote".to_string()));
+        assert_eq!(adapters.len(), 3);
+    }
+
+    #[test]
+    fn test_registry_new_empty() {
+        let registry = AdapterRegistry::new();
+        assert!(registry.list_adapters().is_empty());
+        assert!(registry.current_adapter().is_none());
+        assert!(registry.current_adapter_id().is_none());
+    }
+
+    #[test]
+    fn test_registry_register_and_get() {
+        let mut registry = AdapterRegistry::new();
+        registry.register(Box::new(LocalPCAdapter::new()));
+
+        assert_eq!(registry.list_adapters().len(), 1);
+        assert!(registry.get("local_pc").is_some());
+    }
+
+    #[test]
+    fn test_registry_get_nonexistent() {
+        let registry = AdapterRegistry::new();
+        assert!(registry.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_registry_current_adapter_before_select() {
+        let registry = AdapterRegistry::with_defaults();
+        assert!(registry.current_adapter().is_none());
+        assert!(registry.current_adapter_id().is_none());
+    }
+
+    #[test]
+    fn test_registry_default_trait() {
+        let registry = AdapterRegistry::default();
+        assert_eq!(registry.list_adapters().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_registry_select_nonexistent_adapter() {
+        let mut registry = AdapterRegistry::new();
+        let result = registry.select_adapter("nonexistent").await;
+        assert!(result.is_err());
+        let err = format!("{}", result.unwrap_err());
+        assert!(err.contains("not found"));
     }
 }

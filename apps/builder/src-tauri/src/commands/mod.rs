@@ -9,7 +9,7 @@ pub use executor::*;
 use tracing::{debug, info};
 
 use crate::AppState;
-use forvanced_frida::{ApplicationInfo, AttachTarget, DeviceInfo, ProcessInfo, SpawnOptions};
+use forvanced_frida::{ApplicationInfo, AttachTarget, DeviceInfo, FridaManager, ProcessInfo, SpawnOptions};
 
 // Re-export project commands
 pub use project::*;
@@ -17,29 +17,97 @@ pub use project::*;
 // Re-export build commands
 pub use build::*;
 
+/// Structured error type for IPC commands
+#[derive(Debug, serde::Serialize)]
+#[serde(tag = "kind", content = "message")]
+pub enum CommandError {
+    FridaNotInitialized,
+    NoDeviceSelected,
+    DeviceNotFound(String),
+    SessionError(String),
+    ScriptError(String),
+    Frida(String),
+    Other(String),
+}
+
+impl std::fmt::Display for CommandError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CommandError::FridaNotInitialized => write!(f, "Frida not initialized"),
+            CommandError::NoDeviceSelected => write!(f, "No device selected"),
+            CommandError::DeviceNotFound(id) => write!(f, "Device '{}' not found", id),
+            CommandError::SessionError(msg) => write!(f, "Session error: {}", msg),
+            CommandError::ScriptError(msg) => write!(f, "Script error: {}", msg),
+            CommandError::Frida(msg) => write!(f, "Frida error: {}", msg),
+            CommandError::Other(msg) => write!(f, "{}", msg),
+        }
+    }
+}
+
+impl From<forvanced_frida::FridaError> for CommandError {
+    fn from(err: forvanced_frida::FridaError) -> Self {
+        use forvanced_frida::FridaError;
+        match &err {
+            FridaError::DeviceNotFound(msg) => CommandError::DeviceNotFound(msg.clone()),
+            FridaError::SessionNotFound(msg) => CommandError::SessionError(msg.clone()),
+            FridaError::ScriptNotFound(msg) | FridaError::ScriptCreationFailed(msg)
+            | FridaError::ScriptLoadFailed(msg) | FridaError::ScriptInjectionFailed(msg)
+            | FridaError::ScriptExecutionError(msg) => CommandError::ScriptError(msg.clone()),
+            FridaError::NotConnected => CommandError::FridaNotInitialized,
+            _ => CommandError::Frida(err.to_string()),
+        }
+    }
+}
+
+/// Helper: get the FridaManager from AppState
+async fn get_manager(state: &AppState) -> Result<impl std::ops::Deref<Target = FridaManager> + '_, CommandError> {
+    let guard = state.frida_manager.read().await;
+    // We need to map the guard to the inner value. Since RwLockReadGuard doesn't allow
+    // partial mapping easily, we'll use a different approach.
+    if guard.is_none() {
+        return Err(CommandError::FridaNotInitialized);
+    }
+    Ok(ManagerGuard(guard))
+}
+
+/// Wrapper to deref through Option in RwLockReadGuard
+struct ManagerGuard<'a>(tokio::sync::RwLockReadGuard<'a, Option<FridaManager>>);
+
+impl<'a> std::ops::Deref for ManagerGuard<'a> {
+    type Target = FridaManager;
+    fn deref(&self) -> &Self::Target {
+        // Safe: we checked is_none() before constructing
+        self.0.as_ref().unwrap()
+    }
+}
+
+/// Helper: get the current device ID from AppState
+async fn get_device_id(state: &AppState) -> Result<String, CommandError> {
+    state
+        .current_device_id
+        .read()
+        .await
+        .clone()
+        .ok_or(CommandError::NoDeviceSelected)
+}
+
 /// List all available Frida devices
 #[tauri::command]
-pub async fn list_devices(state: State<'_, AppState>) -> Result<Vec<DeviceInfo>, String> {
+pub async fn list_devices(state: State<'_, AppState>) -> Result<Vec<DeviceInfo>, CommandError> {
     debug!("list_devices called");
-
-    let guard = state.frida_manager.read().await;
-    let manager = guard.as_ref().ok_or("Frida not initialized")?;
-
-    manager.enumerate_devices().await.map_err(|e| e.to_string())
+    let manager = get_manager(&state).await?;
+    manager.enumerate_devices().await.map_err(CommandError::from)
 }
 
 /// Select a device to work with
 #[tauri::command]
-pub async fn select_device(state: State<'_, AppState>, device_id: String) -> Result<(), String> {
+pub async fn select_device(state: State<'_, AppState>, device_id: String) -> Result<(), CommandError> {
     info!("select_device called with: {}", device_id);
 
-    // Verify device exists
-    let guard = state.frida_manager.read().await;
-    let manager = guard.as_ref().ok_or("Frida not initialized")?;
-
-    let devices = manager.enumerate_devices().await.map_err(|e| e.to_string())?;
+    let manager = get_manager(&state).await?;
+    let devices = manager.enumerate_devices().await.map_err(CommandError::from)?;
     if !devices.iter().any(|d| d.id == device_id) {
-        return Err(format!("Device '{}' not found", device_id));
+        return Err(CommandError::DeviceNotFound(device_id));
     }
 
     *state.current_device_id.write().await = Some(device_id);
@@ -48,7 +116,7 @@ pub async fn select_device(state: State<'_, AppState>, device_id: String) -> Res
 
 /// Get current selected device ID
 #[tauri::command]
-pub async fn get_current_device(state: State<'_, AppState>) -> Result<Option<String>, String> {
+pub async fn get_current_device(state: State<'_, AppState>) -> Result<Option<String>, CommandError> {
     debug!("get_current_device called");
     Ok(state.current_device_id.read().await.clone())
 }
@@ -58,123 +126,70 @@ pub async fn get_current_device(state: State<'_, AppState>) -> Result<Option<Str
 pub async fn add_remote_device(
     state: State<'_, AppState>,
     address: String,
-) -> Result<DeviceInfo, String> {
+) -> Result<DeviceInfo, CommandError> {
     info!("add_remote_device called with address: {}", address);
-
-    let guard = state.frida_manager.read().await;
-    let manager = guard.as_ref().ok_or("Frida not initialized")?;
-
-    manager.add_remote_device(&address).await.map_err(|e| e.to_string())
+    let manager = get_manager(&state).await?;
+    manager.add_remote_device(&address).await.map_err(CommandError::from)
 }
 
 /// Enumerate processes on current device
 #[tauri::command]
-pub async fn enumerate_processes(state: State<'_, AppState>) -> Result<Vec<ProcessInfo>, String> {
+pub async fn enumerate_processes(state: State<'_, AppState>) -> Result<Vec<ProcessInfo>, CommandError> {
     debug!("enumerate_processes called");
-
-    let device_id = state
-        .current_device_id
-        .read()
-        .await
-        .clone()
-        .ok_or("No device selected")?;
-
-    let guard = state.frida_manager.read().await;
-    let manager = guard.as_ref().ok_or("Frida not initialized")?;
-
+    let device_id = get_device_id(&state).await?;
+    let manager = get_manager(&state).await?;
     manager
         .enumerate_processes_on_device(&device_id)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(CommandError::from)
 }
 
 /// Enumerate applications on current device (for mobile/USB devices)
 #[tauri::command]
-pub async fn enumerate_applications(state: State<'_, AppState>) -> Result<Vec<ApplicationInfo>, String> {
+pub async fn enumerate_applications(state: State<'_, AppState>) -> Result<Vec<ApplicationInfo>, CommandError> {
     debug!("enumerate_applications called");
-
-    let device_id = state
-        .current_device_id
-        .read()
-        .await
-        .clone()
-        .ok_or("No device selected")?;
-
-    let guard = state.frida_manager.read().await;
-    let manager = guard.as_ref().ok_or("Frida not initialized")?;
-
+    let device_id = get_device_id(&state).await?;
+    let manager = get_manager(&state).await?;
     manager
         .enumerate_applications_on_device(&device_id)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(CommandError::from)
 }
 
 /// Attach to a process on current device by PID
 #[tauri::command]
-pub async fn attach_to_process(state: State<'_, AppState>, pid: u32) -> Result<String, String> {
+pub async fn attach_to_process(state: State<'_, AppState>, pid: u32) -> Result<String, CommandError> {
     info!("attach_to_process called with pid: {}", pid);
-
-    let device_id = state
-        .current_device_id
-        .read()
-        .await
-        .clone()
-        .ok_or("No device selected")?;
-    debug!("Using device_id: {}", device_id);
-
-    let guard = state.frida_manager.read().await;
-    let manager = guard.as_ref().ok_or("Frida not initialized")?;
-
-    let result = manager
+    let device_id = get_device_id(&state).await?;
+    let manager = get_manager(&state).await?;
+    manager
         .attach_on_device(&device_id, pid)
         .await
-        .map_err(|e| e.to_string());
-    
-    debug!("attach_on_device result: {:?}", result);
-    
-    result
+        .map_err(CommandError::from)
 }
 
 /// Attach to a process on current device by name
 #[tauri::command]
-pub async fn attach_by_name(state: State<'_, AppState>, name: String) -> Result<String, String> {
+pub async fn attach_by_name(state: State<'_, AppState>, name: String) -> Result<String, CommandError> {
     info!("attach_by_name called with name: {}", name);
-
-    let device_id = state
-        .current_device_id
-        .read()
-        .await
-        .clone()
-        .ok_or("No device selected")?;
-
-    let guard = state.frida_manager.read().await;
-    let manager = guard.as_ref().ok_or("Frida not initialized")?;
-
+    let device_id = get_device_id(&state).await?;
+    let manager = get_manager(&state).await?;
     manager
         .attach_target(&device_id, AttachTarget::Name(name))
         .await
-        .map_err(|e| e.to_string())
+        .map_err(CommandError::from)
 }
 
 /// Attach to an application on current device by bundle identifier
 #[tauri::command]
-pub async fn attach_by_identifier(state: State<'_, AppState>, identifier: String) -> Result<String, String> {
+pub async fn attach_by_identifier(state: State<'_, AppState>, identifier: String) -> Result<String, CommandError> {
     info!("attach_by_identifier called with identifier: {}", identifier);
-
-    let device_id = state
-        .current_device_id
-        .read()
-        .await
-        .clone()
-        .ok_or("No device selected")?;
-
-    let guard = state.frida_manager.read().await;
-    let manager = guard.as_ref().ok_or("Frida not initialized")?;
-
+    let device_id = get_device_id(&state).await?;
+    let manager = get_manager(&state).await?;
     manager
         .attach_target(&device_id, AttachTarget::Identifier(identifier))
         .await
-        .map_err(|e| e.to_string())
+        .map_err(CommandError::from)
 }
 
 /// Spawn and attach to an application by identifier
@@ -182,23 +197,14 @@ pub async fn attach_by_identifier(state: State<'_, AppState>, identifier: String
 pub async fn spawn_and_attach(
     state: State<'_, AppState>,
     identifier: String,
-) -> Result<String, String> {
+) -> Result<String, CommandError> {
     info!("spawn_and_attach called with identifier: {}", identifier);
-
-    let device_id = state
-        .current_device_id
-        .read()
-        .await
-        .clone()
-        .ok_or("No device selected")?;
-
-    let guard = state.frida_manager.read().await;
-    let manager = guard.as_ref().ok_or("Frida not initialized")?;
-
+    let device_id = get_device_id(&state).await?;
+    let manager = get_manager(&state).await?;
     manager
         .spawn_and_attach(&device_id, &identifier, SpawnOptions::default())
         .await
-        .map_err(|e| e.to_string())
+        .map_err(CommandError::from)
 }
 
 /// Detach from a session
@@ -206,13 +212,10 @@ pub async fn spawn_and_attach(
 pub async fn detach_from_process(
     state: State<'_, AppState>,
     session_id: String,
-) -> Result<(), String> {
+) -> Result<(), CommandError> {
     info!("detach_from_process called with session: {}", session_id);
-
-    let guard = state.frida_manager.read().await;
-    let manager = guard.as_ref().ok_or("Frida not initialized")?;
-
-    manager.detach(&session_id).await.map_err(|e| e.to_string())
+    let manager = get_manager(&state).await?;
+    manager.detach(&session_id).await.map_err(CommandError::from)
 }
 
 /// Inject a script into a session
@@ -221,20 +224,17 @@ pub async fn inject_script(
     state: State<'_, AppState>,
     session_id: String,
     script: String,
-) -> Result<String, String> {
+) -> Result<String, CommandError> {
     info!(
         "inject_script called for session: {}, script length: {}",
         session_id,
         script.len()
     );
-
-    let guard = state.frida_manager.read().await;
-    let manager = guard.as_ref().ok_or("Frida not initialized")?;
-
+    let manager = get_manager(&state).await?;
     manager
         .inject_script(&session_id, &script)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(CommandError::from)
 }
 
 /// Unload a script from a session
@@ -243,19 +243,16 @@ pub async fn unload_script(
     state: State<'_, AppState>,
     session_id: String,
     script_id: String,
-) -> Result<(), String> {
+) -> Result<(), CommandError> {
     info!(
         "unload_script called for session: {}, script: {}",
         session_id, script_id
     );
-
-    let guard = state.frida_manager.read().await;
-    let manager = guard.as_ref().ok_or("Frida not initialized")?;
-
+    let manager = get_manager(&state).await?;
     manager
         .unload_script(&session_id, &script_id)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(CommandError::from)
 }
 
 /// Call an RPC method on a Frida script
@@ -266,19 +263,16 @@ pub async fn call_rpc(
     script_id: String,
     method: String,
     args: Vec<serde_json::Value>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, CommandError> {
     debug!(
         "call_rpc called: session={}, script={}, method={}",
         session_id, script_id, method
     );
-
-    let guard = state.frida_manager.read().await;
-    let manager = guard.as_ref().ok_or("Frida not initialized")?;
-
+    let manager = get_manager(&state).await?;
     manager
         .call_rpc(&session_id, &script_id, &method, args)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(CommandError::from)
 }
 
 /// Register for Frida script messages on a session.
@@ -288,11 +282,10 @@ pub async fn subscribe_to_messages(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     session_id: String,
-) -> Result<(), String> {
+) -> Result<(), CommandError> {
     info!("subscribe_to_messages called for session: {}", session_id);
 
-    let guard = state.frida_manager.read().await;
-    let manager = guard.as_ref().ok_or("Frida not initialized")?;
+    let manager = get_manager(&state).await?;
 
     let app_handle = app.clone();
     let session_id_clone = session_id.clone();
@@ -303,7 +296,6 @@ pub async fn subscribe_to_messages(
             std::sync::Arc::new(move |script_id, message| {
                 use tauri::Emitter;
 
-                // Emit event to frontend
                 let payload = serde_json::json!({
                     "sessionId": session_id_clone,
                     "scriptId": script_id,
@@ -316,7 +308,7 @@ pub async fn subscribe_to_messages(
             }),
         )
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(CommandError::from)?;
 
     Ok(())
 }
@@ -330,7 +322,7 @@ pub async fn simulate_frida_message(
     script_id: String,
     message_type: String,
     payload: serde_json::Value,
-) -> Result<(), String> {
+) -> Result<(), CommandError> {
     use forvanced_frida::ScriptMessage;
 
     info!(
@@ -338,8 +330,7 @@ pub async fn simulate_frida_message(
         session_id, message_type
     );
 
-    let guard = state.frida_manager.read().await;
-    let manager = guard.as_ref().ok_or("Frida not initialized")?;
+    let manager = get_manager(&state).await?;
 
     let message = match message_type.as_str() {
         "log" => ScriptMessage::Log {
@@ -355,11 +346,11 @@ pub async fn simulate_frida_message(
             file_name: payload.get("fileName").and_then(|v| v.as_str()).map(|s| s.to_string()),
             line_number: payload.get("lineNumber").and_then(|v| v.as_u64()).map(|n| n as u32),
         },
-        _ => return Err(format!("Unknown message type: {}", message_type)),
+        _ => return Err(CommandError::Other(format!("Unknown message type: {}", message_type))),
     };
 
     manager
         .dispatch_message(&session_id, &script_id, message)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(CommandError::from)
 }

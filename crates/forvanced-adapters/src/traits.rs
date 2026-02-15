@@ -82,3 +82,41 @@ pub trait TargetAdapter: Send + Sync {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_adapter_capabilities_default() {
+        let caps = AdapterCapabilities::default();
+        assert!(!caps.can_spawn);
+        assert!(caps.can_attach);
+        assert!(caps.can_enumerate);
+        assert!(caps.can_scan_memory);
+        assert!(!caps.supports_java);
+        assert!(!caps.supports_objc);
+        assert!(!caps.supports_swift);
+    }
+
+    #[test]
+    fn test_adapter_capabilities_serde() {
+        let caps = AdapterCapabilities {
+            can_spawn: true,
+            can_attach: true,
+            can_enumerate: false,
+            can_scan_memory: true,
+            supports_java: true,
+            supports_objc: false,
+            supports_swift: false,
+        };
+        let json = serde_json::to_value(&caps).unwrap();
+        assert_eq!(json["can_spawn"], true);
+        assert_eq!(json["can_enumerate"], false);
+        assert_eq!(json["supports_java"], true);
+
+        let deserialized: AdapterCapabilities = serde_json::from_value(json).unwrap();
+        assert_eq!(deserialized.can_spawn, true);
+        assert_eq!(deserialized.can_enumerate, false);
+    }
+}

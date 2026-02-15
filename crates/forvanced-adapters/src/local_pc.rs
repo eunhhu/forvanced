@@ -69,7 +69,10 @@ impl TargetAdapter for LocalPCAdapter {
         let guard = self.frida_manager.read().await;
         let manager = guard.as_ref().ok_or(AdapterError::NotConnected)?;
 
-        manager.enumerate_local_processes().map_err(|e| e.into())
+        manager
+            .enumerate_processes_on_device("local")
+            .await
+            .map_err(|e: forvanced_frida::FridaError| AdapterError::Frida(e))
     }
 
     async fn attach(&self, pid: u32) -> Result<String> {
@@ -78,7 +81,10 @@ impl TargetAdapter for LocalPCAdapter {
         let guard = self.frida_manager.read().await;
         let manager = guard.as_ref().ok_or(AdapterError::NotConnected)?;
 
-        manager.attach_local(pid).await.map_err(|e| e.into())
+        manager
+            .attach_on_device("local", pid)
+            .await
+            .map_err(|e: forvanced_frida::FridaError| AdapterError::Frida(e))
     }
 
     async fn detach(&self, session_id: &str) -> Result<()> {
@@ -138,11 +144,77 @@ impl TargetAdapter for LocalPCAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::TargetAdapter;
 
     #[tokio::test]
     async fn test_adapter_creation() {
         let adapter = LocalPCAdapter::new();
         assert!(!adapter.is_connected());
         assert_eq!(adapter.adapter_id(), "local_pc");
+    }
+
+    #[test]
+    fn test_display_name() {
+        let adapter = LocalPCAdapter::new();
+        assert_eq!(adapter.display_name(), "Local PC");
+    }
+
+    #[test]
+    fn test_capabilities() {
+        let adapter = LocalPCAdapter::new();
+        let caps = adapter.capabilities();
+        assert!(caps.can_spawn);
+        assert!(caps.can_attach);
+        assert!(caps.can_enumerate);
+        assert!(caps.can_scan_memory);
+        assert!(!caps.supports_java);
+        // macOS-specific checks
+        #[cfg(target_os = "macos")]
+        {
+            assert!(caps.supports_objc);
+            assert!(caps.supports_swift);
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            assert!(!caps.supports_objc);
+            assert!(!caps.supports_swift);
+        }
+    }
+
+    #[test]
+    fn test_default_trait() {
+        let adapter = LocalPCAdapter::default();
+        assert!(!adapter.is_connected());
+        assert_eq!(adapter.adapter_id(), "local_pc");
+    }
+
+    #[tokio::test]
+    async fn test_not_connected_enumerate() {
+        let adapter = LocalPCAdapter::new();
+        let result = adapter.enumerate_processes().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_not_connected_attach() {
+        let adapter = LocalPCAdapter::new();
+        let result = adapter.attach(1234).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_not_connected_detach() {
+        let adapter = LocalPCAdapter::new();
+        let result = adapter.detach("some-session").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_spawn_not_implemented() {
+        let adapter = LocalPCAdapter::new();
+        let result = adapter.spawn("/bin/ls", &[]).await;
+        assert!(result.is_err());
+        let err = format!("{}", result.unwrap_err());
+        assert!(err.contains("not yet implemented") || err.contains("not supported") || err.contains("NotSupported"));
     }
 }

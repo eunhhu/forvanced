@@ -18,16 +18,29 @@ export interface DeviceInfo {
 
 export type AttachMode = "pid" | "name" | "identifier";
 
+// Structured IPC error with command context
+export class IPCError extends Error {
+  readonly command: string;
+  readonly code: string;
+
+  constructor(command: string, message: string, code = "IPC_ERROR") {
+    super(message);
+    this.name = "IPCError";
+    this.command = command;
+    this.code = code;
+  }
+}
+
 // Check if running in Tauri environment (Tauri 2.0 uses __TAURI_INTERNALS__)
-function isTauri(): boolean {
+export function isTauri(): boolean {
   return (
     typeof window !== "undefined" &&
     ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)
   );
 }
 
-// Dynamic import for Tauri API
-async function invoke<T>(
+// Dynamic import for Tauri API with structured error handling
+export async function invoke<T>(
   cmd: string,
   args?: Record<string, unknown>,
 ): Promise<T> {
@@ -36,8 +49,13 @@ async function invoke<T>(
     console.log(`[Mock] ${cmd}`, args);
     return getMockResponse<T>(cmd, args);
   }
-  const { invoke: tauriInvoke } = await import("@tauri-apps/api/core");
-  return tauriInvoke<T>(cmd, args);
+  try {
+    const { invoke: tauriInvoke } = await import("@tauri-apps/api/core");
+    return await tauriInvoke<T>(cmd, args);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new IPCError(cmd, message);
+  }
 }
 
 // Mock responses for browser/test environment
@@ -117,14 +135,21 @@ function getMockResponse<T>(cmd: string, args?: Record<string, unknown>): T {
         },
         hotkeys: { enabled: true, bindings: [] },
       },
-      ui: { components: [], width: 400, height: 500, theme: "dark" },
+      ui: {
+        components: [],
+        width: 400,
+        height: 500,
+        theme: "dark",
+        padding: 12,
+        gap: 8,
+      },
       scripts: [],
       created_at: Date.now(),
       updated_at: Date.now(),
     },
-    save_project: undefined,
+    save_project: args?.path || `/tmp/project-${Date.now()}.forvanced`,
     load_project: {
-      id: `project-${Date.now()}`,
+      id: `loaded-${Date.now()}`,
       name: "Loaded Project",
       version: "1.0.0",
       description: null,
@@ -145,12 +170,32 @@ function getMockResponse<T>(cmd: string, args?: Record<string, unknown>): T {
         },
         hotkeys: { enabled: true, bindings: [] },
       },
-      ui: { components: [], width: 400, height: 500, theme: "dark" },
+      ui: {
+        components: [],
+        width: 400,
+        height: 500,
+        theme: "dark",
+        padding: 12,
+        gap: 8,
+      },
       scripts: [],
       created_at: Date.now(),
       updated_at: Date.now(),
     },
-    get_recent_projects: [],
+    close_project: undefined,
+    update_project: undefined,
+    get_recent_projects: [
+      {
+        name: "Example Project",
+        path: "/mock/example.forvanced",
+        last_opened: Date.now() - 86400000,
+      },
+      {
+        name: "My Trainer",
+        path: "/mock/trainer.forvanced",
+        last_opened: Date.now() - 172800000,
+      },
+    ],
     remove_recent_project: undefined,
     // Executor commands
     execute_script: {
@@ -459,4 +504,45 @@ export async function clearScriptState(scriptId: string): Promise<void> {
  */
 export async function clearAllScriptStates(): Promise<void> {
   return invoke<void>("clear_all_script_states");
+}
+
+// ============================================
+// Project Commands
+// ============================================
+
+export interface RecentProjectEntry {
+  name: string;
+  path: string;
+  last_opened: number;
+}
+
+export async function createProject(name: string): Promise<unknown> {
+  return invoke<unknown>("create_project", { name });
+}
+
+export async function saveProject(
+  project: unknown,
+  path: string | null,
+): Promise<string> {
+  return invoke<string>("save_project", { project, path });
+}
+
+export async function loadProject(path: string): Promise<unknown> {
+  return invoke<unknown>("load_project", { path });
+}
+
+export async function closeProject(): Promise<void> {
+  return invoke<void>("close_project");
+}
+
+export async function updateProject(project: unknown): Promise<void> {
+  return invoke<void>("update_project", { project });
+}
+
+export async function getRecentProjects(): Promise<RecentProjectEntry[]> {
+  return invoke<RecentProjectEntry[]>("get_recent_projects");
+}
+
+export async function removeRecentProject(path: string): Promise<void> {
+  return invoke<void>("remove_recent_project", { path });
 }

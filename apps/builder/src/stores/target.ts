@@ -9,6 +9,10 @@ import {
   attachByIdentifier,
   spawnAndAttach,
   detachFromProcess,
+  injectScript,
+  unloadScript,
+  setExecutorSession,
+  clearExecutorSession,
 } from "@/lib/tauri";
 import type { AttachMode } from "@/lib/tauri";
 import { errorStore } from "./error";
@@ -23,6 +27,10 @@ const [attachMode, setAttachMode] = createSignal<AttachMode>("pid");
 const [sessionId, setSessionId] = createSignal<string | null>(null);
 const [attachedPid, setAttachedPid] = createSignal<number | null>(null);
 const [attachedTarget, setAttachedTarget] = createSignal<string | null>(null);
+
+// Executor state (centralized - previously duplicated in TestPanel)
+const [injectedScriptId, setInjectedScriptId] = createSignal<string | null>(null);
+const [isExecutorReady, setIsExecutorReady] = createSignal(false);
 
 // Device list resource
 const [devices, { refetch: refetchDevices }] = createResource(async () => {
@@ -71,14 +79,21 @@ const [applications, { refetch: refetchApplications }] = createResource(
   },
 );
 
+// Reset all session/executor state
+function resetSessionState() {
+  setSessionId(null);
+  setAttachedPid(null);
+  setAttachedTarget(null);
+  setInjectedScriptId(null);
+  setIsExecutorReady(false);
+}
+
 // Actions
 async function changeDevice(deviceId: string) {
   try {
     await selectDevice(deviceId);
     setCurrentDeviceId(deviceId);
-    setSessionId(null);
-    setAttachedPid(null);
-    setAttachedTarget(null);
+    resetSessionState();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("Failed to change device:", error);
@@ -180,13 +195,70 @@ async function detach() {
 
   try {
     await detachFromProcess(id);
-    setSessionId(null);
-    setAttachedPid(null);
-    setAttachedTarget(null);
+    resetSessionState();
     errorStore.showInfo("Detached", "Successfully detached from process");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("Failed to detach from process:", error);
+    errorStore.showError("Detach Failed", message);
+    throw error;
+  }
+}
+
+// Attach to process and set up executor (inject agent + configure executor session)
+async function attachAndSetupExecutor(pid: number, name: string, agentScript: string): Promise<void> {
+  try {
+    const session = await attachToProcess(pid);
+    setSessionId(session);
+    setAttachedPid(pid);
+    setAttachedTarget(name);
+
+    const scriptId = await injectScript(session, agentScript);
+    setInjectedScriptId(scriptId);
+
+    await setExecutorSession(session, scriptId);
+    setIsExecutorReady(true);
+
+    errorStore.showInfo("Attached", `Attached to ${name} (PID: ${pid})`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Failed to attach and setup executor:", error);
+    // Clean up partial state on failure
+    const session = sessionId();
+    if (session) {
+      try {
+        await detachFromProcess(session);
+      } catch {
+        /* ignore cleanup error */
+      }
+    }
+    resetSessionState();
+    errorStore.showError("Attach Failed", `Failed to attach to ${name}`, message);
+    throw error;
+  }
+}
+
+// Detach and clean up executor (clear session + unload script + detach)
+async function detachAndCleanup(): Promise<void> {
+  const session = sessionId();
+  if (!session) return;
+
+  try {
+    await clearExecutorSession();
+    setIsExecutorReady(false);
+
+    const scriptId = injectedScriptId();
+    if (scriptId) {
+      await unloadScript(session, scriptId);
+      setInjectedScriptId(null);
+    }
+
+    await detachFromProcess(session);
+    resetSessionState();
+    errorStore.showInfo("Detached", "Successfully detached from process");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Failed to detach and cleanup:", error);
     errorStore.showError("Detach Failed", message);
     throw error;
   }
@@ -220,6 +292,8 @@ export const targetStore = {
   devices,
   processes,
   applications,
+  injectedScriptId,
+  isExecutorReady,
 
   // Actions
   changeDevice,
@@ -228,6 +302,8 @@ export const targetStore = {
   attachIdentifier,
   spawn,
   detach,
+  attachAndSetupExecutor,
+  detachAndCleanup,
   setAttachMode,
   refetchDevices,
   refetchProcesses,

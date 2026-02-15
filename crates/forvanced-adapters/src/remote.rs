@@ -96,9 +96,11 @@ impl TargetAdapter for RemoteAdapter {
         let guard = self.frida_manager.read().await;
         let manager = guard.as_ref().ok_or(AdapterError::NotConnected)?;
 
+        let device_id = format!("remote-{}:{}", self.host, self.port);
         manager
-            .enumerate_remote_processes(&self.host, self.port)
-            .map_err(|e| e.into())
+            .enumerate_processes_on_device(&device_id)
+            .await
+            .map_err(|e: forvanced_frida::FridaError| AdapterError::Frida(e))
     }
 
     async fn attach(&self, pid: u32) -> Result<String> {
@@ -107,10 +109,11 @@ impl TargetAdapter for RemoteAdapter {
         let guard = self.frida_manager.read().await;
         let manager = guard.as_ref().ok_or(AdapterError::NotConnected)?;
 
+        let device_id = format!("remote-{}:{}", self.host, self.port);
         manager
-            .attach_remote(&self.host, self.port, pid)
+            .attach_on_device(&device_id, pid)
             .await
-            .map_err(|e| e.into())
+            .map_err(|e: forvanced_frida::FridaError| AdapterError::Frida(e))
     }
 
     async fn detach(&self, session_id: &str) -> Result<()> {
@@ -169,6 +172,7 @@ impl TargetAdapter for RemoteAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::TargetAdapter;
 
     #[tokio::test]
     async fn test_adapter_creation() {
@@ -184,5 +188,62 @@ mod tests {
         let adapter = RemoteAdapter::default_local();
         assert_eq!(adapter.host(), "127.0.0.1");
         assert_eq!(adapter.port(), 27042);
+    }
+
+    #[test]
+    fn test_display_name() {
+        let adapter = RemoteAdapter::new("10.0.0.1", 5555);
+        assert_eq!(adapter.display_name(), "Remote (frida-server)");
+    }
+
+    #[test]
+    fn test_default_trait() {
+        let adapter = RemoteAdapter::default();
+        assert_eq!(adapter.host(), "127.0.0.1");
+        assert_eq!(adapter.port(), 27042);
+        assert!(!adapter.is_connected());
+    }
+
+    #[test]
+    fn test_set_host_port() {
+        let mut adapter = RemoteAdapter::default();
+        adapter.set_host("10.0.0.5");
+        adapter.set_port(9999);
+        assert_eq!(adapter.host(), "10.0.0.5");
+        assert_eq!(adapter.port(), 9999);
+    }
+
+    #[test]
+    fn test_capabilities() {
+        let adapter = RemoteAdapter::new("localhost", 27042);
+        let caps = adapter.capabilities();
+        assert!(!caps.can_spawn);
+        assert!(caps.can_attach);
+        assert!(caps.can_enumerate);
+        assert!(caps.can_scan_memory);
+        assert!(caps.supports_java);
+        assert!(caps.supports_objc);
+        assert!(caps.supports_swift);
+    }
+
+    #[tokio::test]
+    async fn test_not_connected_enumerate() {
+        let adapter = RemoteAdapter::new("localhost", 27042);
+        let result = adapter.enumerate_processes().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_not_connected_attach() {
+        let adapter = RemoteAdapter::new("localhost", 27042);
+        let result = adapter.attach(1234).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_spawn_not_supported() {
+        let adapter = RemoteAdapter::new("localhost", 27042);
+        let result = adapter.spawn("/bin/ls", &[]).await;
+        assert!(result.is_err());
     }
 }

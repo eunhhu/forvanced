@@ -55,3 +55,36 @@ pub enum FridaError {
 }
 
 pub type Result<T> = std::result::Result<T, FridaError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_frida_error_display() {
+        let err = FridaError::DeviceNotFound("abc".into());
+        assert_eq!(err.to_string(), "Device not found: abc");
+
+        let err = FridaError::SessionNotFound("sess-1".into());
+        assert_eq!(err.to_string(), "Session not found: sess-1");
+
+        let err = FridaError::ScriptNotFound("script-1".into());
+        assert_eq!(err.to_string(), "Script not found: script-1");
+
+        let err = FridaError::NotConnected;
+        assert_eq!(err.to_string(), "Not connected to any device");
+
+        let err = FridaError::AttachFailed("timeout".into());
+        assert_eq!(err.to_string(), "Failed to attach to process: timeout");
+
+        let err = FridaError::RpcCallFailed("method not found".into());
+        assert_eq!(err.to_string(), "RPC call failed: method not found");
+    }
+
+    #[test]
+    fn test_frida_error_debug() {
+        let err = FridaError::InitializationFailed("init error".into());
+        let debug_str = format!("{:?}", err);
+        assert!(debug_str.contains("InitializationFailed"));
+    }
+}

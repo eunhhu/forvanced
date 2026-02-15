@@ -1,130 +1,15 @@
 import { createSignal, createRoot } from "solid-js";
-
-// Check if running in Tauri environment (evaluated at call time)
-function isTauri(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)
-  );
-}
-
-// Dynamic invoke wrapper
-async function invoke<T>(
-  cmd: string,
-  args?: Record<string, unknown>,
-): Promise<T> {
-  if (!isTauri()) {
-    console.log(`[Mock] ${cmd}`, args);
-    return getMockProjectResponse<T>(cmd, args);
-  }
-  const { invoke: tauriInvoke } = await import("@tauri-apps/api/core");
-  return tauriInvoke<T>(cmd, args);
-}
-
-// Mock responses for project commands
-function getMockProjectResponse<T>(
-  cmd: string,
-  args?: Record<string, unknown>,
-): T {
-  const now = Date.now();
-  const mocks: Record<string, unknown> = {
-    create_project: {
-      id: `project-${now}`,
-      name: args?.name || "New Project",
-      description: null,
-      version: "1.0.0",
-      author: null,
-      config: {
-        target: {
-          process_name: null,
-          process_patterns: [],
-          adapter_type: "local_pc",
-          adapter_config: {},
-          auto_attach: false,
-        },
-        build: {
-          output_name: null,
-          targets: ["windows"],
-          icon: null,
-          bundle_frida: false,
-        },
-        hotkeys: {
-          enabled: true,
-          bindings: [],
-        },
-      },
-      ui: {
-        components: [],
-        width: 400,
-        height: 500,
-        theme: "dark",
-        padding: 12,
-        gap: 8,
-      },
-      scripts: [],
-      created_at: now,
-      updated_at: now,
-    },
-    save_project: args?.path || `/tmp/project-${now}.forvanced`,
-    load_project: {
-      id: `loaded-${now}`,
-      name: "Loaded Project",
-      description: null,
-      version: "1.0.0",
-      author: null,
-      config: {
-        target: {
-          process_name: null,
-          process_patterns: [],
-          adapter_type: "local_pc",
-          adapter_config: {},
-          auto_attach: false,
-        },
-        build: {
-          output_name: null,
-          targets: ["windows"],
-          icon: null,
-          bundle_frida: false,
-        },
-        hotkeys: { enabled: true, bindings: [] },
-      },
-      ui: {
-        components: [],
-        width: 400,
-        height: 500,
-        theme: "dark",
-        padding: 12,
-        gap: 8,
-      },
-      scripts: [],
-      created_at: now,
-      updated_at: now,
-    },
-    close_project: undefined,
-    update_project: undefined,
-    get_recent_projects: [
-      {
-        name: "Example Project",
-        path: "/mock/example.forvanced",
-        last_opened: Date.now() - 86400000,
-      },
-      {
-        name: "My Trainer",
-        path: "/mock/trainer.forvanced",
-        last_opened: Date.now() - 172800000,
-      },
-    ],
-    remove_recent_project: undefined,
-  };
-  return (mocks[cmd] ?? null) as T;
-}
-
-// Recent project entry type
-export interface RecentProjectEntry {
-  name: string;
-  path: string;
-  last_opened: number;
-}
+import {
+  isTauri,
+  createProject as ipcCreateProject,
+  saveProject as ipcSaveProject,
+  loadProject as ipcLoadProject,
+  closeProject as ipcCloseProject,
+  updateProject as ipcUpdateProject,
+  getRecentProjects as ipcGetRecentProjects,
+  removeRecentProject as ipcRemoveRecentProject,
+  type RecentProjectEntry,
+} from "@/lib/tauri";
 
 // Dynamic dialog helpers
 async function saveDialogTauri(defaultName: string): Promise<string | null> {
@@ -153,6 +38,8 @@ async function openDialogTauri(): Promise<string | null> {
 // Import Script type and store from script store
 import type { Script } from "./script";
 import { scriptStore } from "./script";
+
+export type { RecentProjectEntry };
 
 // Project types (matching Rust schema)
 export interface Project {
@@ -359,7 +246,7 @@ function createProjectStore() {
     setIsLoading(true);
     setError(null);
     try {
-      const project = await invoke<Project>("create_project", { name });
+      const project = (await ipcCreateProject(name)) as Project;
       // Initialize with empty scripts array if not present
       if (!project.scripts) {
         project.scripts = [];
@@ -397,10 +284,10 @@ function createProjectStore() {
         scripts: scriptStore.getAllScripts(),
       };
 
-      const savedPath = await invoke<string>("save_project", {
-        project: projectWithScripts,
-        path: path ?? projectPath(),
-      });
+      const savedPath = await ipcSaveProject(
+        projectWithScripts,
+        path ?? projectPath(),
+      );
       setProjectPath(savedPath);
       setIsDirty(false);
       // Update local project state with scripts
@@ -429,7 +316,7 @@ function createProjectStore() {
     setIsLoading(true);
     setError(null);
     try {
-      const project = await invoke<Project>("load_project", { path });
+      const project = (await ipcLoadProject(path)) as Project;
       // Ensure scripts array exists (for backward compatibility with old projects)
       if (!project.scripts) {
         project.scripts = [];
@@ -462,7 +349,7 @@ function createProjectStore() {
   async function close() {
     setIsLoading(true);
     try {
-      await invoke("close_project");
+      await ipcCloseProject();
       setCurrentProject(null);
       setProjectPath(null);
       setIsDirty(false);
@@ -493,7 +380,7 @@ function createProjectStore() {
     // Debounced sync to backend (500ms delay)
     if (syncTimer) clearTimeout(syncTimer);
     syncTimer = setTimeout(() => {
-      invoke("update_project", { project: updated }).catch(console.error);
+      ipcUpdateProject(updated).catch(console.error);
       syncTimer = null;
     }, 500);
   }
@@ -515,7 +402,7 @@ function createProjectStore() {
       // Still sync to backend, but debounced
       if (syncTimer) clearTimeout(syncTimer);
       syncTimer = setTimeout(() => {
-        invoke("update_project", { project }).catch(console.error);
+        ipcUpdateProject(project).catch(console.error);
         syncTimer = null;
       }, 500);
     } else {
@@ -534,9 +421,7 @@ function createProjectStore() {
 
   async function fetchRecentProjects(): Promise<RecentProjectEntry[]> {
     try {
-      const projects = await invoke<RecentProjectEntry[]>(
-        "get_recent_projects",
-      );
+      const projects = await ipcGetRecentProjects();
       setRecentProjects(projects);
       return projects;
     } catch (e) {
@@ -547,7 +432,7 @@ function createProjectStore() {
 
   async function removeRecentProject(path: string): Promise<void> {
     try {
-      await invoke("remove_recent_project", { path });
+      await ipcRemoveRecentProject(path);
       setRecentProjects((prev) => prev.filter((p) => p.path !== path));
     } catch (e) {
       console.error("Failed to remove recent project:", e);

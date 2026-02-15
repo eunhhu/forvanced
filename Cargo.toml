@@ -5,6 +5,7 @@ members = [
     "apps/runtime/src-tauri",
     "crates/forvanced-core",
     "crates/forvanced-frida",
+    "crates/forvanced-adapters",
     "crates/forvanced-build",
     "crates/forvanced-executor",
 ]

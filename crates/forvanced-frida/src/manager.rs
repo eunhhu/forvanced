@@ -294,40 +294,26 @@ impl FridaWorker {
 
     fn attach(&mut self, device_id: &str, target: AttachTarget) -> Result<(String, u32)> {
         info!("Attaching to {} on device {}", target, device_id);
-        eprintln!("[FRIDA DEBUG] attach() called: device_id={}, target={:?}", device_id, target);
 
-        eprintln!("[FRIDA DEBUG] Enumerating devices...");
         let devices = ManuallyDrop::new(self.device_manager.enumerate_all_devices());
-        eprintln!("[FRIDA DEBUG] Found {} devices", devices.len());
 
         let device_idx = devices.iter().position(|d| d.get_id() == device_id)
             .ok_or_else(|| FridaError::DeviceNotFound(format!("Device '{}' not found", device_id)))?;
-        eprintln!("[FRIDA DEBUG] Found device: {}", devices[device_idx].get_name());
 
         // Resolve target to PID
-        eprintln!("[FRIDA DEBUG] Resolving target to PID...");
         let pid = match &target {
-            AttachTarget::Pid(pid) => {
-                eprintln!("[FRIDA DEBUG] Target is PID: {}", pid);
-                *pid
-            }
+            AttachTarget::Pid(pid) => *pid,
             AttachTarget::Name(name) => {
-                eprintln!("[FRIDA DEBUG] Target is Name: {}", name);
                 let processes = ManuallyDrop::new(devices[device_idx].enumerate_processes());
-                eprintln!("[FRIDA DEBUG] Found {} processes", processes.len());
-                let process_pid = processes
+                processes
                     .iter()
                     .find(|p| p.get_name() == name)
                     .map(|p| p.get_pid())
-                    .ok_or_else(|| FridaError::ProcessNotFound(format!("Process '{}' not found", name)))?;
-                eprintln!("[FRIDA DEBUG] Found process with PID: {}", process_pid);
-                process_pid
+                    .ok_or_else(|| FridaError::ProcessNotFound(format!("Process '{}' not found", name)))?
             }
             AttachTarget::Identifier(identifier) => {
-                eprintln!("[FRIDA DEBUG] Target is Identifier: {}", identifier);
                 let processes = ManuallyDrop::new(devices[device_idx].enumerate_processes());
-                eprintln!("[FRIDA DEBUG] Found {} processes", processes.len());
-                let process_pid = processes
+                processes
                     .iter()
                     .find(|p| p.get_name() == identifier)
                     .or_else(|| {
@@ -340,24 +326,16 @@ impl FridaWorker {
                     .ok_or_else(|| FridaError::ProcessNotFound(format!(
                         "No running process found for identifier '{}'. Use spawn to start it.",
                         identifier
-                    )))?;
-                eprintln!("[FRIDA DEBUG] Found process with PID: {}", process_pid);
-                process_pid
+                    )))?
             }
         };
 
-        eprintln!("[FRIDA DEBUG] Attempting to attach to PID {}...", pid);
         let _session = ManuallyDrop::new(
             devices[device_idx].attach(pid)
-                .map_err(|e| {
-                    eprintln!("[FRIDA DEBUG] Attach failed: {}", e);
-                    FridaError::AttachFailed(e.to_string())
-                })?
+                .map_err(|e| FridaError::AttachFailed(e.to_string()))?
         );
-        eprintln!("[FRIDA DEBUG] Attach successful!");
 
         let session_id = Uuid::new_v4().to_string();
-        eprintln!("[FRIDA DEBUG] Created session_id: {}", session_id);
 
         // Store session info (no raw pointers - we re-attach when needed)
         self.sessions.insert(
@@ -652,26 +630,21 @@ impl FridaManager {
 
     /// Attach to a target on a specific device
     pub async fn attach_target(&self, device_id: &str, target: AttachTarget) -> Result<String> {
-        eprintln!("[FRIDA DEBUG] attach_target() sending command...");
         let (session_id, pid) = self.send_command(|reply| FridaCommand::Attach {
             device_id: device_id.to_string(),
             target: target.clone(),
             reply,
         }).await?;
-        eprintln!("[FRIDA DEBUG] attach_target() command returned: session_id={}, pid={}", session_id, pid);
 
         // Create FridaSession metadata for async access
-        eprintln!("[FRIDA DEBUG] Creating FridaSession metadata...");
         let process_info = ProcessInfo::new(pid, format!("{}:{}", device_id, target));
         let frida_session = Arc::new(FridaSession::new(session_id.clone(), process_info));
-        eprintln!("[FRIDA DEBUG] FridaSession created");
+        frida_session.set_state(crate::session::SessionState::Active).await;
 
-        eprintln!("[FRIDA DEBUG] Inserting session into map...");
         self.sessions
             .write()
             .await
             .insert(session_id.clone(), frida_session);
-        eprintln!("[FRIDA DEBUG] Session inserted, returning session_id");
 
         Ok(session_id)
     }
@@ -687,6 +660,7 @@ impl FridaManager {
         // Create FridaSession metadata for async access
         let process_info = ProcessInfo::new(pid, format!("{}:spawn:{}", device_id, identifier));
         let frida_session = Arc::new(FridaSession::new(session_id.clone(), process_info));
+        frida_session.set_state(crate::session::SessionState::Active).await;
 
         self.sessions
             .write()
