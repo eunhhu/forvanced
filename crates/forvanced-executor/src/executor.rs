@@ -87,10 +87,14 @@ impl ScriptExecutor {
     fn default_value_for_type(value_type: &crate::script::ValueType) -> Value {
         use crate::script::ValueType;
         match value_type {
-            ValueType::Int8 | ValueType::Uint8 |
-            ValueType::Int16 | ValueType::Uint16 |
-            ValueType::Int32 | ValueType::Uint32 |
-            ValueType::Int64 | ValueType::Uint64 => Value::Integer(0),
+            ValueType::Int8
+            | ValueType::Uint8
+            | ValueType::Int16
+            | ValueType::Uint16
+            | ValueType::Int32
+            | ValueType::Uint32
+            | ValueType::Int64
+            | ValueType::Uint64 => Value::Integer(0),
             ValueType::Float | ValueType::Double => Value::Float(0.0),
             ValueType::Pointer => Value::Pointer(0),
             ValueType::String => Value::String(String::new()),
@@ -208,7 +212,8 @@ impl ScriptExecutor {
         // Save variable state for next execution
         let script_id = script.id.clone();
         let final_variables = ctx.variables().clone();
-        self.save_script_variables(&script_id, final_variables.clone()).await;
+        self.save_script_variables(&script_id, final_variables.clone())
+            .await;
 
         Ok(ExecutionResult {
             success: true,
@@ -327,7 +332,11 @@ impl ScriptExecutor {
                         // Need to evaluate the source node if it's a value-only node
                         // (nodes with no flow inputs)
                         let from_node = from_node.clone();
-                        if from_node.inputs.iter().all(|p| p.port_type != PortType::Flow) {
+                        if from_node
+                            .inputs
+                            .iter()
+                            .all(|p| p.port_type != PortType::Flow)
+                        {
                             let output = self.execute_value_node(ctx, &from_node).await?;
                             ctx.set_node_outputs(from_node_id, output.values.clone());
                             if let Some(value) = output.values.get(&from_port.name) {
@@ -351,30 +360,39 @@ impl ScriptExecutor {
         node: &'a ScriptNode,
     ) -> Pin<Box<dyn Future<Output = ExecutorResult<NodeOutput>> + Send + 'a>> {
         Box::pin(async move {
+            let value_node_id = node.id.clone();
+            ctx.visit_value_node(&value_node_id)?;
+
             // Collect inputs from connected value nodes (recursive)
-            let inputs = self.collect_value_inputs(ctx, node).await?;
+            let result = async {
+                let inputs = self.collect_value_inputs(ctx, node).await?;
 
-            // Determine execution context
-            let node_context = classify_node(&node.node_type);
+                // Determine execution context
+                let node_context = classify_node(&node.node_type);
 
-            match node_context {
-                NodeContext::Host => {
-                    if let Some(executor) = nodes::get_executor(&node.node_type) {
-                        executor.execute(node, &inputs, ctx).await
-                    } else {
-                        Err(ExecutorError::InvalidOperation(format!(
-                            "No executor for value node type: {}",
-                            node.node_type
-                        )))
+                match node_context {
+                    NodeContext::Host => {
+                        if let Some(executor) = nodes::get_executor(&node.node_type) {
+                            executor.execute(node, &inputs, ctx).await
+                        } else {
+                            Err(ExecutorError::InvalidOperation(format!(
+                                "No executor for value node type: {}",
+                                node.node_type
+                            )))
+                        }
+                    }
+                    NodeContext::Target => {
+                        // Value-only target nodes are rare, but handle them
+                        let bridge = self.rpc_bridge.read().await;
+                        let outputs = bridge.execute_target_node(node, &inputs).await?;
+                        Ok(NodeOutput::values(outputs))
                     }
                 }
-                NodeContext::Target => {
-                    // Value-only target nodes are rare, but handle them
-                    let bridge = self.rpc_bridge.read().await;
-                    let outputs = bridge.execute_target_node(node, &inputs).await?;
-                    Ok(NodeOutput::values(outputs))
-                }
             }
+            .await;
+
+            ctx.unvisit_value_node(&value_node_id);
+            result
         })
     }
 
@@ -402,7 +420,8 @@ impl ScriptExecutor {
                     if let Some(from_node) = script.find_node(from_node_id) {
                         if let Some(from_port) = from_node.output_by_id(from_port_id) {
                             // Check cache first
-                            if let Some(value) = ctx.get_node_output(from_node_id, &from_port.name) {
+                            if let Some(value) = ctx.get_node_output(from_node_id, &from_port.name)
+                            {
                                 inputs.insert(input_port.name.clone(), value.clone());
                                 continue;
                             }
@@ -416,7 +435,10 @@ impl ScriptExecutor {
                             }
 
                             // Only recursively evaluate pure value nodes (no flow inputs)
-                            let has_flow_input = from_node.inputs.iter().any(|p| p.port_type == PortType::Flow);
+                            let has_flow_input = from_node
+                                .inputs
+                                .iter()
+                                .any(|p| p.port_type == PortType::Flow);
                             if has_flow_input {
                                 // Flow node outputs should be cached from execution
                                 // If not cached, the node hasn't been executed yet - skip
@@ -606,7 +628,11 @@ impl ScriptExecutor {
     }
 
     /// Follow the "done" port after loop completion
-    async fn follow_done_port(&self, ctx: &mut ExecutionContext, node: &ScriptNode) -> ExecutorResult<()> {
+    async fn follow_done_port(
+        &self,
+        ctx: &mut ExecutionContext,
+        node: &ScriptNode,
+    ) -> ExecutorResult<()> {
         if let Some(done_port) = node.output_by_name("done") {
             let script = ctx.script().clone();
             for conn in script.connections_from_port(&node.id, &done_port.id) {
@@ -729,6 +755,167 @@ mod tests {
         }
     }
 
+    fn make_value_cycle_script() -> Script {
+        let event_node = ScriptNode {
+            id: "event-1".to_string(),
+            node_type: "event_ui".to_string(),
+            label: "UI Event".to_string(),
+            x: 0.0,
+            y: 0.0,
+            config: HashMap::new(),
+            inputs: vec![],
+            outputs: vec![Port {
+                id: "event-exec".to_string(),
+                name: "exec".to_string(),
+                port_type: PortType::Flow,
+                value_type: None,
+                direction: PortDirection::Output,
+            }],
+        };
+
+        let log_node = ScriptNode {
+            id: "log-1".to_string(),
+            node_type: "log".to_string(),
+            label: "Log".to_string(),
+            x: 300.0,
+            y: 0.0,
+            config: HashMap::new(),
+            inputs: vec![
+                Port {
+                    id: "log-exec-in".to_string(),
+                    name: "exec".to_string(),
+                    port_type: PortType::Flow,
+                    value_type: None,
+                    direction: PortDirection::Input,
+                },
+                Port {
+                    id: "log-message-in".to_string(),
+                    name: "message".to_string(),
+                    port_type: PortType::Value,
+                    value_type: None,
+                    direction: PortDirection::Input,
+                },
+            ],
+            outputs: vec![Port {
+                id: "log-exec-out".to_string(),
+                name: "exec".to_string(),
+                port_type: PortType::Flow,
+                value_type: None,
+                direction: PortDirection::Output,
+            }],
+        };
+
+        let math_1 = ScriptNode {
+            id: "math-1".to_string(),
+            node_type: "math".to_string(),
+            label: "Math 1".to_string(),
+            x: 120.0,
+            y: 80.0,
+            config: {
+                let mut c = HashMap::new();
+                c.insert("operation".to_string(), serde_json::json!("add"));
+                c
+            },
+            inputs: vec![
+                Port {
+                    id: "math1-a".to_string(),
+                    name: "a".to_string(),
+                    port_type: PortType::Value,
+                    value_type: None,
+                    direction: PortDirection::Input,
+                },
+                Port {
+                    id: "math1-b".to_string(),
+                    name: "b".to_string(),
+                    port_type: PortType::Value,
+                    value_type: None,
+                    direction: PortDirection::Input,
+                },
+            ],
+            outputs: vec![Port {
+                id: "math1-result".to_string(),
+                name: "result".to_string(),
+                port_type: PortType::Value,
+                value_type: None,
+                direction: PortDirection::Output,
+            }],
+        };
+
+        let math_2 = ScriptNode {
+            id: "math-2".to_string(),
+            node_type: "math".to_string(),
+            label: "Math 2".to_string(),
+            x: 120.0,
+            y: 160.0,
+            config: {
+                let mut c = HashMap::new();
+                c.insert("operation".to_string(), serde_json::json!("add"));
+                c
+            },
+            inputs: vec![
+                Port {
+                    id: "math2-a".to_string(),
+                    name: "a".to_string(),
+                    port_type: PortType::Value,
+                    value_type: None,
+                    direction: PortDirection::Input,
+                },
+                Port {
+                    id: "math2-b".to_string(),
+                    name: "b".to_string(),
+                    port_type: PortType::Value,
+                    value_type: None,
+                    direction: PortDirection::Input,
+                },
+            ],
+            outputs: vec![Port {
+                id: "math2-result".to_string(),
+                name: "result".to_string(),
+                port_type: PortType::Value,
+                value_type: None,
+                direction: PortDirection::Output,
+            }],
+        };
+
+        Script {
+            id: "value-cycle-script".to_string(),
+            name: "Value Cycle Script".to_string(),
+            description: None,
+            variables: vec![],
+            nodes: vec![event_node, log_node, math_1, math_2],
+            connections: vec![
+                Connection {
+                    id: "flow-1".to_string(),
+                    from_node_id: "event-1".to_string(),
+                    from_port_id: "event-exec".to_string(),
+                    to_node_id: "log-1".to_string(),
+                    to_port_id: "log-exec-in".to_string(),
+                },
+                Connection {
+                    id: "value-log".to_string(),
+                    from_node_id: "math-1".to_string(),
+                    from_port_id: "math1-result".to_string(),
+                    to_node_id: "log-1".to_string(),
+                    to_port_id: "log-message-in".to_string(),
+                },
+                Connection {
+                    id: "value-cycle-1".to_string(),
+                    from_node_id: "math-1".to_string(),
+                    from_port_id: "math1-result".to_string(),
+                    to_node_id: "math-2".to_string(),
+                    to_port_id: "math2-a".to_string(),
+                },
+                Connection {
+                    id: "value-cycle-2".to_string(),
+                    from_node_id: "math-2".to_string(),
+                    from_port_id: "math2-result".to_string(),
+                    to_node_id: "math-1".to_string(),
+                    to_port_id: "math1-a".to_string(),
+                },
+            ],
+        }
+    }
+
     #[tokio::test]
     async fn test_simple_script_execution() {
         let ui_state = Arc::new(RwLock::new(HashMap::new()));
@@ -742,5 +929,23 @@ mod tests {
 
         assert!(result.success);
         assert!(result.error.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_value_cycle_is_detected() {
+        let ui_state = Arc::new(RwLock::new(HashMap::new()));
+        let executor = ScriptExecutor::new(ui_state);
+
+        let script = make_value_cycle_script();
+        let result = executor
+            .execute_from_event(script, "event-1", Value::Boolean(true), None)
+            .await
+            .unwrap();
+
+        assert!(!result.success);
+        assert!(result
+            .error
+            .unwrap_or_default()
+            .contains("Execution cycle detected"));
     }
 }

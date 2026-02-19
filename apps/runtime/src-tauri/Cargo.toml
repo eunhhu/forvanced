@@ -31,3 +31,7 @@ async-trait = { workspace = true }
 forvanced-core = { path = "../../../crates/forvanced-core" }
 forvanced-frida = { path = "../../../crates/forvanced-frida", default-features = false }
 forvanced-executor = { path = "../../../crates/forvanced-executor" }
+
+[dev-dependencies]
+forvanced-build = { path = "../../../crates/forvanced-build" }
+tempfile = "3.24"

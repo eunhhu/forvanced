@@ -3,7 +3,7 @@
 //! Uses apps/runtime as the template and embeds project configuration.
 
 use crate::error::{BuildError, InstallInstruction, MissingTool, MissingToolsInfo};
-use forvanced_core::Project;
+use forvanced_core::project::{Project, UIComponent, VisualScript};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tokio::fs;
@@ -101,8 +101,8 @@ pub struct ProjectConfig {
     pub version: String,
     pub target_process: Option<String>,
     pub auto_attach: bool,
-    pub components: Vec<serde_json::Value>,
-    pub scripts: Vec<serde_json::Value>,
+    pub components: Vec<UIComponent>,
+    pub scripts: Vec<VisualScript>,
     pub canvas: CanvasConfig,
 }
 
@@ -121,17 +121,8 @@ impl From<&Project> for ProjectConfig {
             version: project.version.clone(),
             target_process: project.config.target.process_name.clone(),
             auto_attach: project.config.target.auto_attach,
-            components: project
-                .ui
-                .components
-                .iter()
-                .map(|c| serde_json::to_value(c).unwrap_or_default())
-                .collect(),
-            scripts: project
-                .scripts
-                .iter()
-                .map(|s| serde_json::to_value(s).unwrap_or_default())
-                .collect(),
+            components: project.ui.components.clone(),
+            scripts: project.scripts.clone(),
             canvas: CanvasConfig {
                 width: project.ui.width,
                 height: project.ui.height,
@@ -193,7 +184,11 @@ impl Builder {
         info!("Created project directory");
 
         // Copy runtime template
-        info!("Copying runtime template from {} to {}...", self.runtime_path.display(), project_dir.display());
+        info!(
+            "Copying runtime template from {} to {}...",
+            self.runtime_path.display(),
+            project_dir.display()
+        );
         copy_dir_recursive(&self.runtime_path, &project_dir).await?;
         info!("Copied runtime template to: {}", project_dir.display());
 
@@ -258,7 +253,9 @@ impl Builder {
             .arg("install")
             .current_dir(&project_dir)
             .status()
-            .map_err(|e| BuildError::CommandFailed(format!("{} install failed: {}", install_cmd, e)))?;
+            .map_err(|e| {
+                BuildError::CommandFailed(format!("{} install failed: {}", install_cmd, e))
+            })?;
 
         if !install_status.success() {
             return Err(BuildError::CommandFailed(format!(
@@ -306,7 +303,11 @@ impl Builder {
         })
     }
 
-    async fn update_tauri_config(&self, project_dir: &Path, project: &Project) -> Result<(), BuildError> {
+    async fn update_tauri_config(
+        &self,
+        project_dir: &Path,
+        project: &Project,
+    ) -> Result<(), BuildError> {
         let config_path = project_dir.join("src-tauri/tauri.conf.json");
         let content = fs::read_to_string(&config_path).await?;
 
@@ -327,7 +328,10 @@ impl Builder {
                     if let Some(window) = windows.first_mut().and_then(|w| w.as_object_mut()) {
                         window.insert("title".to_string(), serde_json::json!(project.name));
                         window.insert("width".to_string(), serde_json::json!(project.ui.width));
-                        window.insert("height".to_string(), serde_json::json!(project.ui.height + 60)); // Add header
+                        window.insert(
+                            "height".to_string(),
+                            serde_json::json!(project.ui.height + 60),
+                        ); // Add header
                     }
                 }
             }
@@ -340,7 +344,11 @@ impl Builder {
         Ok(())
     }
 
-    async fn update_cargo_toml(&self, project_dir: &Path, project: &Project) -> Result<(), BuildError> {
+    async fn update_cargo_toml(
+        &self,
+        project_dir: &Path,
+        project: &Project,
+    ) -> Result<(), BuildError> {
         let cargo_path = project_dir.join("src-tauri/Cargo.toml");
 
         let sanitized = sanitize_name(&project.name);
@@ -390,7 +398,11 @@ codegen-units = 1
         Ok(())
     }
 
-    async fn update_package_json(&self, project_dir: &Path, project: &Project) -> Result<(), BuildError> {
+    async fn update_package_json(
+        &self,
+        project_dir: &Path,
+        project: &Project,
+    ) -> Result<(), BuildError> {
         let pkg_path = project_dir.join("package.json");
         let content = fs::read_to_string(&pkg_path).await?;
 
@@ -409,7 +421,11 @@ codegen-units = 1
         Ok(())
     }
 
-    async fn generate_lib_rs(&self, project_dir: &Path, project: &Project) -> Result<(), BuildError> {
+    async fn generate_lib_rs(
+        &self,
+        project_dir: &Path,
+        project: &Project,
+    ) -> Result<(), BuildError> {
         let lib_path = project_dir.join("src-tauri/src/lib.rs");
 
         // Overwrite lib.rs to load the embedded config
@@ -471,7 +487,11 @@ pub fn run() {
         Ok(())
     }
 
-    async fn generate_main_rs(&self, project_dir: &Path, project: &Project) -> Result<(), BuildError> {
+    async fn generate_main_rs(
+        &self,
+        project_dir: &Path,
+        project: &Project,
+    ) -> Result<(), BuildError> {
         let path = project_dir.join("src-tauri/src/main.rs");
         let lib_name = sanitize_name(&project.name).replace('-', "_");
 
@@ -623,13 +643,11 @@ impl AppState {
             missing.push(MissingTool {
                 name: "Rust",
                 description: "Rust 프로그래밍 언어 및 Cargo 패키지 매니저",
-                install_instructions: vec![
-                    InstallInstruction {
-                        platform: "Windows/macOS/Linux",
-                        command: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
-                        url: Some("https://rustup.rs"),
-                    },
-                ],
+                install_instructions: vec![InstallInstruction {
+                    platform: "Windows/macOS/Linux",
+                    command: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
+                    url: Some("https://rustup.rs"),
+                }],
             });
         }
 
@@ -639,13 +657,11 @@ impl AppState {
             missing.push(MissingTool {
                 name: "Tauri CLI",
                 description: "Tauri 앱 빌드 도구",
-                install_instructions: vec![
-                    InstallInstruction {
-                        platform: "모든 플랫폼",
-                        command: "cargo install tauri-cli",
-                        url: None,
-                    },
-                ],
+                install_instructions: vec![InstallInstruction {
+                    platform: "모든 플랫폼",
+                    command: "cargo install tauri-cli",
+                    url: None,
+                }],
             });
         }
 
@@ -671,10 +687,10 @@ fn find_runtime_path() -> Result<PathBuf, BuildError> {
     // Try common locations - including when running from apps/builder
     let candidates = [
         PathBuf::from("apps/runtime"),
-        PathBuf::from("../runtime"),              // When in apps/builder
+        PathBuf::from("../runtime"), // When in apps/builder
         PathBuf::from("../apps/runtime"),
         PathBuf::from("../../apps/runtime"),
-        PathBuf::from("../../runtime"),           // When in apps/builder/src-tauri
+        PathBuf::from("../../runtime"), // When in apps/builder/src-tauri
         cwd.join("apps/runtime"),
         cwd.join("../runtime"),
     ];
@@ -697,7 +713,10 @@ fn find_runtime_path() -> Result<PathBuf, BuildError> {
         if let Some(root) = workspace_root {
             let runtime_path = root.join("apps/runtime");
             if runtime_path.exists() {
-                debug!("Found runtime template via CARGO_MANIFEST_DIR: {}", runtime_path.display());
+                debug!(
+                    "Found runtime template via CARGO_MANIFEST_DIR: {}",
+                    runtime_path.display()
+                );
                 return Ok(runtime_path);
             }
         }
@@ -707,7 +726,10 @@ fn find_runtime_path() -> Result<PathBuf, BuildError> {
     if let Some(workspace_root) = find_workspace_root(&cwd) {
         let runtime_path = workspace_root.join("apps/runtime");
         if runtime_path.exists() && runtime_path.join("src-tauri").exists() {
-            debug!("Found runtime template via workspace root: {}", runtime_path.display());
+            debug!(
+                "Found runtime template via workspace root: {}",
+                runtime_path.display()
+            );
             return Ok(runtime_path);
         }
     }
@@ -719,7 +741,8 @@ fn find_runtime_path() -> Result<PathBuf, BuildError> {
 fn find_workspace_root(start: &Path) -> Option<PathBuf> {
     let mut current = start.to_path_buf();
 
-    for _ in 0..10 {  // Limit search depth
+    for _ in 0..10 {
+        // Limit search depth
         let cargo_toml = current.join("Cargo.toml");
         if cargo_toml.exists() {
             // Check if it's a workspace root
@@ -743,18 +766,20 @@ async fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), BuildError> {
     let src = src.to_path_buf();
     let dst = dst.to_path_buf();
 
-    tokio::task::spawn_blocking(move || {
-        copy_dir_recursive_sync(&src, &dst)
-    })
-    .await
-    .map_err(|e| BuildError::CommandFailed(format!("Copy task failed: {}", e)))??;
+    tokio::task::spawn_blocking(move || copy_dir_recursive_sync(&src, &dst))
+        .await
+        .map_err(|e| BuildError::CommandFailed(format!("Copy task failed: {}", e)))??;
 
     Ok(())
 }
 
 /// Synchronous directory copy (faster than async for many small files)
 fn copy_dir_recursive_sync(src: &Path, dst: &Path) -> Result<(), BuildError> {
-    debug!("copy_dir_recursive_sync: {} -> {}", src.display(), dst.display());
+    debug!(
+        "copy_dir_recursive_sync: {} -> {}",
+        src.display(),
+        dst.display()
+    );
     std::fs::create_dir_all(dst)?;
 
     let entries = std::fs::read_dir(src)?;
@@ -783,7 +808,12 @@ fn copy_dir_recursive_sync(src: &Path, dst: &Path) -> Result<(), BuildError> {
         }
     }
 
-    debug!("Copied {} files and {} directories from {}", file_count, dir_count, src.display());
+    debug!(
+        "Copied {} files and {} directories from {}",
+        file_count,
+        dir_count,
+        src.display()
+    );
     Ok(())
 }
 
@@ -803,7 +833,7 @@ fn sanitize_name(name: &str) -> String {
 
 fn find_executables(project_dir: &Path, release: bool) -> Result<Vec<PathBuf>, BuildError> {
     let profile = if release { "release" } else { "debug" };
-    
+
     // Tauri outputs to project_dir/target (not src-tauri/target)
     // When running in a workspace, it may also output to workspace root target
     let possible_target_dirs = [
@@ -924,7 +954,10 @@ fn find_executables(project_dir: &Path, release: bool) -> Result<Vec<PathBuf>, B
             if let Ok(entries) = std::fs::read_dir(&appimage_dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
-                    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                    let name = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
                     if name.ends_with(".AppImage") {
                         info!("Found Linux AppImage: {}", path.display());
                         executables.push(path);

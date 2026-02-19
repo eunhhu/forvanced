@@ -1,5 +1,6 @@
 //! Runtime application state
 
+use forvanced_core::project::{ComponentType, UIComponent, VisualScript};
 use forvanced_executor::{ScriptExecutor, Value as ExecutorValue};
 use forvanced_frida::FridaManager;
 use std::collections::HashMap;
@@ -27,9 +28,11 @@ fn json_to_executor(json: &serde_json::Value) -> ExecutorValue {
         serde_json::Value::Array(arr) => {
             ExecutorValue::Array(arr.iter().map(json_to_executor).collect())
         }
-        serde_json::Value::Object(obj) => {
-            ExecutorValue::Object(obj.iter().map(|(k, v)| (k.clone(), json_to_executor(v))).collect())
-        }
+        serde_json::Value::Object(obj) => ExecutorValue::Object(
+            obj.iter()
+                .map(|(k, v)| (k.clone(), json_to_executor(v)))
+                .collect(),
+        ),
     }
 }
 
@@ -45,79 +48,50 @@ pub fn executor_to_json(value: &ExecutorValue) -> serde_json::Value {
         ExecutorValue::Array(arr) => {
             serde_json::Value::Array(arr.iter().map(executor_to_json).collect())
         }
-        ExecutorValue::Object(obj) => {
-            serde_json::Value::Object(obj.iter().map(|(k, v)| (k.clone(), executor_to_json(v))).collect())
-        }
+        ExecutorValue::Object(obj) => serde_json::Value::Object(
+            obj.iter()
+                .map(|(k, v)| (k.clone(), executor_to_json(v)))
+                .collect(),
+        ),
     }
 }
 
 /// Trainer configuration embedded at build time
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectConfig {
     /// Trainer name
     pub name: String,
+    /// Trainer version
+    #[serde(default = "default_project_version")]
+    pub version: String,
     /// Target process name (optional - user can select if not specified)
+    #[serde(default)]
     pub target_process: Option<String>,
+    /// Auto-attach on startup
+    #[serde(default)]
+    pub auto_attach: bool,
     /// UI components
+    #[serde(default)]
     pub components: Vec<UIComponent>,
     /// Visual scripts
-    pub scripts: Vec<Script>,
+    #[serde(default)]
+    pub scripts: Vec<VisualScript>,
     /// Canvas settings
+    #[serde(default)]
     pub canvas: CanvasSettings,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+fn default_project_version() -> String {
+    "0.1.0".to_string()
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct CanvasSettings {
     pub width: u32,
     pub height: u32,
     pub padding: u32,
     pub gap: u32,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UIComponent {
-    pub id: String,
-    #[serde(rename = "type")]
-    pub component_type: String,
-    pub label: String,
-    pub x: i32,
-    pub y: i32,
-    pub width: i32,
-    pub height: i32,
-    pub props: serde_json::Value,
-    pub parent_id: Option<String>,
-    pub children: Option<Vec<String>>,
-    pub z_index: i32,
-    pub visible: Option<bool>,
-    pub width_mode: Option<String>,
-    pub height_mode: Option<String>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Script {
-    pub id: String,
-    pub name: String,
-    pub nodes: Vec<ScriptNode>,
-    pub connections: Vec<ScriptConnection>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ScriptNode {
-    pub id: String,
-    #[serde(rename = "type")]
-    pub node_type: String,
-    pub config: serde_json::Value,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ScriptConnection {
-    pub id: String,
-    pub source_node: String,
-    pub source_port: String,
-    pub target_node: String,
-    pub target_port: String,
 }
 
 /// Runtime application state
@@ -140,8 +114,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn new() -> Self {
-        let frida_manager = FridaManager::new()
-            .expect("Failed to initialize FridaManager");
+        let frida_manager = FridaManager::new().expect("Failed to initialize FridaManager");
 
         let component_values: Arc<RwLock<HashMap<String, serde_json::Value>>> =
             Arc::new(RwLock::new(HashMap::new()));
@@ -161,8 +134,7 @@ impl AppState {
 
     /// Create AppState from embedded config (used by generated projects)
     pub fn from_config(config: ProjectConfig) -> Self {
-        let frida_manager = FridaManager::new()
-            .expect("Failed to initialize FridaManager");
+        let frida_manager = FridaManager::new().expect("Failed to initialize FridaManager");
 
         let component_values: Arc<RwLock<HashMap<String, serde_json::Value>>> =
             Arc::new(RwLock::new(HashMap::new()));
@@ -223,8 +195,7 @@ impl AppState {
 
 impl Default for AppState {
     fn default() -> Self {
-        let frida_manager = FridaManager::new()
-            .expect("Failed to initialize FridaManager");
+        let frida_manager = FridaManager::new().expect("Failed to initialize FridaManager");
 
         let component_values: Arc<RwLock<HashMap<String, serde_json::Value>>> =
             Arc::new(RwLock::new(HashMap::new()));
@@ -245,29 +216,34 @@ impl Default for AppState {
 
 /// Get default value for a component based on its type
 fn get_default_value(component: &UIComponent) -> Option<serde_json::Value> {
-    match component.component_type.as_str() {
-        "toggle" => {
-            let default = component.props.get("defaultValue")
+    match component.component_type {
+        ComponentType::Toggle => {
+            let default = component
+                .props
+                .get("defaultValue")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
             Some(serde_json::json!(default))
         }
-        "slider" => {
-            let default = component.props.get("defaultValue")
+        ComponentType::Slider => {
+            let default = component
+                .props
+                .get("defaultValue")
                 .and_then(|v| v.as_f64())
                 .or_else(|| component.props.get("min").and_then(|v| v.as_f64()))
                 .unwrap_or(0.0);
             Some(serde_json::json!(default))
         }
-        "input" => {
-            let default = component.props.get("defaultValue")
+        ComponentType::Input => {
+            let default = component
+                .props
+                .get("defaultValue")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
             Some(serde_json::json!(default))
         }
-        "dropdown" => {
-            let options = component.props.get("options")
-                .and_then(|v| v.as_array());
+        ComponentType::Dropdown => {
+            let options = component.props.get("options").and_then(|v| v.as_array());
             if let Some(opts) = options {
                 if let Some(first) = opts.first() {
                     return Some(first.clone());
@@ -275,10 +251,9 @@ fn get_default_value(component: &UIComponent) -> Option<serde_json::Value> {
             }
             Some(serde_json::json!(""))
         }
-        "page" => {
+        ComponentType::Page => {
             // Default to first tab
-            let tabs = component.props.get("tabs")
-                .and_then(|v| v.as_array());
+            let tabs = component.props.get("tabs").and_then(|v| v.as_array());
             if let Some(tabs) = tabs {
                 if let Some(first) = tabs.first() {
                     if let Some(id) = first.get("id").and_then(|v| v.as_str()) {

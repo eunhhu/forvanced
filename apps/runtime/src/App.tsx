@@ -20,7 +20,7 @@ interface Toast {
 // Types matching backend
 interface ProjectConfig {
   name: string;
-  target_process: string | null;
+  targetProcess: string | null;
   components: UIComponent[];
   scripts: Script[];
   canvas: CanvasSettings;
@@ -65,10 +65,10 @@ interface ScriptNode {
 
 interface ScriptConnection {
   id: string;
-  sourceNode: string;
-  sourcePort: string;
-  targetNode: string;
-  targetPort: string;
+  fromNodeId: string;
+  fromPortId: string;
+  toNodeId: string;
+  toPortId: string;
 }
 
 const App: Component = () => {

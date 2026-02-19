@@ -43,6 +43,9 @@ pub struct ExecutionContext {
     /// Visited nodes (for cycle detection)
     visited: HashSet<String>,
 
+    /// Value-only nodes currently being evaluated (for recursive value cycle detection)
+    value_visited: HashSet<String>,
+
     /// Loop stack (for break/continue)
     loop_stack: Vec<LoopState>,
 
@@ -60,7 +63,7 @@ pub struct ExecutionContext {
 
     /// Execution logs (collected from log nodes)
     logs: Vec<String>,
-    
+
     /// Notifications to send to frontend
     notifications: Vec<Notification>,
 }
@@ -93,6 +96,7 @@ impl ExecutionContext {
             variables,
             node_outputs: HashMap::new(),
             visited: HashSet::new(),
+            value_visited: HashSet::new(),
             loop_stack: Vec::new(),
             functions: HashMap::new(),
             ui_state,
@@ -115,6 +119,7 @@ impl ExecutionContext {
             variables,
             node_outputs: HashMap::new(),
             visited: HashSet::new(),
+            value_visited: HashSet::new(),
             loop_stack: Vec::new(),
             functions: HashMap::new(),
             ui_state,
@@ -129,10 +134,14 @@ impl ExecutionContext {
     fn default_value_for_type(value_type: &crate::script::ValueType) -> Value {
         use crate::script::ValueType;
         match value_type {
-            ValueType::Int8 | ValueType::Uint8 |
-            ValueType::Int16 | ValueType::Uint16 |
-            ValueType::Int32 | ValueType::Uint32 |
-            ValueType::Int64 | ValueType::Uint64 => Value::Integer(0),
+            ValueType::Int8
+            | ValueType::Uint8
+            | ValueType::Int16
+            | ValueType::Uint16
+            | ValueType::Int32
+            | ValueType::Uint32
+            | ValueType::Int64
+            | ValueType::Uint64 => Value::Integer(0),
             ValueType::Float | ValueType::Double => Value::Float(0.0),
             ValueType::Pointer => Value::Pointer(0),
             ValueType::String => Value::String(String::new()),
@@ -250,6 +259,21 @@ impl ExecutionContext {
     /// Clear all visited markers
     pub fn clear_visited(&mut self) {
         self.visited.clear();
+    }
+
+    /// Mark a value-only node as being evaluated
+    pub fn visit_value_node(&mut self, node_id: &str) -> ExecutorResult<()> {
+        if self.value_visited.contains(node_id) {
+            Err(ExecutorError::CycleDetected(node_id.to_string()))
+        } else {
+            self.value_visited.insert(node_id.to_string());
+            Ok(())
+        }
+    }
+
+    /// Unmark a value-only node after evaluation
+    pub fn unvisit_value_node(&mut self, node_id: &str) {
+        self.value_visited.remove(node_id);
     }
 
     // ============================================
@@ -384,7 +408,11 @@ impl ExecutionContext {
 
     /// Add a notification to be sent to the frontend
     pub fn add_notification(&mut self, title: String, message: String, level: String) {
-        self.notifications.push(Notification { title, message, level });
+        self.notifications.push(Notification {
+            title,
+            message,
+            level,
+        });
     }
 
     /// Get all notifications and clear the list

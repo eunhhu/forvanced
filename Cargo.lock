@@ -960,6 +960,7 @@ name = "forvanced-runtime"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "forvanced-build",
  "forvanced-core",
  "forvanced-executor",
  "forvanced-frida",
@@ -967,6 +968,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
